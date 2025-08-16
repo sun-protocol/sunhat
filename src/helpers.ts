@@ -651,6 +651,7 @@ export function addHelpers(
         : receiptPre.contractAddress;
     let receipt;
     let address;
+    let addressHex;
     let bandwith;
     if (network.tron && ethersSigner instanceof TronSigner){
 
@@ -666,7 +667,9 @@ export function addHelpers(
       receipt.from = tronweb.address.fromHex(receiptPre.from);
       receipt.to = tronweb.address.fromHex(receiptPre.to);
       receipt.contractAddress = tronweb.address.fromHex(receiptPre.contractAddress);
+      
       address = tronweb.address.fromHex(addressPre);
+      addressHex = tronweb.address.toHex(receiptPre.contractAddress);
       const resp = await tronweb.trx.getUnconfirmedTransactionInfo(tx.hash) as TronTxInfo;
       if (resp?.receipt?.net_usage != null) {
         bandwith = resp?.receipt?.net_usage;
@@ -682,6 +685,7 @@ export function addHelpers(
     const deployment = {
       ...preDeployment,
       address,
+      addressHex,
       receipt,
       transactionHash: receipt.transactionHash,
       libraries: options.libraries,

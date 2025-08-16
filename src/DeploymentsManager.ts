@@ -880,6 +880,7 @@ export class DeploymentsManager {
       JSON.stringify(
         {
           address: deployment.address || actualReceipt?.contractAddress,
+          addressHex : deployment.addressHex,
           abi: deployment.abi,
           transactionHash:
             deployment.transactionHash || actualReceipt?.transactionHash,
