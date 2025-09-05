@@ -95,6 +95,35 @@ Furthermore SunStudio can also support a multi-chain settings like L1, L2 with m
 
 There is a demo covering the basics here: https://github.com/sun-protocol/sun-studio-demo
 
+## Prepare for TronNetwork
+
+### Get test coin
+
+You can get testnet tokens (TRX and TRC-20 tokens) on the TRON Shasta and Nile testnets (Recommended nile testnet). 
+There is a guide here: https://developers.tron.network/docs/getting-testnet-tokens-on-tron
+
+### Get API Keys for RPCs
+
+TronGrid provides all full-node HTTP APIs and extended APIs of the TRON network. In order to ensure reasonable allocation of requested resources, all request APIs need to carry the parameter API Key, and requests without an API Key will be severely limited or not even responded.
+
+#### How To Get
+After logging in [Trongrid](#https://www.trongrid.io/), users can quickly create API Keys on the Dashboard or API Key list. Each API Key has its separate configuration page, and users can configure API Keys to meet different needs.
+
+#### How To Use API Keys
+At present, an API Key is used by adding the parameter TRON-PRO-API-KEY=API Key to the header of the request.
+
+HTTP Examples:
+```
+curl -X POST \
+  https://api.trongrid.io/wallet/createtransaction \
+  -H 'Content-Type: application/json' \
+  -H 'TRON-PRO-API-KEY: 25f66928-0b70-48cd-9ac6-da6f8247c663' \
+  -d '{
+    "to_address": "41e9d79cc47518930bc322d9bf7cddd260a0260a8d",
+    "owner_address": "41D1E7A6BC354106CB410E65FF8B181C600FF14292",
+    "amount": 1000
+}'
+```
 ## Installation
 
 ### npm install SunStudio
