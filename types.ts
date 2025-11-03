@@ -338,6 +338,7 @@ export type Facet = {
 export interface DeploymentSubmission {
   abi: ABI;
   address: Address; // used to override receipt.contractAddress (useful for proxies)
+  addressHex?: any; // used to override receipt.contractAddressHex (useful for proxies)
   receipt?: Receipt;
   transactionHash?: string;
   history?: Deployment[];
@@ -370,6 +371,7 @@ export interface DeploymentSubmission {
 
 export interface Deployment {
   address: Address;
+  addressHex?: any; // used to override receipt.contractAddressHex (useful for proxies)
   abi: ABI;
   receipt?: Receipt;
   transactionHash?: string;

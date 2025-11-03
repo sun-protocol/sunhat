@@ -115,7 +115,7 @@ extendConfig(
     if (userConfig.namedAccounts) {
       config.namedAccounts = userConfig.namedAccounts;
     } else {
-      config.namedAccounts = {};
+      config.namedAccounts = {default: {default: 0}};
     }
 
     config.deterministicDeployment = userConfig.deterministicDeployment;
