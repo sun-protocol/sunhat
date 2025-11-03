@@ -707,7 +707,7 @@ const {deployments} = require('hardhat');
 const artifact = await deployments.getArtifact(artifactName);
 ```
 
-With the `Sunhat-ethers` plugin you can get an artifact as an ethers contract factory, ready to be deployed, via the following:
+With the `hardhat-ethers` plugin you can get an artifact as an ethers contract factory, ready to be deployed, via the following:
 
 ```js
 const {deployments, ethers} = require('hardhat');
@@ -1297,7 +1297,7 @@ describe('Token', () => {
 });
 ```
 
-Tests can also leverage named accounts for clearer test. Combined with `Sunhat-ethers` plugin, you can write succint test :
+Tests can also leverage named accounts for clearer test. Combined with `hardhat-ethers` plugin, you can write succint test :
 
 ```js
 const {ethers, getNamedAccounts} = require('hardhat');
