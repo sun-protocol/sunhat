@@ -8,8 +8,8 @@
 Sunhat is a comprehensive [Hardhat](https://hardhat.org) plugin designed to provide a seamless, end-to-end development experience on [TRON](https://tron.network/). It manages every stage of your project—from writing code in multiple languages to deploying with confidence—all within a single, unified workflow.
 
 - [What is it for?](#what-is-it-for)
-  - [A Closed-Loop Lifecycle: Develop, Test, Deploy](#A-Closed-Loop-Lifecycle:-Develop,-Test,-Deploy)
-  - [Core Features at a Glance](#Core-Features-at-a-Glance)
+  - [A Closed-Loop Lifecycle: Develop, Test, Deploy](#a-closed-loop-lifecycle-develop-test-deploy)
+  - [Core Features at a Glance](#core-features-at-a-glance)
 - [Sunhat in a nutshell](#Sunhat-in-a-nutshell)
 - [Installation](#installation)
   - [npm install](#npm-install)
