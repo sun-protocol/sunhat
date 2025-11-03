@@ -1,7 +1,7 @@
 {
   "name": "@sun-protocol/sunhat",
-  "version": "0.2.2",
-  "description": "Release 0.2.2 version",
+  "version": "1.0.0",
+  "description": "Release 1.0.0 version",
   "repository": "https://github.com/sun-protocol/sunhat.git",
   "author": "dev",
   "license": "MIT",
@@ -18,7 +18,8 @@
     "testing",
     "tool",
     "hardhat",
-    "hardhat-plugin"
+    "hardhat-plugin",
+    "tron"
   ],
   "files": [
     "dist/src/",
