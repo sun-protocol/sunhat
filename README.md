@@ -1,16 +1,22 @@
-<h1>Sun Studio</h1>
+# Sunhat
 
-_A [Hardhat](https://hardhat.org) Plugin For Replicable Deployments And Easy Testing on Tron_
->SunStudio is a fork of [hardhat-deploy](https://github.com/wighawag/hardhat-deploy/tree/main)
+**An All-in-One Toolkit for the Complete TRON Smart Contract Lifecycle**
+
+> **Note:** Sunhat is a specialized fork of the popular [`hardhat-deploy`](https://github.com/wighawag/hardhat-deploy) plugin, supercharged with features tailored for the TRON ecosystem.
+> A complete dev template using Sunhat is available on this [repo](https://github.com/sun-protocol/sunhat-demo)
+
+Sunhat is a comprehensive [Hardhat](https://hardhat.org) plugin designed to provide a seamless, end-to-end development experience on [TRON](https://tron.network/). It manages every stage of your project—from writing code in multiple languages to deploying with confidence—all within a single, unified workflow.
 
 - [What is it for?](#what-is-it-for)
-- [SunStudio in a nutshell](#SunStudio-in-a-nutshell)
+  - [A Closed-Loop Lifecycle: Develop, Test, Deploy](#A-Closed-Loop-Lifecycle:-Develop,-Test,-Deploy)
+  - [Core Features at a Glance](#Core-Features-at-a-Glance)
+- [Sunhat in a nutshell](#Sunhat-in-a-nutshell)
 - [Installation](#installation)
-  - [npm install SunStudio](#npm-install-SunStudio)
+  - [npm install](#npm-install)
   - [TypeScript support](#typescript-support)
-  - [Migrating existing deployment to SunStudio](#migrating-existing-deployment-to-SunStudio)
-- [Hardhat Tasks Available/Updated](#hardhat-tasks-availableupdated)
-  - [1. hardhat deploy](#1-SunStudio)
+  - [Migrating existing deployment to Sunhat](#migrating-existing-deployment-to-Sunhat)
+- [Sunhat Tasks Available/Updated](#hardhat-tasks-availableupdated)
+  - [1. hardhat deploy](#1-Sunhat)
     - [**Options**](#options)
     - [**Flags**](#flags)
   - [2. hardhat node](#2-hardhat-node)
@@ -27,7 +33,8 @@ _A [Hardhat](https://hardhat.org) Plugin For Replicable Deployments And Easy Tes
     - [`deploy`](#deploy)
     - [`companionNetworks`](#companionnetworks)
   - [**3. extra hardhat.config paths' options**](#3-extra-hardhatconfig-paths-options)
-  - [**4. deterministicDeployment (ability to specify a deployment factory)**](#4-deterministicdeployment-ability-to-specify-a-deployment-factory)
+  - [**4. compiler options**](#4-compiler-options)
+  - [**5. deterministicDeployment (ability to specify a deployment factory)**](#5-deterministicdeployment-ability-to-specify-a-deployment-factory)
   - [Importing deployment from other projects (with truffle support)](#importing-deployment-from-other-projects-with-truffle-support)
   - [Access to Artifacts (non-deployed contract code and abi)](#access-to-artifacts-non-deployed-contract-code-and-abi)
 - [How to Deploy Contracts](#how-to-deploy-contracts)
@@ -58,13 +65,39 @@ _A [Hardhat](https://hardhat.org) Plugin For Replicable Deployments And Easy Tes
 
 This [hardhat](https://hardhat.org) plugin adds a mechanism to deploy contracts to any network, Especially to [Tron](https://tron.network/) , keeping track of them and replicating the same environment for testing.
 
-It also adds a mechanism to associate names to addresses, so test and deployment scripts can be reconfigured by simply changing the address a name points to, allowing different configurations per network. This also results in much clearer tests and deployment scripts (no more `accounts[0]` in your code).
+### A Closed-Loop Lifecycle: Develop, Test, Deploy
 
-## SunStudio in a nutshell
+Sunhat creates a complete, closed-loop process, ensuring consistency and reliability from the first line of code to the final on-chain transaction.
 
-Before going into the details, here is a very simple summary of the basic feature of **SunStudio**.
+*  **DEVELOP: Flexible & Powerful Compilation**
+   *   Write your smart contracts in the language you prefer with multi-language support for **Solidity** and **Vyper**.
+   *   Compile your code for maximum compatibility and performance using multiple compiler versions, including standard **solc** and the TRON-specific **tron-solc**.
 
-**SunStudio** allows you to write [`deploy scripts`](#deploy-scripts) in the `deployTron` folder. If you want to use evm chains, this scripts will be in `deploy` folder. Each of these files that look as follows will be executed in turn when you execute the following task: `hardhat --network <networkName> --tags alice deploy`
+*  **TEST: Robust & Automated Validation**
+   *   Leverage automated, cross-framework testing. Sunhat integrates seamlessly with both **Hardhat**'s built-in testing environment and the high-speed **Foundry** toolkit.
+   *   Write clearer, more maintainable tests using named accounts instead of hardcoded addresses.
+
+*  **DEPLOY: Confident & Trackable**
+   *   Deploy your contracts reliably to any TRON network (Mainnet, Shasta, etc.). The plugin tracks all deployments, allowing you to manage and upgrade your contracts with ease.
+
+
+### Core Features at a Glance
+
+*   **Unified Development Environment**: Supports multiple compilers (**solc**, **tron-solc**) and languages (**Solidity**, **Vyper**), giving your team the flexibility to use the best tools for the job.
+
+*   **Cross-Framework Automated Testing**: Natively supports test suites written for both **Hardhat** and **Foundry**, eliminating the need to choose between frameworks.
+
+*   **Deterministic Deployments**: Reliably deploy contracts and track their history. This allows you to replicate the exact same on-chain state for testing, staging, or disaster recovery.
+
+*   **Named Accounts**: Replace ambiguous addresses (`accounts[0]`) with human-readable names (`deployer`, `tokenOwner`). This makes scripts and tests cleaner and simplifies multi-network configuration.
+
+*   **TRON-Specific Network Data**: Gain access to crucial network-specific parameters directly within your testing and deployment scripts, enabling more accurate pre-deployment simulations.
+
+## Sunhat in a nutshell
+
+Before going into the details, here is a very simple summary of the basic feature of **Sunhat**.
+
+**Sunhat** allows you to write [`deploy scripts`](#deploy-scripts) in the `deployTron` folder. If you want to use evm chains, this scripts will be in `deploy` folder. Each of these files that look as follows will be executed in turn when you execute the following task: `hardhat --network <networkName> --tags alice deploy`
 
 ```js
 // deployTron/1.ts
@@ -89,17 +122,17 @@ This is a huge benefit for testing since you are not required to replicate the d
 
 You can even group deploy scripts in different sub-folders and ensure they are executed in their logical order.
 
-Furthermore SunStudio can also support a multi-chain settings like L1, L2 with multiple deploy folder specific to each network.
+Furthermore Sunhat can also support a multi-chain settings like L1, L2 with multiple deploy folder specific to each network.
 
-**All of this can also be bundled in a npm package so users of SunStudio can reuse your deployment procedure and get started integrating with your project locally.**
+**All of this can also be bundled in a npm package so users of Sunhat can reuse your deployment procedure and get started integrating with your project locally.**
 
-There is a demo covering the basics here: https://github.com/sun-protocol/sun-studio-demo
+There is a demo covering the basics here: https://github.com/sun-protocol/sunhat-demo
 
 ## Prepare for TronNetwork
 
 ### Get test coin
 
-You can get testnet tokens (TRX and TRC-20 tokens) on the TRON Shasta and Nile testnets (Recommended nile testnet). 
+You can get testnet tokens (TRX and TRC-20 tokens) on the TRON Shasta and Nile testnets (Recommended nile testnet).
 There is a guide here: https://developers.tron.network/docs/getting-testnet-tokens-on-tron
 
 ### Get API Keys for RPCs
@@ -117,7 +150,7 @@ HTTP Examples:
 curl -X POST \
   https://api.trongrid.io/wallet/createtransaction \
   -H 'Content-Type: application/json' \
-  -H 'TRON-PRO-API-KEY: 25f66928-0b70-48cd-9ac6-da6f8247c663' \
+  -H 'TRON-PRO-API-KEY: {YOUR API KEY}' \
   -d '{
     "to_address": "41e9d79cc47518930bc322d9bf7cddd260a0260a8d",
     "owner_address": "41D1E7A6BC354106CB410E65FF8B181C600FF14292",
@@ -126,10 +159,10 @@ curl -X POST \
 ```
 ## Installation
 
-### npm install SunStudio
+### npm install
 
 ```bash
-npm i @sun-protocol/sun-studio
+npm i @sun-protocol/sunhat
 ```
 
 
@@ -145,20 +178,20 @@ for deploy script (see below) you can write them this way to benefit from typing
 
 ```ts
 import {HardhatRuntimeEnvironment} from 'hardhat/types';
-import {DeployFunction} from '@sun-protocol/sun-studio/types';
+import {DeployFunction} from '@sun-protocol/sunhat/types';
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   // code here
 };
 export default func;
 ```
-### Migrating existing deployment to SunStudio
+### Migrating existing deployment to Sunhat
 
 > Only needed for an existing project that already deployed contracts and has the deployment information available **(at minimum, address and abi)**
 
-You might want to switch your current deployment process to use **SunStudio**. In that case you probably have some deployments saved elsewhere.
+You might want to switch your current deployment process to use **Sunhat**. In that case you probably have some deployments saved elsewhere.
 
-In order to port them to **SunStudio**, you'll need to create one `.json` file per contract in the `deployments/<network>` folder (configurable via [paths config](#extra-paths-config)).
+In order to port them to **Sunhat**, you'll need to create one `.json` file per contract in the `deployments/<network>` folder (configurable via [paths config](#extra-paths-config)).
 
 The network folder is simply the hardhat network name (as configured in hardhat.config.js) (accessible at runtime via `hre.network.name`).
 Such folder need to have a file named `.chainId` containing the chainId as decimal.
@@ -246,7 +279,7 @@ deployments/
     Lock.json
 ```
 
-The reason why **SunStudio** save chainId in the `.chainId` file is both for
+The reason why **Sunhat** save chainId in the `.chainId` file is both for
 
 - safety: so that if you were to change the network name to point to a different chain, it would not attempt to read the wrong folder and assume that a contract has been deployed while it has not.
 - ability to know the chainId without requiring to be connected to a node (and so not dependent on hardhat.config.js settings). Useful for `export` task.
@@ -255,7 +288,7 @@ The reason why **SunStudio** save chainId in the `.chainId` file is both for
 
 ## Hardhat Tasks Available/Updated
 
-hardhat deploy adds several tasks to hardhat. It also modifies existing one, adding new options and new behavior. All of these are described here:
+Sunhat adds several tasks to hardhat. It also modifies existing one, adding new options and new behavior. All of these are described here:
 
 ---
 
@@ -281,7 +314,7 @@ For further details on how to use it and write deploy script, see [section](#dep
 
 `--tags <tags>`: only execute deploy scripts with the given tags (separated by commas) and their dependencies (see more info [here](#deploy-scripts-tags-and-dependencies) about tags and dependencies)
 
-`--gasprice <gasprice>`: specify the gasprice (in wei) to use by default for transactions executed via **SunStudio** helpers in deploy scripts
+`--gasprice <gasprice>`: specify the gasprice (in wei) to use by default for transactions executed via **Sunhat** helpers in deploy scripts
 
 `--write <boolean>`: default to true (except for hardhat network). If true, write deployments to disk (in deployments path, see [path config](#extra-paths-config)).
 
@@ -289,7 +322,7 @@ For further details on how to use it and write deploy script, see [section](#dep
 
 `--reset`: This flag resets the deployments from scratch. Previously deployed contracts are not considered and deleted from disk.
 
-`--silent`: This flag removes **SunStudio** log output (see log function and log options for [`hre.deployments`](#the-deployments-field))
+`--silent`: This flag removes **Sunhat** log output (see log function and log options for [`hre.deployments`](#the-deployments-field))
 
 `--watch`: This flag make the task never-ending, watching for file changes in the deploy scripts folder and the contract source folder. If any changes happen the contracts are recompiled and the deploy script are re-run. Combined with a proxy deployment ([Proxies](#deploying-and-upgrading-proxies) or [Diamond](#builtin-in-support-for-diamonds-eip2535)) this allow to have HCR (Hot Contract Replacement).
 
@@ -311,7 +344,7 @@ It adds similar options than the `deploy` task :
 
 `--tags <tags>`: only excutes deploy scripts with the given tags (separated by commas) and their dependencies (see more info [here](#deploy-scripts-tags-and-dependencies) about tags and dependencies)
 
-`--gasprice <gasprice>`: specify the gasprice to use by default for transactions executed via **SunStudio** helpers in deploy scripts
+`--gasprice <gasprice>`: specify the gasprice to use by default for transactions executed via **Sunhat** helpers in deploy scripts
 
 `--write <boolean>`: default to true (except for hardhat network). If true, write deployments to disk (in deployments path, see [path config](#extra-paths-config)).
 
@@ -319,13 +352,13 @@ It adds similar options than the `deploy` task :
 
 `--no-reset`: This flag prevents the resetting of the existing deployments. This is usually not desired when running the `node` task as a network is created from scratch and previous deployments are irrelevant.
 
-`--silent`: This flag removes **SunStudio** log output (see log function and log options for [`hre.deployments`](#the-deployments-field))
+`--silent`: This flag removes **Sunhat** log output (see log function and log options for [`hre.deployments`](#the-deployments-field))
 
 `--watch`: This flag makes the task never-ending, watching for file changes in the deploy scripts folder and the contract source folder. If any changes happen the contracts are recompiled and the deploy script are re-run. Combined with a proxy deployment ([Proxies](#deploying-and-upgrading-proxies) or [Diamond](#builtin-in-support-for-diamonds-eip2535)) this allows to have HCR (Hot Contract Replacement).
 
 `--no-deploy` that discard all other options to revert to normal `hardhat node` behavior without any deployment being performed.
 
-> :warning: Note that the deployments are saved as if the network name is `localhost`. This is because `hardhat node` is expected to be used as localhost: You can for example execute `hardhat --network localhost console` after `node` is running. Doing `hardhat --network hardhat console` would indeed not do anything useful. It still takes the configuration from `hardhat` in the hardhat.config.js file though.
+> :warning: Note that the deployments are saved as if the network name is `localhost`. This is because `hardhat node` is expected to be used as localhost: You can for example execute `hardhat --network lohe configuration from `hardhat` in the hardhat.config.js file though.rdhat console` would indeed not do anything useful. It still takes t
 
 ---
 
@@ -390,7 +423,7 @@ This allows you to have meaningful names in your tests while the addresses match
 
 ---
 
-**SunStudio** add 5 new fields to `networks` configuration
+**Sunhat** add 5 new fields to `networks` configuration
 
 #### `live`
 
@@ -398,7 +431,7 @@ this is not used internally but is useful to perform action on a network whether
 
 #### `saveDeployments`
 
-this tell whether **SunStudio** should save the deployments to disk or not. Default to true, except for the hardhat network.
+this tell whether **Sunhat** should save the deployments to disk or not. Default to true, except for the hardhat network.
 
 #### `tags`
 
@@ -448,7 +481,13 @@ Example:
     },
     rinkeby: {
       deploy: [ 'testnet-deploy/' ]
-    }
+    },
+    nile: {
+      url: "https://nile.trongrid.io/jsonrpc",
+      tron: true,
+      deploy: ['deployTron/'],
+      accounts: [`${process.env.PRIVATE_KEY}`],
+    },
   }
 }
 ```
@@ -510,7 +549,7 @@ module.exports = async ({
 
 ---
 
-`SunStudio` also adds fields to `HardhatConfig`'s `ProjectPaths` object.
+`Sunhat` also adds fields to `HardhatConfig`'s `ProjectPaths` object.
 
 Here is an example showing the default values :
 
@@ -537,7 +576,51 @@ The `imports` folder is expected to contain artifacts that were pre-compiled. Us
 
 ---
 
-### **4. deterministicDeployment (ability to specify a deployment factory)**
+### **4. compiler options**
+
+---
+
+This plugin extends the `HardhatConfig`'s object with `solidity` and `vyper` compiler field.
+
+This feature supports compiling smart contracts written in both Solidity and Vyper, including the use of multiple compiler versions for each language.
+
+Here is an example showing how to config compilers:
+
+```js
+{
+  tronSolc: {
+    enable: true, //if using the tronSolc
+  },
+  solidity: {
+    compilers: [
+      {
+          "version": "0.8.23",
+          "optimizer": {
+                enabled: true,
+                runs: 999999,
+          }
+      },
+      {
+          "version": "0.8.22",
+          "optimizer": {
+                enabled: true,
+                runs: 999999,
+          }
+      },
+    ]
+  },
+  vyper: {
+    compilers: [
+      { "version": "0.2.8" },
+      { "version": "0.3.10" }
+    ]
+  }
+}
+```
+
+---
+
+### **5. deterministicDeployment (ability to specify a deployment factory)**
 
 ---
 
@@ -579,7 +662,7 @@ or as a function that returns the information for the deterministic deployment
 
 ### Importing deployment from other projects (with truffle support)
 
-`SunStudio` also add the `external` field to `HardhatConfig`
+`Sunhat` also add the `external` field to `HardhatConfig`
 
 Such field allows to specify paths for external artifacts or **deployments**.
 
@@ -609,7 +692,7 @@ The `contracts` field specify an array of object which itself have 2 fields.
 - `artifacts`: (mandatory) it is a path to an artifact folder. This support both hardhat and truffle artifacts.
 - `deploy`: (optional) it specifies a path to a folder where reside deploy script. The deploy scripts have only access to the artifact specified in the artifacts field. This allow project to share their deployment procedure. A boon for developer aiming at integrating it as they can get the contracts to be deployed for testing locally.
 
-The `deployments` fields specify an object whose field names are the hardhat network and the value is an array of path to look for deployments. It supports both **SunStudio** and truffle formats.
+The `deployments` fields specify an object whose field names are the hardhat network and the value is an array of path to look for deployments. It supports both **Sunhat** and truffle formats.
 
 ---
 
@@ -617,14 +700,14 @@ The `deployments` fields specify an object whose field names are the hardhat net
 
 Artifacts in hardhat terminology represent a compiled contract (not yet deployed) with at least its bytecode and abi.
 
-`SunStudio` gives can access to these artifacts via the `deployments.getArtifact` function :
+`Sunhat` gives can access to these artifacts via the `deployments.getArtifact` function :
 
 ```js
 const {deployments} = require('hardhat');
 const artifact = await deployments.getArtifact(artifactName);
 ```
 
-With the `SunStudio-ethers` plugin you can get an artifact as an ethers contract factory, ready to be deployed, via the following:
+With the `Sunhat-ethers` plugin you can get an artifact as an ethers contract factory, ready to be deployed, via the following:
 
 ```js
 const {deployments, ethers} = require('hardhat');
@@ -643,7 +726,7 @@ const factory = await ethers.getContractFactory(artifactName);
 
 `hardhat --network <networkName> deploy [options and flags]`
 
-This is a new task that the `SunStudio` adds. As the name suggests it deploys contracts.
+This is a new task that the `Sunhat` adds. As the name suggests it deploys contracts.
 To be exact it will look for files in the folder `deploy` or whatever was configured in `paths.deploy`, see [paths config](#extra-paths-config)
 
 It will scan for files in alphabetical order and execute them in turn.
@@ -685,7 +768,7 @@ Finally the function can return true if it wishes to never be executed again. Th
 
 In other words, if you want a particular deploy script to run only once, it needs to both return true (async) and have an `id` set.
 
-In any case, as a general advice every deploy function should be idempotent. This is so they can always recover from failure or pending transaction. This is what underpin most of SunStudio philosophy.
+In any case, as a general advice every deploy function should be idempotent. This is so they can always recover from failure or pending transaction. This is what underpin most of Sunhat philosophy.
 
 This is why the `hre.deployments.deploy` function will by default only deploy if the contract code has changed, making it easier to write idempotent script.
 
@@ -889,7 +972,7 @@ This `libraries` object takes the name of the library, and its deployed address 
 
 ## Exporting Deployments
 
-Apart from deployments saved in the `deployments` folder which contains all information available about the contract (compile time data + deployment data), `SunStudio` allows you to export lightweight files.
+Apart from deployments saved in the `deployments` folder which contains all information available about the contract (compile time data + deployment data), `Sunhat` allows you to export lightweight files.
 
 These can be used for example to power your frontend with contract's address and abi.
 
@@ -1001,7 +1084,7 @@ Note that for the second invocation, this deployment will not be executed from t
 
 Now, it is likely you do not want to locally handle the private key / mnemonic of the account that manage the proxy or it could even be that the `greeterOwner` in question is a multi sig. As such that second invocation will throw an error as it cannot find a local signer for it.
 
-The error will output the necessary information to upgrade the contract but `SunStudio` comes also with a utility function for such case: `deployments.catchUnknownSigner` which will catch the error and output to the console the necessary information while continuing to next step.
+The error will output the necessary information to upgrade the contract but `Sunhat` comes also with a utility function for such case: `deployments.catchUnknownSigner` which will catch the error and output to the console the necessary information while continuing to next step.
 
 Here is the full example :
 
@@ -1214,7 +1297,7 @@ describe('Token', () => {
 });
 ```
 
-Tests can also leverage named accounts for clearer test. Combined with `SunStudio-ethers` plugin, you can write succint test :
+Tests can also leverage named accounts for clearer test. Combined with `Sunhat-ethers` plugin, you can write succint test :
 
 ```js
 const {ethers, getNamedAccounts} = require('hardhat');
