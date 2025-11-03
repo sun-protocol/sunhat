@@ -667,7 +667,6 @@ export function addHelpers(
       receipt.from = tronweb.address.fromHex(receiptPre.from);
       receipt.to = tronweb.address.fromHex(receiptPre.to);
       receipt.contractAddress = tronweb.address.fromHex(receiptPre.contractAddress);
-      
       address = tronweb.address.fromHex(addressPre);
       addressHex = tronweb.address.toHex(receiptPre.contractAddress);
       const resp = await tronweb.trx.getUnconfirmedTransactionInfo(tx.hash) as TronTxInfo;
