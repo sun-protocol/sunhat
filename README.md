@@ -1,9 +1,8 @@
 # Sunhat
+[![CI Status](https://github.com/sun-protocol/sunhat/actions/workflows/main.yml/badge.svg)](https://github.com/sun-protocol/sunhat/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **An All-in-One Toolkit for the Complete TRON Smart Contract Lifecycle**
-
-> **Note:** Sunhat is a specialized fork of the popular [`hardhat-deploy`](https://github.com/wighawag/hardhat-deploy) plugin, supercharged with features tailored for the TRON ecosystem.
-> A complete dev template using Sunhat is available on this [repo](https://github.com/sun-protocol/sunhat-demo)
 
 Sunhat is a comprehensive [Hardhat](https://hardhat.org) plugin designed to provide a seamless, end-to-end development experience on [TRON](https://tron.network/). It manages every stage of your project—from writing code in multiple languages to deploying with confidence—all within a single, unified workflow.
 
