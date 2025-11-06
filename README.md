@@ -1,5 +1,5 @@
 # Sunhat
-[![CI Status](https://github.com/sun-protocol/sunhat/actions/workflows/main.yml/badge.svg)](https://github.com/sun-protocol/sunhat/actions)
+[![CI Status](https://github.com/sun-protocol/sunhat/actions/workflows/linux-test.yml/badge.svg)](https://github.com/sun-protocol/sunhat/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **An All-in-One Toolkit for the Complete TRON Smart Contract Lifecycle**
