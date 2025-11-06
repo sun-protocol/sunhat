@@ -22,31 +22,10 @@ body:
       required: true
   - type: input
     attributes:
-      label: AutoGen version
+      label: sunhat version
       description: What version or commit of the library was used
     validations:
       required: true
-  - type: dropdown
-    attributes:
-      label: Which package was this bug in
-      options:
-        - Core
-        - AgentChat
-        - Extensions
-        - AutoGen Studio
-        - Magentic One
-        - AutoGen Bench
-        - Other
-    validations:
-      required: true
-  - type: input
-    attributes:
-      label: Model used
-      description: If a model was used, please describe it here, indicating whether it is a local model or a cloud-hosted model
-      placeholder: gpt-4, mistral-7B etc
-  - type: input
-    attributes:
-      label: Python version
   - type: input
     attributes:
       label: Operating system
