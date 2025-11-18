@@ -1,0 +1,41 @@
+{
+  "name": "sunhat-developer-pack",
+  "displayName": "Sunhat Developer Pack",
+  "description": "Sunhat Developer's Extension Pack to ease the smart contract development, testing and deployment.",
+  "version": "0.0.1",
+  "keywords": [
+    "hardhat",
+    "contract test",
+    "solidity snippets",
+    "solidity",
+    "snippets",
+    "smart contract",
+    "smart contracts",
+    "blockchain",
+    "sunhat",
+    "tron network"
+  ],
+  "icon": "images/sun.png",
+  "author": {
+    "name": "Leon Johnson",
+    "email": "leon.zhang@tron.network",
+    "url": "https://grayfoxd.github.io"
+  },
+  "publisher": "grayfoxd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sun-protocol/sunhat-developer-pack"
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Extension Packs"
+  ],
+  "extensionPack": [
+    "maratib.solidity-snippets",
+    "maratib.hardhat-test-snippets",
+    "NomicFoundation.hardhat-solidity",
+    "hbenl.vscode-mocha-test-adapter"
+  ]
+}
