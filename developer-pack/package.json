@@ -24,7 +24,7 @@
   "publisher": "grayfoxd",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sun-protocol/sunhat-developer-pack"
+    "url": "https://github.com/sun-protocol/sunhat"
   },
   "engines": {
     "vscode": "^1.70.0"
