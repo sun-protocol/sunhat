@@ -4,7 +4,7 @@ name: Release and Publish to npm
 
 on:
   release:
-    types: [created]
+    types: [published]
 
 jobs:
   build-and-publish:
