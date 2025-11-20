@@ -8,7 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [1.1.0] - 2025-11-18
 
 ### Added
-- Support tronsolc 0.8.25
+- Support tronsolc v0.8.25
+- Developer Pack v0.0.1
+- Developer Documents Updated
 
 ## [1.0.1] - 2025-11-06
 
