@@ -1,6 +1,6 @@
 # .github/workflows/release.yml
 
-name: Release and Publish to npm
+name: release.yml
 
 on:
   release:
@@ -35,21 +35,5 @@ jobs:
           pnpm install
           pnpm run build
 
-      # 步骤 1: 使用官方 action 获取 OIDC 令牌
-      - name: Get OIDC Token
-        uses: actions/github-script@v7
-        id: get_token
-        with:
-          script: |
-            const token = await core.getIDToken();
-            core.setOutput('oidc_token', token);
-
-      # 步骤 2: 解码并打印令牌内容
-      - name: Decode and Print OIDC Token
-        run: |
-          echo "--- Decoded OIDC Token Payload ---"
-          echo "${{ steps.get_token.outputs.oidc_token }}" | cut -d. -f2 | base64 --decode | jq .
-          echo "------------------------------------"
-
-      # - name: Publish to npm
-      #   run: npm publish --provenance
+      - name: Publish to npm
+        run: npm publish --provenance
