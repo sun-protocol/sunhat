@@ -35,19 +35,21 @@ jobs:
           pnpm install
           pnpm run build
 
-      - name: 🕵️ Inspect OIDC Token
+      - name: Inspect OIDC Token
         run: |
-          echo "Requesting OIDC token for debugging..."
-          # 使用 actions/create-github-app-token action 来明确获取并解码令牌
-          # 这比从 npm config 获取更直接
-          # 首先安装 jwt-cli 来解码
-          npm install -g @panva/jwt-cli
+          echo "Inspecting the OIDC token that npm will use..."
+          # 从 npm 配置中获取由 setup-node action 准备好的 OIDC 令牌
+          TOKEN=$(npm config get //registry.npmjs.org/:_authToken)
 
-          # 从 GitHub 获取 OIDC Token
-          OIDC_TOKEN=$(ACTIONS_RUNTIME_TOKEN=$ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL jwt token -a "sigstore")
+          if [ -z "$TOKEN" ]; then
+            echo "::error::OIDC token not found in npm config. Check the permissions and setup-node step."
+            exit 1
+          fi
 
           echo "--- Decoded OIDC Token Payload ---"
-          echo "$OIDC_TOKEN" | jwt-cli-decode
+          # JWT 由三部分组成，用.分隔。第二部分是 payload。
+          # 我们用 cut 提取 payload，然后用 base64 解码，最后用 jq 美化输出。
+          echo "$TOKEN" | cut -d. -f2 | base64 -d | jq .
           echo "------------------------------------"
 
       # - name: Publish to npm
