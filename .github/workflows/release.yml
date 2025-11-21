@@ -35,21 +35,20 @@ jobs:
           pnpm install
           pnpm run build
 
-      - name: Inspect OIDC Token
+      # 步骤 1: 使用官方 action 获取 OIDC 令牌
+      - name: Get OIDC Token
+        uses: actions/github-script@v7
+        id: get_token
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setOutput('oidc_token', token);
+
+      # 步骤 2: 解码并打印令牌内容
+      - name: Decode and Print OIDC Token
         run: |
-          echo "Inspecting the OIDC token that npm will use..."
-          # 从 npm 配置中获取由 setup-node action 准备好的 OIDC 令牌
-          TOKEN=$(npm config get //registry.npmjs.org/:_authToken)
-
-          if [ -z "$TOKEN" ]; then
-            echo "::error::OIDC token not found in npm config. Check the permissions and setup-node step."
-            exit 1
-          fi
-
           echo "--- Decoded OIDC Token Payload ---"
-          # JWT 由三部分组成，用.分隔。第二部分是 payload。
-          # 我们用 cut 提取 payload，然后用 base64 解码，最后用 jq 美化输出。
-          echo "$TOKEN" | cut -d. -f2 | base64 -d | jq .
+          echo "${{ steps.get_token.outputs.oidc_token }}" | cut -d. -f2 | base64 --decode | jq .
           echo "------------------------------------"
 
       # - name: Publish to npm
