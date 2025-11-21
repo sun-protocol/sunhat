@@ -35,5 +35,20 @@ jobs:
           pnpm install
           pnpm run build
 
-      - name: Publish to npm
-        run: npm publish --provenance
+      - name: 🕵️ Inspect OIDC Token
+        run: |
+          echo "Requesting OIDC token for debugging..."
+          # 使用 actions/create-github-app-token action 来明确获取并解码令牌
+          # 这比从 npm config 获取更直接
+          # 首先安装 jwt-cli 来解码
+          npm install -g @panva/jwt-cli
+
+          # 从 GitHub 获取 OIDC Token
+          OIDC_TOKEN=$(ACTIONS_RUNTIME_TOKEN=$ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_ID_TOKEN_REQUEST_URL=$ACTIONS_ID_TOKEN_REQUEST_URL jwt token -a "sigstore")
+
+          echo "--- Decoded OIDC Token Payload ---"
+          echo "$OIDC_TOKEN" | jwt-cli-decode
+          echo "------------------------------------"
+
+      # - name: Publish to npm
+      #   run: npm publish --provenance
