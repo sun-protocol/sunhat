@@ -16,15 +16,15 @@
   </a>
 </p>
 
-The essential VS Code extension pack for Web3 developers using Hardhat. Streamline your smart contract development, testing, and deployment lifecycle with this all-in-one toolkit.
+The essential VS Code extension pack for Web3 developers using Sunhat. Streamline your smart contract development, testing, and deployment lifecycle with this all-in-one toolkit.
 
 ## ✨ Core Features
 
 *   🤖 **AI-Powered Code Audits**: Get instant security and optimization feedback directly in your editor. Powered by Large Language Models (LLMs), Sunhat identifies potential issues in your **Solidity** and **Vyper** code, displaying them as in-line diagnostics.
-*   **Integrated Test Runner**: Visualize, run, and debug your Hardhat tests directly within the VS Code Test Explorer.
+*   **Integrated Test Runner**: Visualize, run, and debug your Sunhat tests directly within the VS Code Test Explorer.
 *   **Full Language Support**: Comprehensive syntax highlighting, code completion, and error checking for both Solidity and Vyper.
-*   **Accelerated Development**: Write code faster with intelligent snippets for common Solidity patterns and Hardhat tests.
-*   **All-in-One Setup**: Get the most critical extensions for Hardhat development with a single install.
+*   **Accelerated Development**: Write code faster with intelligent snippets for common Solidity patterns and Sunhat tests.
+*   **All-in-One Setup**: Get the most critical extensions for Sunhat development with a single install.
 
 ---
 
