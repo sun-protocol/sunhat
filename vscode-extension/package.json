@@ -33,6 +33,7 @@
     "maratib.solidity-snippets",
     "maratib.hardhat-test-snippets",
     "NomicFoundation.hardhat-solidity",
+    "tintinweb.vscode-vyper",
     "hbenl.vscode-mocha-test-adapter"
   ],
   "activationEvents": [

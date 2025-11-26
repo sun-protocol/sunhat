@@ -28,6 +28,7 @@ import { lazyObject } from 'hardhat/plugins';
 import { loadTronSolc } from './tron/solc';
 import { OpenAI, AzureOpenAI } from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { glob } from 'glob';
 
 import debug from 'debug';
 const log = debug('hardhat:sun-protocol:tron-studio');
@@ -1121,6 +1122,7 @@ subtask(
 );
 
 type ProviderName = keyof LlmConfig['providers'];
+type SupportedLanguage = 'solidity' | 'vyper';
 
 /**
  * 统一的 LLM 调用函数
@@ -1200,19 +1202,55 @@ async function callLLM(
   }
 }
 
+/**
+ * 根据配置获取基础审计 Prompt
+ * @param llmConfig - LLM 的配置对象
+ * @returns {string} - 基础审计指令
+ */
+function getBasePromptTemplate(llmConfig: LlmConfig): string {
+  const defaultPromptTemplate = `As an expert smart contract auditor, please analyze the following {language} code.
+The file name is "{contractName}".
+
+Your analysis should cover:
+1.  **Security Vulnerabilities**: Identify potential risks.
+2.  **Gas Optimization**: Suggest gas-saving improvements.
+3.  **Best Practices**: Check for code style and common practices.`;
+
+  const userPrompt = llmConfig.promptTemplate;
+  return userPrompt || defaultPromptTemplate;
+}
+
+/**
+ * 生成最终的审计 Prompt，结合了用户自定义部分和固定的格式要求
+ * @param contractName - 合约名称
+ * @param contractCode - 带行号的合约代码
+ * @param format - 输出格式
+ * @param llmConfig - LLM 配置，用于获取自定义 prompt
+ * @param language - 合约语言
+ * @returns {string} - 完整的 Prompt
+ */
 function getAuditPrompt(
   contractName: string,
   contractCode: string,
   format: 'text' | 'json',
+  llmConfig: LlmConfig,
+  language: SupportedLanguage,
 ): string {
   const codeWithLineNumbers = contractCode
     .split('\n')
     .map((line, index) => `${index + 1}: ${line}`) // 为每行加上 "行号: " 前缀
     .join('\n');
 
+  let basePrompt = getBasePromptTemplate(llmConfig);
+  basePrompt = basePrompt
+    .replace('{contractName}', contractName)
+    .replace('{codeWithLineNumbers}', codeWithLineNumbers)
+    .replace('{language}', language);
+
   if (format === 'json') {
     return `
-      As an expert smart contract auditor, please analyze the following Solidity code from the file "${contractName}".
+      ${basePrompt}
+
       Your response MUST be a single, valid JSON array of objects, enclosed in a single \`\`\`json code block. Do not add any text before or after the JSON block.
       Each object in the array represents a single issue you've found and must conform to this exact structure:
       {
@@ -1226,21 +1264,15 @@ function getAuditPrompt(
 
       If you find no issues, return an empty array [].
 
-      Analyze this code:
-      \`\`\`solidity
+      Now, analyze the following contract code:
+      \`\`\`${language}
       ${codeWithLineNumbers}
       \`\`\`
     `;
   }
 
   return `
-    As an expert smart contract auditor, please analyze the following Solidity code.
-    The file name is "${contractName}".
-
-    Your analysis should cover:
-    1.  **Security Vulnerabilities**: Identify potential risks.
-    2.  **Gas Optimization**: Suggest gas-saving improvements.
-    3.  **Best Practices**: Check for code style and common practices.
+    ${basePrompt}
 
     **CRITICAL**: For each issue you find, you MUST format the title of the issue on a single line like this:
     [SEVERITY]|[FILE_PATH]:[LINE_NUMBER] - [BRIEF_DESCRIPTION]
@@ -1269,13 +1301,13 @@ function getAuditPrompt(
     ---
 
     Now, analyze the following contract code:
-    \`\`\`solidity
+    \`\`\`${language}
     ${codeWithLineNumbers}
     \`\`\`
   `;
 }
 
-// 提取 JSON 字符串的辅助函数
+// 提取 Markdown JSON
 function extractJson(rawOutput: string): string {
   const match = rawOutput.match(/```json\s*(\[[\s\S]*?\])\s*```/);
   if (!match || !match[1]) {
@@ -1292,27 +1324,29 @@ function extractJson(rawOutput: string): string {
 }
 
 interface AuditTaskArgs {
-  contract: string;
+  contract?: string;
   provider?: ProviderName;
   format?: 'text' | 'json';
 }
 
 task('audit', 'Audits a smart contract using a specified LLM provider')
-  .addParam('contract', 'The name of the contract file to audit')
+  .addOptionalParam(
+    'contract',
+    'The name of the contract file to audit (e.g., "MyContract.sol"). If not provided, audits all contracts.',
+  )
   .addOptionalParam(
     'provider',
-    'The LLM provider to use (openai, gemini, qwen, deepseek)',
+    'The LLM provider to use (openai, azure_openai, gemini, qwen, deepseek)',
   )
   .addOptionalParam('format', "The output format: 'text' (default) or 'json'")
   .setAction(
     async (taskArgs: AuditTaskArgs, hre: HardhatRuntimeEnvironment) => {
       const {
-        contract: contractName,
+        contract: contractArg,
         provider: providerArg,
         format: formatArg,
       } = taskArgs;
       const { llm: llmConfig } = hre.config;
-      const contract = contractName || 'all';
       const format = formatArg || 'text';
       const provider = providerArg || llmConfig.defaultProvider;
       const providerConfig = llmConfig.providers[provider];
@@ -1324,58 +1358,122 @@ task('audit', 'Audits a smart contract using a specified LLM provider')
         return;
       }
 
-      let contractCode: string;
-      try {
-        const contractPath = path.resolve(
-          hre.config.paths.sources,
-          contractName,
+      let contractPaths: string[];
+      const sourcesPath = hre.config.paths.sources;
+
+      if (!contractArg || contractArg.toLowerCase() === 'all') {
+        console.log(
+          '[INFO] No specific contract provided. Auditing all contracts...',
         );
-        contractCode = fs.readFileSync(contractPath, 'utf8');
-        console.log(`[INFO] Successfully read contract: ${contractName}`);
-      } catch (error) {
-        console.error(
-          `\n[ERROR] Could not read contract file: ${contractName}.`,
-        );
+        contractPaths = await glob(`${sourcesPath}/**/*.{sol,vy}`);
+      } else {
+        contractPaths = [path.resolve(sourcesPath, contractArg)];
+      }
+
+      if (contractPaths.length === 0) {
+        console.error('\n[ERROR] No contract files found to audit.');
         return;
       }
 
-      const prompt = getAuditPrompt(contractName, contractCode, format);
+      console.log(`[INFO] Found ${contractPaths.length} contract(s) to audit.`);
 
-      try {
-        console.log(
-          `[INFO] Sending code to LLM for analysis (format: ${format})...`,
-        );
-        const rawAnalysis = await callLLM(provider, providerConfig, prompt);
-        console.log(`\n=============================================`);
-        console.log(`    🤖 LLM Audit Report (${provider.toUpperCase()})    `);
-        console.log(`=============================================\n`);
-        console.log(rawAnalysis);
-        if (format === 'json') {
-          const jsonString = extractJson(rawAnalysis);
-          try {
-            const parsedJson = JSON.parse(jsonString);
-            const formattedJsonString = JSON.stringify(parsedJson, null, 2);
-            const outputPath = path.join(
-              hre.config.paths.root,
-              'audit-report.json',
-            );
-            fs.writeFileSync(outputPath, formattedJsonString, 'utf8');
-            console.log(
-              `\n✅ [SUCCESS] Audit report has been saved to: ${outputPath}`,
-            );
-          } catch (e) {
-            console.error(
-              "\n[ERROR] Failed to parse the JSON extracted from the LLM's response.",
-            );
-            if (e instanceof SyntaxError) {
-              console.error('Syntax Error:', e.message);
-            }
-            console.error('Extracted string that failed to parse:', jsonString);
-          }
+      const allIssues: any[] = [];
+      for (const contractPath of contractPaths) {
+        const contractName = path.basename(contractPath);
+
+        const extension = path.extname(contractPath).substring(1); // 'sol' or 'vy'
+        let language: SupportedLanguage;
+
+        if (extension === 'sol') {
+          language = 'solidity';
+        } else if (extension === 'vy') {
+          language = 'vyper';
+        } else {
+          console.warn(
+            `[WARN] Unsupported file type ".${extension}" for ${contractName}. Skipping.`,
+          );
+          continue;
         }
-      } catch (error: any) {
-        console.error(`\n[ERROR] An error occurred during the audit process:`);
-        console.error(error.message);
+
+        console.log(`\n---------------------------------------------`);
+        console.log(`  Auditing: ${contractName} (${language})`);
+        console.log(`---------------------------------------------\n`);
+
+        let contractCode: string;
+        try {
+          const contractPath = path.resolve(
+            hre.config.paths.sources,
+            contractName,
+          );
+          contractCode = fs.readFileSync(contractPath, 'utf8');
+          console.log(`[INFO] Successfully read contract: ${contractName}`);
+        } catch (error) {
+          console.error(
+            `\n[ERROR] Could not read contract file: ${contractName}.`,
+          );
+          continue;
+        }
+
+        const prompt = getAuditPrompt(
+          contractName,
+          contractCode,
+          format,
+          llmConfig,
+          language,
+        );
+
+        try {
+          console.log(
+            `[INFO] Sending code to LLM for analysis (format: ${format})...`,
+          );
+          const rawAnalysis = await callLLM(provider, providerConfig, prompt);
+          console.log(`\n=============================================`);
+          console.log(
+            `    🤖 LLM Audit Report for ${contractName} (${provider.toUpperCase()})`,
+          );
+          console.log(`=============================================\n`);
+          console.log(rawAnalysis);
+          if (format === 'json') {
+            const jsonString = extractJson(rawAnalysis);
+            try {
+              const parsedJson = JSON.parse(jsonString);
+              allIssues.push(...parsedJson);
+            } catch (e) {
+              console.error(
+                "\n[ERROR] Failed to parse the JSON extracted from the LLM's response.",
+              );
+              if (e instanceof SyntaxError) {
+                console.error('Syntax Error:', e.message);
+              }
+              console.error(
+                'Extracted string that failed to parse:',
+                jsonString,
+              );
+            }
+          }
+        } catch (error: any) {
+          console.error(
+            `\n[ERROR] An error occurred during the audit  of ${contractName}:`,
+          );
+          console.error(error.message);
+        }
+      }
+      if (format === 'json') {
+        if (allIssues.length > 0) {
+          const formattedJsonString = JSON.stringify(allIssues, null, 2);
+          const outputPath = path.join(
+            hre.config.paths.root,
+            'audit-report.json',
+          );
+          fs.writeFileSync(outputPath, formattedJsonString, 'utf8');
+          console.log(
+            `\n✅ [SUCCESS] Combined audit report for ${contractPaths.length} contract(s) has been saved to: ${outputPath}`,
+          );
+        } else {
+          console.log(
+            `\n✅ [SUCCESS] All contracts were audited, and no issues were found.`,
+          );
+        }
       }
     },
   );
