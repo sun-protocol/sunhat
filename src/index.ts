@@ -11,11 +11,11 @@ import {
   BuildInfo,
   NetworkConfig,
 } from 'hardhat/types';
-import {createProvider} from 'hardhat/internal/core/providers/construction'; // TODO harhdat argument types not from internal
-import {LazyInitializationProviderAdapter} from 'hardhat/internal/core/providers/lazy-initialization';
-import {Deployment, ExtendedArtifact} from '../types';
-import {extendEnvironment, task, subtask, extendConfig} from 'hardhat/config';
-import {HARDHAT_NETWORK_NAME, HardhatPluginError} from 'hardhat/plugins';
+import { createProvider } from 'hardhat/internal/core/providers/construction'; // TODO harhdat argument types not from internal
+import { LazyInitializationProviderAdapter } from 'hardhat/internal/core/providers/lazy-initialization';
+import { Deployment, ExtendedArtifact } from '../types';
+import { extendEnvironment, task, subtask, extendConfig } from 'hardhat/config';
+import { HARDHAT_NETWORK_NAME, HardhatPluginError } from 'hardhat/plugins';
 import * as types from 'hardhat/internal/core/params/argumentTypes'; // TODO harhdat argument types not from internal
 import {
   TASK_NODE,
@@ -24,21 +24,24 @@ import {
   TASK_NODE_SERVER_READY,
   TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD,
 } from 'hardhat/builtin-tasks/task-names';
-import {lazyObject} from 'hardhat/plugins';
-import {loadTronSolc} from './tron/solc';
+import { lazyObject } from 'hardhat/plugins';
+import { loadTronSolc } from './tron/solc';
+import { OpenAI, AzureOpenAI } from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import debug from 'debug';
 const log = debug('hardhat:sun-protocol:tron-studio');
 
-import {DeploymentsManager} from './DeploymentsManager';
+import { DeploymentsManager } from './DeploymentsManager';
 import chokidar from 'chokidar';
-import {submitSources} from './etherscan';
-import {submitSourcesToSourcify} from './sourcify';
-import {Network} from 'hardhat/types/runtime';
-import {store} from './globalStore';
-import {getDeployPaths, getNetworkName} from './utils';
+import { submitSources } from './etherscan';
+import { submitSourcesToSourcify } from './sourcify';
+import { Network } from 'hardhat/types/runtime';
+import { store } from './globalStore';
+import { getDeployPaths, getNetworkName } from './utils';
+import { LlmConfig, LlmProviderConfig } from './llm';
 
-export {getNetworkName};
+export { getNetworkName };
 
 export const TASK_DEPLOY = 'deploy';
 export const TASK_DEPLOY_MAIN = 'deploy:main';
@@ -55,7 +58,7 @@ export * from 'hardhat/types';
 let nodeTaskArgs: Record<string, any> = {};
 
 function isHardhatEVM(hre: HardhatRuntimeEnvironment): boolean {
-  const {network} = hre;
+  const { network } = hre;
   return network.name === HARDHAT_NETWORK_NAME;
 }
 
@@ -72,7 +75,7 @@ function normalizePathArray(config: HardhatConfig, paths: string[]): string[] {
 function normalizePath(
   config: HardhatConfig,
   userPath: string | undefined,
-  defaultPath: string
+  defaultPath: string,
 ): string {
   if (userPath === undefined) {
     userPath = path.join(config.paths.root, defaultPath);
@@ -89,13 +92,13 @@ extendConfig(
     config.paths.deployments = normalizePath(
       config,
       userConfig.paths?.deployments,
-      'deployments'
+      'deployments',
     );
 
     config.paths.imports = normalizePath(
       config,
       userConfig.paths?.imports,
-      'imports'
+      'imports',
     );
 
     if (userConfig.paths?.deploy) {
@@ -106,7 +109,7 @@ extendConfig(
         deployPaths = userConfig.paths.deploy;
       }
       config.paths.deploy = deployPaths.map((p) =>
-        normalizePath(config, p, 'deploy')
+        normalizePath(config, p, 'deploy'),
       );
     } else {
       config.paths.deploy = [normalizePath(config, undefined, 'deploy')];
@@ -115,7 +118,7 @@ extendConfig(
     if (userConfig.namedAccounts) {
       config.namedAccounts = userConfig.namedAccounts;
     } else {
-      config.namedAccounts = {default: {default: 0}};
+      config.namedAccounts = { default: { default: 0 } };
     }
 
     config.deterministicDeployment = userConfig.deterministicDeployment;
@@ -125,7 +128,8 @@ extendConfig(
         config.external = {};
       }
       if (userConfig.external.contracts) {
-        const externalContracts: {artifacts: string[]; deploy?: string}[] = [];
+        const externalContracts: { artifacts: string[]; deploy?: string }[] =
+          [];
         config.external.contracts = externalContracts;
         for (const userDefinedExternalContracts of userConfig.external
           .contracts) {
@@ -139,7 +143,7 @@ extendConfig(
               ? normalizePath(
                   config,
                   userDefinedExternalContracts.deploy,
-                  userDefinedExternalContracts.deploy
+                  userDefinedExternalContracts.deploy,
                 )
               : undefined,
           });
@@ -150,7 +154,7 @@ extendConfig(
         for (const key of Object.keys(userConfig.external.deployments)) {
           config.external.deployments[key] = normalizePathArray(
             config,
-            userConfig.external.deployments[key]
+            userConfig.external.deployments[key],
           );
         }
       }
@@ -163,7 +167,7 @@ extendConfig(
     const defaultConfig = {};
     if (userConfig.verify !== undefined) {
       const customConfig = userConfig.verify;
-      config.verify = {...defaultConfig, ...customConfig};
+      config.verify = { ...defaultConfig, ...customConfig };
     } else {
       config.verify = defaultConfig;
       // backward compatibility for runtime (js)
@@ -173,15 +177,15 @@ extendConfig(
         config.verify.etherscan = (userConfig as any).etherscan;
       }
     }
-  }
+  },
 );
 
 function createNetworkFromConfig(
   env: HardhatRuntimeEnvironment,
   networkName: string,
-  config: NetworkConfig
+  config: NetworkConfig,
 ): Network {
-  const tags: {[tag: string]: boolean} = {};
+  const tags: { [tag: string]: boolean } = {};
   const tagsCollected = config.tags || [];
   for (const tag of tagsCollected) {
     tags[tag] = true;
@@ -205,7 +209,7 @@ function createNetworkFromConfig(
 function networkFromConfig(
   env: HardhatRuntimeEnvironment,
   network: Network,
-  companion: boolean
+  companion: boolean,
 ) {
   let live = true;
   const networkName = network.name; // cannot use fork here as this could be set via task, T
@@ -224,7 +228,7 @@ function networkFromConfig(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((network.config as any).etherscan) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      network.verify = {etherscan: (network.config as any).etherscan};
+      network.verify = { etherscan: (network.config as any).etherscan };
     }
   }
 
@@ -287,7 +291,7 @@ extendEnvironment((env) => {
   if (deploymentsManager === undefined || env.deployments === undefined) {
     deploymentsManager = new DeploymentsManager(
       env,
-      lazyObject(() => env.network) // IMPORTANT, else other plugin cannot set env.network before end, like solidity-coverage does here in the coverage task :  https://github.com/sc-forks/solidity-coverage/blob/3c0f3a5c7db26e82974873bbf61cf462072a7c6d/plugins/resources/nomiclabs.utils.js#L93-L98
+      lazyObject(() => env.network), // IMPORTANT, else other plugin cannot set env.network before end, like solidity-coverage does here in the coverage task :  https://github.com/sc-forks/solidity-coverage/blob/3c0f3a5c7db26e82974873bbf61cf462072a7c6d/plugins/resources/nomiclabs.utils.js#L93-L98
     );
     env.deployments = deploymentsManager.deploymentsExtension;
     env.getNamedAccounts =
@@ -306,7 +310,7 @@ extendEnvironment((env) => {
       store.networks[networkName] = createNetworkFromConfig(
         env,
         networkName,
-        config
+        config,
       );
     }
   }
@@ -321,8 +325,8 @@ function addIfNotPresent(array: string[], value: string) {
 }
 
 function setupExtraSolcSettings(settings: {
-  metadata: {useLiteralContent: boolean};
-  outputSelection: {'*': {'': string[]; '*': string[]}};
+  metadata: { useLiteralContent: boolean };
+  outputSelection: { '*': { '': string[]; '*': string[] } };
 }): void {
   settings.metadata = settings.metadata || {};
   settings.metadata.useLiteralContent = true;
@@ -382,7 +386,7 @@ function initCompanionNetworks(hre: HardhatRuntimeEnvironment) {
     const config = hre.config.networks[networkName];
     if (!('url' in config) || networkName === 'hardhat') {
       throw new Error(
-        `in memory network like hardhat are not supported as companion network`
+        `in memory network like hardhat are not supported as companion network`,
       );
     }
 
@@ -415,36 +419,36 @@ subtask(TASK_DEPLOY_RUN_DEPLOY, 'deploy run only')
     'tags',
     'specify which deploy script to execute via tags, separated by commas',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'tagsRequireAll',
-    'execute only deploy scripts containing all the tags specified'
+    'execute only deploy scripts containing all the tags specified',
   )
   .addOptionalParam(
     'write',
     'whether to write deployments to file',
     true,
-    types.boolean
+    types.boolean,
   )
   .addOptionalParam(
     'pendingtx',
     'whether to save pending tx',
     false,
-    types.boolean
+    types.boolean,
   )
   .addOptionalParam(
     'gasprice',
     'gas price to use for transactions',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam('maxfee', 'max fee per gas', undefined, types.string)
   .addOptionalParam(
     'priorityfee',
     'max priority fee per gas',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag('reset', 'whether to delete deployments files first')
   .addFlag('log', 'whether to output log')
@@ -479,36 +483,36 @@ subtask(TASK_DEPLOY_MAIN, 'deploy')
     'tags',
     'specify which deploy script to execute via tags, separated by commas',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'tagsRequireAll',
-    'execute only deploy scripts containing all the tags specified'
+    'execute only deploy scripts containing all the tags specified',
   )
   .addOptionalParam(
     'write',
     'whether to write deployments to file',
     true,
-    types.boolean
+    types.boolean,
   )
   .addOptionalParam(
     'pendingtx',
     'whether to save pending tx',
     false,
-    types.boolean
+    types.boolean,
   )
   .addOptionalParam(
     'gasprice',
     'gas price to use for transactions',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam('maxfee', 'max fee per gas', undefined, types.string)
   .addOptionalParam(
     'priorityfee',
     'max priority fee per gas',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag('noCompile', 'disable pre compilation')
   .addFlag('reset', 'whether to delete deployments files first')
@@ -516,13 +520,13 @@ subtask(TASK_DEPLOY_MAIN, 'deploy')
   .addFlag('watch', 'redeploy on every change of contract or deploy script')
   .addFlag(
     'watchOnly',
-    'do not actually deploy, just watch and deploy if changes occurs'
+    'do not actually deploy, just watch and deploy if changes occurs',
   )
   .addFlag('reportGas', 'report gas use')
   .setAction(async (args, hre) => {
     if (args.reset) {
       await deploymentsManager.deletePreviousDeployments(
-        args.runAsNode ? 'localhost' : undefined
+        args.runAsNode ? 'localhost' : undefined,
       );
     }
 
@@ -530,7 +534,7 @@ subtask(TASK_DEPLOY_MAIN, 'deploy')
       if (!args.noCompile) {
         await hre.run('compile');
       }
-      return hre.run(TASK_DEPLOY_RUN_DEPLOY, {...args, reset: false});
+      return hre.run(TASK_DEPLOY_RUN_DEPLOY, { ...args, reset: false });
     }
 
     let currentPromise: Promise<{
@@ -543,11 +547,11 @@ subtask(TASK_DEPLOY_MAIN, 'deploy')
         {
           ignored: /(^|[/\\])\../, // ignore dotfiles
           persistent: true,
-        }
+        },
       );
 
       watcher.on('ready', () =>
-        console.log('Initial scan complete. Ready for changes')
+        console.log('Initial scan complete. Ready for changes'),
       );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -624,7 +628,7 @@ task(TASK_TEST, 'Runs mocha tests')
       await hre.deployments.fixture(undefined, {
         keepExistingDeployments: true, // by default reuse the existing deployments (useful for fork testing)
       });
-      return runSuper({...args, noCompile: true});
+      return runSuper({ ...args, noCompile: true });
     } else {
       return runSuper(args);
     }
@@ -637,37 +641,37 @@ task(TASK_DEPLOY, 'Deploy contracts')
     'tags',
     'specify which deploy script to execute via tags, separated by commas',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'tagsRequireAll',
-    'execute only deploy scripts containing all the tags specified'
+    'execute only deploy scripts containing all the tags specified',
   )
   .addOptionalParam(
     'write',
     'whether to write deployments to file',
     undefined,
-    types.boolean
+    types.boolean,
   )
   // TODO pendingtx
   .addOptionalParam(
     'gasprice',
     'gas price to use for transactions',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam('maxfee', 'max fee per gas', undefined, types.string)
   .addOptionalParam(
     'priorityfee',
     'max priority fee per gas',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'deployScripts',
     'override deploy script folder path',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag('noImpersonation', 'do not impersonate unknown accounts')
   .addFlag('noCompile', 'disable pre compilation')
@@ -699,7 +703,7 @@ task(TASK_DEPLOY, 'Deploy contracts')
 
 task(
   TASK_EXPORT,
-  'export contract deployment of the specified network into one file'
+  'export contract deployment of the specified network into one file',
 )
   .addOptionalParam('export', 'export current network deployments')
   .addOptionalParam('exportAll', 'export all deployments into one file')
@@ -713,7 +717,7 @@ task(
 
 async function enableProviderLogging(
   provider: EthereumProvider,
-  enabled: boolean
+  enabled: boolean,
 ) {
   await provider.request({
     method: 'hardhat_setLoggingEnabled',
@@ -728,26 +732,26 @@ task(TASK_NODE, 'Starts a JSON-RPC server on top of Hardhat EVM')
     'tags',
     'specify which deploy script to execute via tags, separated by commas',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'write',
     'whether to write deployments to file',
     true,
-    types.boolean
+    types.boolean,
   )
   .addOptionalParam(
     'gasprice',
     'gas price to use for transactions',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam('maxfee', 'max fee per gas', undefined, types.string)
   .addOptionalParam(
     'priorityfee',
     'max priority fee per gas',
     undefined,
-    types.string
+    types.string,
   )
   // TODO --unlock-accounts
   .addFlag('noReset', 'do not delete deployments files already present')
@@ -765,7 +769,7 @@ task(TASK_NODE, 'Starts a JSON-RPC server on top of Hardhat EVM')
         `
 Unsupported network for JSON-RPC server. Only hardhat is currently supported.
 you can specifiy hardhat via "--network hardhat"
-`
+`,
       );
     }
 
@@ -796,7 +800,7 @@ subtask(TASK_NODE_GET_PROVIDER).setAction(
       // copy existing deployment from specified netwotk into localhost deployment folder
       await fs.copy(
         path.join(hre.config.paths.deployments, networkName),
-        path.join(hre.config.paths.deployments, 'localhost')
+        path.join(hre.config.paths.deployments, 'localhost'),
       );
     }
 
@@ -812,7 +816,7 @@ subtask(TASK_NODE_GET_PROVIDER).setAction(
     await enableProviderLogging(provider, true);
 
     return provider;
-  }
+  },
 );
 
 subtask(TASK_NODE_SERVER_READY).setAction(async (args, hre, runSuper) => {
@@ -833,35 +837,35 @@ task(TASK_ETHERSCAN_VERIFY, 'submit contract source code to etherscan')
     'license',
     'SPDX license (useful if SPDX is not listed in the sources), need to be supported by etherscan: https://etherscan.io/contract-license-types',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'apiUrl',
     'specify the url manually',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'contractName',
     'specific contract name to verify',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'forceLicense',
-    'force the use of the license specified by --license option'
+    'force the use of the license specified by --license option',
   )
   .addFlag(
     'sleep',
-    'sleep 500ms between each verification, so API rate limit is not exceeded'
+    'sleep 500ms between each verification, so API rate limit is not exceeded',
   )
   .addFlag(
     'solcInput',
-    'fallback on solc-input (useful when etherscan fails on the minimum sources, see https://github.com/ethereum/solidity/issues/9573)'
+    'fallback on solc-input (useful when etherscan fails on the minimum sources, see https://github.com/ethereum/solidity/issues/9573)',
   )
   .addFlag(
     'writePostData',
-    'write the post data on file in "etherscan_requests/<network>" folder, for debugging purpose'
+    'write the post data on file in "etherscan_requests/<network>" folder, for debugging purpose',
   )
   .setAction(async (args, hre) => {
     const etherscanApiKey =
@@ -871,7 +875,7 @@ task(TASK_ETHERSCAN_VERIFY, 'submit contract source code to etherscan')
       hre.config.verify?.etherscan?.apiKey;
     if (!etherscanApiKey) {
       throw new Error(
-        `No Etherscan API KEY provided. Set it through command line option, in hardhat.config.ts, or by setting the "ETHERSCAN_API_KEY" env variable`
+        `No Etherscan API KEY provided. Set it through command line option, in hardhat.config.ts, or by setting the "ETHERSCAN_API_KEY" env variable`,
       );
     }
     const solcInputsPath = await deploymentsManager.getSolcInputPath();
@@ -889,23 +893,23 @@ task(TASK_ETHERSCAN_VERIFY, 'submit contract source code to etherscan')
 
 task(
   TASK_SOURCIFY,
-  'submit contract source code to sourcify (https://sourcify.dev)'
+  'submit contract source code to sourcify (https://sourcify.dev)',
 )
   .addOptionalParam(
     'endpoint',
     'endpoint url for sourcify',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'contractName',
     'specific contract name to verify',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'writeFailingMetadata',
-    'write to disk failing metadata for easy debugging'
+    'write to disk failing metadata for easy debugging',
   )
   .setAction(async (args, hre) => {
     await submitSourcesToSourcify(hre, args);
@@ -916,41 +920,41 @@ task('export-artifacts')
     'dest',
     'destination folder where the extended artifacts files will be written to',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'solcInput',
-    'if set, artifacts will have an associated solcInput files (required for old version of solidity to ensure verifiability'
+    'if set, artifacts will have an associated solcInput files (required for old version of solidity to ensure verifiability',
   )
   .addFlag(
     'includingEmptyBytecode',
-    'if set, even contract without bytecode (like interfaces) will be exported'
+    'if set, even contract without bytecode (like interfaces) will be exported',
   )
   .addFlag(
     'includingNoPublicFunctions',
-    'if set, even contract without public interface (like imternal libraries) will be exported'
+    'if set, even contract without public interface (like imternal libraries) will be exported',
   )
   .addOptionalParam(
     'exclude',
     'list of contract names separated by commas to exclude',
     undefined,
-    types.string
+    types.string,
   )
   .addOptionalParam(
     'include',
     'list of contract names separated by commas to include. If specified, only these will be considered',
     undefined,
-    types.string
+    types.string,
   )
   .addFlag(
     'hideSources',
-    'if set, the artifacts files will not contain source code (metadata or other data exposing it) unless specified via --sources-for'
+    'if set, the artifacts files will not contain source code (metadata or other data exposing it) unless specified via --sources-for',
   )
   .addOptionalParam(
     'sourcesFor',
     'list of contract names separated by commas to include source (metadata,etc...) for (see --hide-sources)',
     undefined,
-    types.string
+    types.string,
   )
   .setAction(async (args, hre) => {
     await hre.run('compile');
@@ -961,7 +965,7 @@ task('export-artifacts')
         result[item] = true;
         return result;
       },
-      {}
+      {},
     );
     const argsExclude: string[] = args.exclude ? args.exclude.split(',') : [];
     const exclude = argsExclude.reduce(
@@ -969,7 +973,7 @@ task('export-artifacts')
         result[item] = true;
         return result;
       },
-      {}
+      {},
     );
     const argsSourcesFor: string[] = args.sourcesFor
       ? args.sourcesFor.split(',')
@@ -979,7 +983,7 @@ task('export-artifacts')
         result[item] = true;
         return result;
       },
-      {}
+      {},
     );
     const extendedArtifactFolderpath = args.dest;
     fs.emptyDirSync(extendedArtifactFolderpath);
@@ -995,12 +999,12 @@ task('export-artifacts')
       }
       const artifactDBGPath = path.join(
         path.dirname(artifactPath),
-        artifactName + '.dbg.json'
+        artifactName + '.dbg.json',
       );
       const artifactDBG = await fs.readJSON(artifactDBGPath);
       const buildinfoPath = path.join(
         path.dirname(artifactDBGPath),
-        artifactDBG.buildInfo
+        artifactDBG.buildInfo,
       );
       const buildInfo: BuildInfo = await fs.readJSON(buildinfoPath);
       const output =
@@ -1073,20 +1077,20 @@ task('export-artifacts')
 
       let filepath = path.join(
         extendedArtifactFolderpath,
-        artifactName + '.json'
+        artifactName + '.json',
       );
       if (dataToWrite.sourceName) {
         if (dataToWrite.contractName) {
           filepath = path.join(
             extendedArtifactFolderpath,
             dataToWrite.sourceName,
-            dataToWrite.contractName + '.json'
+            dataToWrite.contractName + '.json',
           );
         } else {
           filepath = path.join(
             extendedArtifactFolderpath,
             dataToWrite.sourceName,
-            artifactName + '.json'
+            artifactName + '.json',
           );
         }
       }
@@ -1103,13 +1107,275 @@ subtask(
       solcVersion: string;
     },
     hre,
-    runSuper
+    runSuper,
   ) => {
-    const nw = hre.hardhatArguments["network"]?hre.hardhatArguments["network"]:"localhost";
+    const nw = hre.hardhatArguments['network']
+      ? hre.hardhatArguments['network']
+      : 'localhost';
     if (hre.config.networks[nw].tron && (hre.config as any)?.tronSolc?.enable) {
       // are we using tron-solc compiler and is the network a Tron network
       return await loadTronSolc(args.solcVersion);
     }
     return runSuper();
-  }
+  },
 );
+
+type ProviderName = keyof LlmConfig['providers'];
+
+/**
+ * 统一的 LLM 调用函数
+ * @param {string} provider - LLM 提供商 (e.g., 'openai', 'gemini')
+ * @param {object} config - 该 provider 的配置 (apiKey, model, baseURL?)
+ * @param {string} prompt - 发送给模型的 Prompt
+ * @returns {Promise<string>} - 返回模型的分析结果文本
+ */
+async function callLLM(
+  provider: ProviderName,
+  config: LlmProviderConfig,
+  prompt: string,
+): Promise<string> {
+  console.log(`[INFO] Using provider: ${provider}, model: ${config.model}`);
+  console.log(`[INFO] prompt: ${prompt}`);
+
+  switch (provider) {
+    case 'openai':
+    case 'qwen':
+    case 'deepseek': {
+      // 这些模型使用 OpenAI 兼容的 API
+      const openaiConfig = config as LlmConfig['providers']['openai'];
+      const openai = new OpenAI({
+        apiKey: openaiConfig.apiKey,
+        baseURL: openaiConfig.baseURL,
+      });
+      const response = await openai.chat.completions.create({
+        model: openaiConfig.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a professional and meticulous smart contract auditor.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.3,
+      });
+      return response.choices[0].message.content ?? '';
+    }
+    case 'azure_openai': {
+      const azureConfig = config as LlmConfig['providers']['azure_openai'];
+
+      const azureClient = new AzureOpenAI({
+        endpoint: azureConfig.endpoint,
+        apiKey: azureConfig.apiKey,
+        apiVersion: azureConfig.apiVersion,
+        deployment: azureConfig.deploymentName,
+      });
+
+      console.log(`[INFO] Using model deployment: ${azureConfig.model}`);
+      const response = await azureClient.chat.completions.create({
+        model: azureConfig.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a professional and meticulous smart contract auditor.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.3,
+      });
+      return response.choices[0].message.content ?? '';
+    }
+    case 'gemini': {
+      const geminiConfig = config as LlmConfig['providers']['gemini'];
+      const genAI = new GoogleGenerativeAI(geminiConfig.apiKey);
+      const model = genAI.getGenerativeModel({ model: geminiConfig.model });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    }
+
+    default:
+      throw new Error(`Unsupported LLM provider: ${provider}`);
+  }
+}
+
+function getAuditPrompt(
+  contractName: string,
+  contractCode: string,
+  format: 'text' | 'json',
+): string {
+  const codeWithLineNumbers = contractCode
+    .split('\n')
+    .map((line, index) => `${index + 1}: ${line}`) // 为每行加上 "行号: " 前缀
+    .join('\n');
+
+  if (format === 'json') {
+    return `
+      As an expert smart contract auditor, please analyze the following Solidity code from the file "${contractName}".
+      Your response MUST be a single, valid JSON array of objects, enclosed in a single \`\`\`json code block. Do not add any text before or after the JSON block.
+      Each object in the array represents a single issue you've found and must conform to this exact structure:
+      {
+        "severity": "HIGH" | "MEDIUM" | "LOW" | "INFO",
+        "filePath": "${contractName}",
+        "lineNumber": <number>,
+        "message": "<A concise description of the issue>",
+        "detailedDescription": "<A full explanation of the vulnerability or suggestion.>",
+        "suggestion": "<A code snippet showing the recommended change. Use diff format if possible.>"
+      }
+
+      If you find no issues, return an empty array [].
+
+      Analyze this code:
+      \`\`\`solidity
+      ${codeWithLineNumbers}
+      \`\`\`
+    `;
+  }
+
+  return `
+    As an expert smart contract auditor, please analyze the following Solidity code.
+    The file name is "${contractName}".
+
+    Your analysis should cover:
+    1.  **Security Vulnerabilities**: Identify potential risks.
+    2.  **Gas Optimization**: Suggest gas-saving improvements.
+    3.  **Best Practices**: Check for code style and common practices.
+
+    **CRITICAL**: For each issue you find, you MUST format the title of the issue on a single line like this:
+    [SEVERITY]|[FILE_PATH]:[LINE_NUMBER] - [BRIEF_DESCRIPTION]
+
+    - **SEVERITY**: Use one of: HIGH, MEDIUM, LOW, INFO.
+    - **FILE_PATH**: This MUST be the exact filename provided: ${contractName}.
+    - **LINE_NUMBER**: The specific line number where the issue occurs.
+    - **BRIEF_DESCRIPTION**: A short, one-sentence summary of the issue.
+
+    After this title line, provide a detailed explanation and a code snippet with your suggested modification.
+
+    Example of a single issue's format:
+    ---
+    MEDIUM|MyContract.sol:42 - Re-entrancy risk in the withdraw function.
+
+    **Details**: The current implementation of the \`withdraw\` function updates the user's balance *after* the external call (transfer), which makes it vulnerable to a re-entrancy attack.
+
+    **Recommendation**:
+    \`\`\`diff
+    - balance[msg.sender] = 0;
+    - (bool sent, ) = msg.sender.call{value: amount}("");
+    + (bool sent, ) = msg.sender.call{value: amount}("");
+    + require(sent, "Failed to send Ether");
+    + balance[msg.sender] = 0;
+    \`\`\`
+    ---
+
+    Now, analyze the following contract code:
+    \`\`\`solidity
+    ${codeWithLineNumbers}
+    \`\`\`
+  `;
+}
+
+// 提取 JSON 字符串的辅助函数
+function extractJson(rawOutput: string): string {
+  const match = rawOutput.match(/```json\s*(\[[\s\S]*?\])\s*```/);
+  if (!match || !match[1]) {
+    try {
+      JSON.parse(rawOutput);
+      return rawOutput;
+    } catch (e) {
+      throw new Error(
+        'Could not find a valid JSON code block or parse the raw output as JSON.',
+      );
+    }
+  }
+  return match[1];
+}
+
+interface AuditTaskArgs {
+  contract: string;
+  provider?: ProviderName;
+  format?: 'text' | 'json';
+}
+
+task('audit', 'Audits a smart contract using a specified LLM provider')
+  .addParam('contract', 'The name of the contract file to audit')
+  .addOptionalParam(
+    'provider',
+    'The LLM provider to use (openai, gemini, qwen, deepseek)',
+  )
+  .addOptionalParam('format', "The output format: 'text' (default) or 'json'")
+  .setAction(
+    async (taskArgs: AuditTaskArgs, hre: HardhatRuntimeEnvironment) => {
+      const {
+        contract: contractName,
+        provider: providerArg,
+        format: formatArg,
+      } = taskArgs;
+      const { llm: llmConfig } = hre.config;
+      const contract = contractName || 'all';
+      const format = formatArg || 'text';
+      const provider = providerArg || llmConfig.defaultProvider;
+      const providerConfig = llmConfig.providers[provider];
+
+      if (!providerConfig || !providerConfig.apiKey) {
+        console.error(
+          `\n[ERROR] Configuration for provider '${provider}' is missing or incomplete. Check your hardhat.config.ts and .env file.`,
+        );
+        return;
+      }
+
+      let contractCode: string;
+      try {
+        const contractPath = path.resolve(
+          hre.config.paths.sources,
+          contractName,
+        );
+        contractCode = fs.readFileSync(contractPath, 'utf8');
+        console.log(`[INFO] Successfully read contract: ${contractName}`);
+      } catch (error) {
+        console.error(
+          `\n[ERROR] Could not read contract file: ${contractName}.`,
+        );
+        return;
+      }
+
+      const prompt = getAuditPrompt(contractName, contractCode, format);
+
+      try {
+        console.log(
+          `[INFO] Sending code to LLM for analysis (format: ${format})...`,
+        );
+        const rawAnalysis = await callLLM(provider, providerConfig, prompt);
+        console.log(`\n=============================================`);
+        console.log(`    🤖 LLM Audit Report (${provider.toUpperCase()})    `);
+        console.log(`=============================================\n`);
+        console.log(rawAnalysis);
+        if (format === 'json') {
+          const jsonString = extractJson(rawAnalysis);
+          try {
+            const parsedJson = JSON.parse(jsonString);
+            const formattedJsonString = JSON.stringify(parsedJson, null, 2);
+            const outputPath = path.join(
+              hre.config.paths.root,
+              'audit-report.json',
+            );
+            fs.writeFileSync(outputPath, formattedJsonString, 'utf8');
+            console.log(
+              `\n✅ [SUCCESS] Audit report has been saved to: ${outputPath}`,
+            );
+          } catch (e) {
+            console.error(
+              "\n[ERROR] Failed to parse the JSON extracted from the LLM's response.",
+            );
+            if (e instanceof SyntaxError) {
+              console.error('Syntax Error:', e.message);
+            }
+            console.error('Extracted string that failed to parse:', jsonString);
+          }
+        }
+      } catch (error: any) {
+        console.error(`\n[ERROR] An error occurred during the audit process:`);
+        console.error(error.message);
+      }
+    },
+  );

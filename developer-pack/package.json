@@ -1,8 +1,8 @@
 {
-  "name": "sunhat-developer-pack",
-  "displayName": "Sunhat Developer Pack",
+  "name": "sunhat-vscode-extension",
+  "displayName": "Sunhat VSCode Extension",
   "description": "Sunhat Developer's Extension Pack to ease the smart contract development, testing and deployment.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "keywords": [
     "hardhat",
     "contract test",
@@ -15,13 +15,8 @@
     "sunhat",
     "tron network"
   ],
-  "icon": "images/sun.png",
-  "author": {
-    "name": "Leon Johnson",
-    "email": "leon.zhang@tron.network",
-    "url": "https://grayfoxd.github.io"
-  },
-  "publisher": "grayfoxd",
+  "icon": "images/logo.png",
+  "publisher": "sun-protocol",
   "repository": {
     "type": "git",
     "url": "https://github.com/sun-protocol/sunhat"
@@ -30,6 +25,8 @@
     "vscode": "^1.70.0"
   },
   "categories": [
+    "Linters",
+    "Programming Languages",
     "Extension Packs"
   ],
   "extensionPack": [
@@ -37,5 +34,23 @@
     "maratib.hardhat-test-snippets",
     "NomicFoundation.hardhat-solidity",
     "hbenl.vscode-mocha-test-adapter"
-  ]
+  ],
+  "activationEvents": [
+    "onLanguage:solidity",
+    "onLanguage:vyper"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc",
+    "watch": "tsc -w",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "@types/vscode": "^1.106.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
 }
