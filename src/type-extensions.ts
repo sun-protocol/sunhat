@@ -6,7 +6,8 @@ import {
   DeploymentsExtension,
   DeterministicDeploymentInfo,
 } from '../types';
-import {EthereumProvider} from 'hardhat/types';
+import { LlmConfig } from './llm';
+import { EthereumProvider } from 'hardhat/types';
 
 declare module 'hardhat/types/config' {
   interface HardhatUserConfig {
@@ -14,7 +15,7 @@ declare module 'hardhat/types/config' {
       [name: string]:
         | string
         | number
-        | {[network: string]: null | number | string};
+        | { [network: string]: null | number | string };
     };
     deterministicDeployment?:
       | {
@@ -30,7 +31,8 @@ declare module 'hardhat/types/config' {
         deploy?: string;
       }[];
     };
-    verify?: {etherscan?: {apiKey?: string}};
+    verify?: { etherscan?: { apiKey?: string } };
+    llm?: LlmConfig;
   }
 
   interface HardhatConfig {
@@ -38,7 +40,7 @@ declare module 'hardhat/types/config' {
       [name: string]:
         | string
         | number
-        | {[network: string]: null | number | string};
+        | { [network: string]: null | number | string };
     };
     deterministicDeployment?:
       | {
@@ -54,7 +56,8 @@ declare module 'hardhat/types/config' {
         deploy?: string;
       }[];
     };
-    verify: {etherscan?: {apiKey?: string}};
+    verify: { etherscan?: { apiKey?: string } };
+    llm: LlmConfig;
   }
 
   interface HardhatNetworkUserConfig {
@@ -62,8 +65,8 @@ declare module 'hardhat/types/config' {
     saveDeployments?: boolean;
     tags?: string[];
     deploy?: string | string[];
-    companionNetworks?: {[name: string]: string};
-    verify?: {etherscan?: {apiKey?: string; apiUrl?: string}};
+    companionNetworks?: { [name: string]: string };
+    verify?: { etherscan?: { apiKey?: string; apiUrl?: string } };
     zksync?: boolean;
     tron?: boolean;
     autoImpersonate?: boolean;
@@ -74,8 +77,8 @@ declare module 'hardhat/types/config' {
     saveDeployments?: boolean;
     tags?: string[];
     deploy?: string | string[];
-    companionNetworks?: {[name: string]: string};
-    verify?: {etherscan?: {apiKey?: string; apiUrl?: string}};
+    companionNetworks?: { [name: string]: string };
+    verify?: { etherscan?: { apiKey?: string; apiUrl?: string } };
     zksync?: boolean;
     tron?: boolean;
     autoImpersonate?: boolean;
@@ -92,8 +95,8 @@ declare module 'hardhat/types/config' {
     saveDeployments: boolean;
     tags: string[];
     deploy?: string[];
-    companionNetworks: {[name: string]: string};
-    verify?: {etherscan?: {apiKey?: string; apiUrl?: string}};
+    companionNetworks: { [name: string]: string };
+    verify?: { etherscan?: { apiKey?: string; apiUrl?: string } };
     zksync?: boolean;
     tron?: boolean;
     autoImpersonate?: boolean;
@@ -104,8 +107,8 @@ declare module 'hardhat/types/config' {
     saveDeployments: boolean;
     tags: string[];
     deploy?: string[];
-    companionNetworks: {[name: string]: string};
-    verify?: {etherscan?: {apiKey?: string; apiUrl?: string}};
+    companionNetworks: { [name: string]: string };
+    verify?: { etherscan?: { apiKey?: string; apiUrl?: string } };
     zksync?: boolean;
     tron?: boolean;
     autoImpersonate?: boolean;
@@ -144,8 +147,8 @@ declare module 'hardhat/types/runtime' {
     saveDeployments: boolean;
     tags: Record<string, boolean>;
     deploy: string[];
-    companionNetworks: {[name: string]: string};
-    verify?: {etherscan?: {apiKey?: string; apiUrl?: string}};
+    companionNetworks: { [name: string]: string };
+    verify?: { etherscan?: { apiKey?: string; apiUrl?: string } };
     zksync?: boolean;
     tron?: boolean;
     autoImpersonate?: boolean;
