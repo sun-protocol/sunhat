@@ -28,6 +28,7 @@ export type LlmProviderConfig =
 // 主配置对象的类型
 export interface LlmConfig {
   defaultProvider: keyof LlmConfig['providers'];
+  promptTemplate?: string;
   providers: {
     openai: OpenAICompatibleConfig;
     gemini: GeminiConfig;
