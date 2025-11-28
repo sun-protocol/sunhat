@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <a href="https://marketplace.visualstudio.com/items?itemName=sun-protocol.sunhat-vscode-extension">
-    <img src="https://img.shields.io/visual-studio-marketplace/v/sun-protocol.sunhat-vscode-extension?style=for-the-badge&label=VS%20Marketplace&color=blue" alt="VS Marketplace Version">
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunai.sunhat-vscode-extension">
+    <img src="https://img.shields.io/visual-studio-marketplace/v/sunai.sunhat-vscode-extension?style=for-the-badge&label=VS%20Marketplace&color=blue" alt="VS Marketplace Version">
   </a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=sun-protocol.sunhat-vscode-extension">
-    <img src="https://img.shields.io/visual-studio-marketplace/i/sun-protocol.sunhat-vscode-extension?style=for-the-badge&color=brightgreen" alt="Installs">
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunai.sunhat-vscode-extension">
+    <img src="https://img.shields.io/visual-studio-marketplace/i/sunai.sunhat-vscode-extension?style=for-the-badge&color=brightgreen" alt="Installs">
   </a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=sun-protocol.sunhat-vscode-extension&ssr=false#review-details">
-    <img src="https://img.shields.io/visual-studio-marketplace/r/sun-protocol.sunhat-vscode-extension?style=for-the-badge&color=yellow" alt="Rating">
+  <a href="https://marketplace.visualstudio.com/items?itemName=sunai.sunhat-vscode-extension&ssr=false#review-details">
+    <img src="https://img.shields.io/visual-studio-marketplace/r/sunai.sunhat-vscode-extension?style=for-the-badge&color=yellow" alt="Rating">
   </a>
 </p>
 
