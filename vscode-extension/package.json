@@ -16,7 +16,7 @@
     "tron network"
   ],
   "icon": "images/logo.png",
-  "publisher": "sun-protocol",
+  "publisher": "sunai",
   "repository": {
     "type": "git",
     "url": "https://github.com/sun-protocol/sunhat"
