@@ -1,7 +1,7 @@
 # Sunhat VSCode Extension
 
 <p align="center">
-  <img src="images/logo.png" width="200">
+  <img src="https://raw.githubusercontent.com/sun-protocol/sunhat/main/vscode-extension/images/logo.png" width="200">
 </p>
 
 <p align="center">
