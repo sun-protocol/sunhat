@@ -214,7 +214,7 @@ Check the `deployments/` directory for your deployment files. You should see:
 ---
 
 ## Development
-To dive deeper into advanced topics of the sunhat project lifecycle, please see the [Documentation](https://docs-hat.sun.io/) for guides and reference.
+To dive deeper into advanced topics of the sunhat project lifecycle, please see the [Documentation](https://hat-docs.sunagent.ai/) for guides and reference.
 
 ---
 

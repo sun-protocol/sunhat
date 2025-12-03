@@ -1137,7 +1137,7 @@ async function callLLM(
   prompt: string,
 ): Promise<string> {
   console.log(`[INFO] Using provider: ${provider}, model: ${config.model}`);
-  console.log(`[INFO] prompt: ${prompt}`);
+  // console.log(`[INFO] prompt: ${prompt}`);
 
   switch (provider) {
     case 'openai':
