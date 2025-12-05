@@ -12,16 +12,12 @@ RUN apt-get update \
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 RUN source /root/.nvm/nvm.sh \
       && nvm install 22 \
-      && npm install -g npm@latest
+      && npm install -g npm@latest \
+      && npm install -g pnpm \
+      && npm install -g yarn
 
 # vyper
 RUN pip3 install vyper==0.2.8
-
-# pnpm
-RUN npm install -g pnpm
-
-# yarn
-RUN npm install -g yarn
 
 # foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
