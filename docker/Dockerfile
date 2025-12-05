@@ -18,7 +18,10 @@ RUN source /root/.nvm/nvm.sh \
 RUN pip3 install vyper==0.2.8
 
 # pnpm
-RUN wget -qO- https://get.pnpm.io/install.sh | ENV="$HOME/.bashrc" SHELL="$(which bash)" bash -
+RUN npm install -g pnpm
+
+# yarn
+RUN npm install -g yarn
 
 # foundry
 RUN curl -L https://foundry.paradigm.xyz | bash
