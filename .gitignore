@@ -6,3 +6,8 @@ cache
 extendedArtifacts/
 package-lock.json
 .vscode/
+*.swp
+*.swo
+.pnpm-store
+out/
+*.vsix
