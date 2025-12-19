@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - SunHat CLI as Hardhat CLI alternative
 - Project Scaffolding and Automated Setup
 - Developer Documents Updated
+- Official Docker Image Published
+
+### Fixed
+- Release Workflow
 
 ## [1.2.0] - 2025-12-5
 
