@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2025-12-19
+
+### Added
+- SunHat CLI as Hardhat CLI alternative
+- Project Scaffolding and Automated Setup
+- Developer Documents Updated
+
 ## [1.2.0] - 2025-12-5
 
 ### Added
