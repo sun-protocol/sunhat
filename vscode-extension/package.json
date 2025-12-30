@@ -2,7 +2,7 @@
   "name": "sunhat-vscode-extension",
   "displayName": "Sunhat VSCode Extension",
   "description": "The essential VS Code extension pack for Web3 developers using Sunhat. Streamline your smart contract development, testing, and deployment lifecycle with this all-in-one toolkit.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "keywords": [
     "hardhat",
     "contract test",
