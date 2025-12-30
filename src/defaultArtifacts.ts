@@ -1,9 +1,9 @@
 import * as ea from '../extendedArtifacts';
 import * as eaT from '../extendedArtifactsTron';
-import {ExtendedArtifact} from '../types';
+import { ExtendedArtifact } from '../types';
 
 type DefaultArtifactsName = keyof typeof ea & keyof typeof eaT;
-type DefaultArtifacts = {[key in DefaultArtifactsName]: ExtendedArtifact};
+type DefaultArtifacts = { [key in DefaultArtifactsName]: ExtendedArtifact };
 
 /*
 const isArtifactName = (

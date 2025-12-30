@@ -1,4 +1,4 @@
-import {TronWebError1, TronWebError2} from 'tronweb/interfaces';
+import { TronWebError1, TronWebError2 } from 'tronweb/interfaces';
 
 export const isArrayofBytes = (data: any): boolean => {
   return (
@@ -11,7 +11,7 @@ export const isArrayofBytes = (data: any): boolean => {
 export class TronWebError extends Error {
   readonly code: string;
   readonly hash: string;
-  constructor({code, message, txid}: TronWebError1) {
+  constructor({ code, message, txid }: TronWebError1) {
     // need to convert the message to utf-8
     message = Buffer.from(message, 'hex').toString();
     super(message);
@@ -22,7 +22,7 @@ export class TronWebError extends Error {
 }
 
 export class TronWebGetTransactionError extends Error {
-  constructor({Error}: TronWebError2) {
+  constructor({ Error }: TronWebError2) {
     super(Error);
     this.name = this.constructor.name;
   }

@@ -10,7 +10,7 @@ interface OpenAICompatibleConfig extends BaseProviderConfig {
 }
 
 // Gemini 的特定配置
-interface GeminiConfig extends BaseProviderConfig {}
+type GeminiConfig = BaseProviderConfig;
 
 // Azure 的特定配置
 interface AzureConfig extends BaseProviderConfig {

@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {Signer} from '@ethersproject/abstract-signer';
+import { Signer } from '@ethersproject/abstract-signer';
 import {
   Web3Provider,
   TransactionResponse,
   TransactionRequest,
 } from '@ethersproject/providers';
-import {getAddress} from '@ethersproject/address';
-import {Contract, PayableOverrides} from '@ethersproject/contracts';
+import { getAddress } from '@ethersproject/address';
+import { Contract, PayableOverrides } from '@ethersproject/contracts';
 import * as zk from 'zksync-ethers';
-import {AddressZero} from '@ethersproject/constants';
-import {BigNumber} from '@ethersproject/bignumber';
-import {Wallet} from '@ethersproject/wallet';
-import {keccak256 as solidityKeccak256} from '@ethersproject/solidity';
-import {zeroPad, hexlify} from '@ethersproject/bytes';
-import {Interface, FunctionFragment} from '@ethersproject/abi';
+import { AddressZero } from '@ethersproject/constants';
+import { BigNumber } from '@ethersproject/bignumber';
+import { Wallet } from '@ethersproject/wallet';
+import { keccak256 as solidityKeccak256 } from '@ethersproject/solidity';
+import { zeroPad, hexlify } from '@ethersproject/bytes';
+import { Interface, FunctionFragment } from '@ethersproject/abi';
 import {
   Deployment,
   DeployResult,
@@ -34,26 +34,26 @@ import {
   ArtifactData,
   ABI,
 } from '../types';
-import {PartialExtension} from './internal/types';
-import {UnknownSignerError} from './errors';
-import {filterABI, mergeABIs, recode, countElements} from './utils';
+import { PartialExtension } from './internal/types';
+import { UnknownSignerError } from './errors';
+import { filterABI, mergeABIs, recode, countElements } from './utils';
 import fs from 'fs-extra';
 
 import oldDiamonBase from './old_diamondbase.json';
-import {Artifact, EthereumProvider} from 'hardhat/types';
-import {DeploymentsManager} from './DeploymentsManager';
+import { Artifact, EthereumProvider } from 'hardhat/types';
+import { DeploymentsManager } from './DeploymentsManager';
 import enquirer from 'enquirer';
 import {
   parse as parseTransaction,
   Transaction,
 } from '@ethersproject/transactions';
-import {getDerivationPath} from './hdpath';
-import {bnReplacer} from './internal/utils';
-import {DeploymentFactory} from './DeploymentFactory';
-import {TronWeb3Provider} from './tron/provider';
-import {TronSigner} from './tron/signer';
-import {CreateSmartContract} from './tron/types';
-import {getDefaultArtifact} from './defaultArtifacts';
+import { getDerivationPath } from './hdpath';
+import { bnReplacer } from './internal/utils';
+import { DeploymentFactory } from './DeploymentFactory';
+import { TronWeb3Provider } from './tron/provider';
+import { TronSigner } from './tron/signer';
+import { CreateSmartContract } from './tron/types';
+import { getDefaultArtifact } from './defaultArtifacts';
 import TronWeb from 'tronweb';
 
 let LedgerSigner: any; // TODO type
@@ -119,7 +119,7 @@ function fixProvider(providerGiven: any): any {
       providerGiven
         .send(req.method, req.params)
         .then((result: any) =>
-          callback(null, {result, id: req.id, jsonrpc: req.jsonrpc})
+          callback(null, { result, id: req.id, jsonrpc: req.jsonrpc })
         )
         .catch((error: any) => callback(error, null));
     };
@@ -162,7 +162,7 @@ function linkRawLibrary(
 
 function linkRawLibraries(
   bytecode: string,
-  libraries: {[libraryName: string]: Address}
+  libraries: { [libraryName: string]: Address }
 ): string {
   for (const libName of Object.keys(libraries)) {
     const libAddress = libraries[libName];
@@ -176,11 +176,11 @@ function linkLibraries(
     bytecode: string;
     linkReferences?: {
       [libraryFileName: string]: {
-        [libraryName: string]: Array<{length: number; start: number}>;
+        [libraryName: string]: Array<{ length: number; start: number }>;
       };
     };
   },
-  libraries?: {[libraryName: string]: Address}
+  libraries?: { [libraryName: string]: Address }
 ) {
   let bytecode = artifact.bytecode;
 
@@ -270,7 +270,7 @@ export function addHelpers(
   };
 } {
   let provider: Web3Provider | zk.Web3Provider | TronWeb3Provider;
-  const availableAccounts: {[name: string]: boolean} = {};
+  const availableAccounts: { [name: string]: boolean } = {};
 
   async function init(): Promise<
     Web3Provider | zk.Web3Provider | TronWeb3Provider
@@ -492,20 +492,20 @@ export function addHelpers(
       artifactName = name;
       artifact = await getArtifact(artifactName);
     }
-    return {artifact, artifactName};
+    return { artifact, artifactName };
   }
 
   async function getLinkedArtifact(
     name: string,
     options: DeployOptions
-  ): Promise<{artifact: Artifact; artifactName: string | undefined}> {
+  ): Promise<{ artifact: Artifact; artifactName: string | undefined }> {
     // TODO get linked artifact
-    const {artifact, artifactName} = await getArtifactFromOptions(
+    const { artifact, artifactName } = await getArtifactFromOptions(
       name,
       options
     );
     const byteCode = linkLibraries(artifact, options.libraries);
-    return {artifact: {...artifact, bytecode: byteCode}, artifactName};
+    return { artifact: { ...artifact, bytecode: byteCode }, artifactName };
   }
 
   async function _deploy(
@@ -521,7 +521,7 @@ export function addHelpers(
       unknown,
     } = await getFrom(options.from);
 
-    const {artifact: linkedArtifact, artifactName} = await getLinkedArtifact(
+    const { artifact: linkedArtifact, artifactName } = await getLinkedArtifact(
       name,
       options
     );
@@ -624,7 +624,7 @@ export function addHelpers(
       ...linkedArtifact,
       transactionHash: tx.hash,
       args,
-      linkedData: options.linkedData
+      linkedData: options.linkedData,
     };
     if (artifactName && willSaveToDisk()) {
       const extendedArtifact = await partialExtension.getExtendedArtifact(
@@ -653,33 +653,31 @@ export function addHelpers(
     let address;
     let addressHex;
     let bandwith;
-    if (network.tron && ethersSigner instanceof TronSigner){
-
+    if (network.tron && ethersSigner instanceof TronSigner) {
       const tronwebCurr = ethersSigner.getTronWeb();
-      const url = tronwebCurr.fullNode.host.replace(/\/jsonrpc$/, "");
-      const tronweb = new TronWeb(
-        url,
-        url,
-        false,
-        false
-      );
+      const url = tronwebCurr.fullNode.host.replace(/\/jsonrpc$/, '');
+      const tronweb = new TronWeb(url, url, false, false);
       receipt = receiptPre;
       receipt.from = tronweb.address.fromHex(receiptPre.from);
       receipt.to = tronweb.address.fromHex(receiptPre.to);
-      receipt.contractAddress = tronweb.address.fromHex(receiptPre.contractAddress);
+      receipt.contractAddress = tronweb.address.fromHex(
+        receiptPre.contractAddress
+      );
       address = tronweb.address.fromHex(addressPre);
       addressHex = tronweb.address.toHex(receiptPre.contractAddress);
-      const resp = await tronweb.trx.getUnconfirmedTransactionInfo(tx.hash) as TronTxInfo;
+      const resp = (await tronweb.trx.getUnconfirmedTransactionInfo(
+        tx.hash
+      )) as TronTxInfo;
       if (resp?.receipt?.net_usage != null) {
         bandwith = resp?.receipt?.net_usage;
       } else if (resp?.fee != null) {
         bandwith = resp.fee;
       }
-    }else{
+    } else {
       receipt = receiptPre;
       address = addressPre;
     }
-   
+
     const argNumbers = countElements(preDeployment.args);
     const deployment = {
       ...preDeployment,
@@ -711,7 +709,7 @@ export function addHelpers(
     implementationAddress?: Address;
     deploy: () => Promise<DeployResult>;
   }> {
-    options = {...options}; // ensure no change
+    options = { ...options }; // ensure no change
     await init();
 
     const deployFunction = () =>
@@ -742,9 +740,9 @@ export function addHelpers(
       } = await _getProxyInfo(name, options);
       /* eslint-enable prefer-const */
 
-      const {address: implementationAddress} = await deterministic(
+      const { address: implementationAddress } = await deterministic(
         implementationName,
-        {...implementationOptions, salt: options.salt}
+        { ...implementationOptions, salt: options.salt }
       );
 
       const implementationContract = new Contract(
@@ -774,7 +772,7 @@ export function addHelpers(
         }
 
         if (!proxyAdminDeployed) {
-          const {address: proxyAdminAddress} = await deterministic(
+          const { address: proxyAdminAddress } = await deterministic(
             proxyAdminName,
             {
               from: options.from,
@@ -798,7 +796,7 @@ export function addHelpers(
         }
       }
 
-      const proxyOptions = {...options}; // ensure no change
+      const proxyOptions = { ...options }; // ensure no change
       delete proxyOptions.proxy;
       delete proxyOptions.libraries;
       proxyOptions.contract = proxyContract;
@@ -807,7 +805,7 @@ export function addHelpers(
         proxyAdmin,
         data,
       });
-      const {address: proxyAddress} = await deterministic(proxyName, {
+      const { address: proxyAddress } = await deterministic(proxyName, {
         ...proxyOptions,
         salt: options.salt,
       });
@@ -825,10 +823,8 @@ export function addHelpers(
         address: from,
       } = await getFrom(options.from);
 
-      const {artifact: linkedArtifact, artifactName} = await getLinkedArtifact(
-        name,
-        options
-      );
+      const { artifact: linkedArtifact, artifactName } =
+        await getLinkedArtifact(name, options);
       const factory = new DeploymentFactory(
         getArtifact,
         linkedArtifact,
@@ -873,13 +869,13 @@ export function addHelpers(
   async function fetchIfDifferent(
     name: string,
     options: DeployOptions
-  ): Promise<{differences: boolean; address?: string}> {
-    options = {...options}; // ensure no change
+  ): Promise<{ differences: boolean; address?: string }> {
+    options = { ...options }; // ensure no change
     const args = options.args ? [...options.args] : [];
     await init();
 
-    const {ethersSigner} = await getFrom(options.from);
-    const {artifact: linkedArtifact} = await getLinkedArtifact(name, options);
+    const { ethersSigner } = await getFrom(options.from);
+    const { artifact: linkedArtifact } = await getLinkedArtifact(name, options);
     const factory = new DeploymentFactory(
       getArtifact,
       linkedArtifact,
@@ -901,15 +897,15 @@ export function addHelpers(
       );
       const code = await provider.getCode(create2Address);
       if (code === '0x') {
-        return {differences: true, address: undefined};
+        return { differences: true, address: undefined };
       } else {
-        return {differences: false, address: create2Address};
+        return { differences: false, address: create2Address };
       }
     }
     const deployment = await partialExtension.getOrNull(name);
     if (deployment) {
       if (options.skipIfAlreadyDeployed) {
-        return {differences: false, address: undefined}; // TODO check receipt, see below
+        return { differences: false, address: undefined }; // TODO check receipt, see below
       }
       // TODO transactionReceipt + check for status
       let transactionDetailsAvailable = false;
@@ -929,9 +925,9 @@ export function addHelpers(
       if (transaction) {
         const differences = await factory.compareDeploymentTransaction(
           transaction,
-	  deployment
+          deployment
         );
-        return {differences, address: deployment.address};
+        return { differences, address: deployment.address };
       } else {
         if (transactionDetailsAvailable) {
           throw new Error(
@@ -941,11 +937,11 @@ export function addHelpers(
           console.error(
             `no transaction details found for ${name}'s previous deployment, if the deployment is t be discarded, please delete the file`
           );
-          return {differences: false, address: deployment.address};
+          return { differences: false, address: deployment.address };
         }
       }
     }
-    return {differences: true, address: undefined};
+    return { differences: true, address: undefined };
   }
 
   async function _deployOne(
@@ -954,7 +950,7 @@ export function addHelpers(
     failsOnExistingDeterminisitc?: boolean
   ): Promise<DeployResult> {
     const argsArray = options.args ? [...options.args] : [];
-    options = {...options, args: argsArray};
+    options = { ...options, args: argsArray };
 
     let result: DeployResult;
     const diffResult = await fetchIfDifferent(name, options);
@@ -973,7 +969,7 @@ export function addHelpers(
           diffResult.address &&
           diffResult.address.toLowerCase() !== deployment.address.toLowerCase()
         ) {
-          const {artifact: linkedArtifact, artifactName} =
+          const { artifact: linkedArtifact, artifactName } =
             await getLinkedArtifact(name, options);
 
           // receipt missing
@@ -1000,7 +996,7 @@ export function addHelpers(
           );
         }
 
-        const {artifact: linkedArtifact, artifactName} =
+        const { artifact: linkedArtifact, artifactName } =
           await getLinkedArtifact(name, options);
 
         // receipt missing
@@ -1034,7 +1030,7 @@ export function addHelpers(
     }
     if (upgradeIndex === 0) {
       if (oldDeployment) {
-        return {...oldDeployment, newlyDeployed: false};
+        return { ...oldDeployment, newlyDeployed: false };
       }
     } else if (upgradeIndex === 1) {
       if (!oldDeployment) {
@@ -1046,7 +1042,7 @@ export function addHelpers(
         (oldDeployment.history && oldDeployment.history.length > 0) ||
         (oldDeployment.numDeployments && oldDeployment.numDeployments > 1)
       ) {
-        return {...oldDeployment, newlyDeployed: false};
+        return { ...oldDeployment, newlyDeployed: false };
       }
     } else {
       if (!oldDeployment) {
@@ -1058,7 +1054,7 @@ export function addHelpers(
       if (!oldDeployment.history) {
         if (oldDeployment.numDeployments && oldDeployment.numDeployments > 1) {
           if (oldDeployment.numDeployments > upgradeIndex) {
-            return {...oldDeployment, newlyDeployed: false};
+            return { ...oldDeployment, newlyDeployed: false };
           } else if (oldDeployment.numDeployments < upgradeIndex) {
             throw new Error(
               `upgradeIndex === ${upgradeIndex} : expects Deployments numDeployments to be at least ${upgradeIndex}`
@@ -1070,7 +1066,7 @@ export function addHelpers(
           );
         }
       } else if (oldDeployment.history.length > upgradeIndex - 1) {
-        return {...oldDeployment, newlyDeployed: false};
+        return { ...oldDeployment, newlyDeployed: false };
       } else if (oldDeployment.history.length < upgradeIndex - 1) {
         throw new Error(
           `upgradeIndex === ${upgradeIndex} : expects Deployments history length to be at least ${
@@ -1087,7 +1083,7 @@ export function addHelpers(
   ): Promise<{
     viaAdminContract:
       | string
-      | {name: string; artifact?: string | ArtifactData}
+      | { name: string; artifact?: string | ArtifactData }
       | undefined;
     proxyAdminName: string | undefined;
     proxyAdminDeployed: Deployment | undefined;
@@ -1111,7 +1107,7 @@ export function addHelpers(
     upgradeMethod: string | undefined;
     upgradeArgsTemplate: any[];
   }> {
-    const {isTronNetworkWithTronSolc} = deploymentManager;
+    const { isTronNetworkWithTronSolc } = deploymentManager;
     const oldDeployment = await getDeploymentOrNUll(name);
     let contractName = options.contract;
     let implementationName = name + '_Implementation';
@@ -1127,7 +1123,7 @@ export function addHelpers(
     let checkProxyAdmin = true;
     let viaAdminContract:
       | string
-      | {name: string; artifact?: string | ArtifactData}
+      | { name: string; artifact?: string | ArtifactData }
       | undefined;
     let proxyArgsTemplate = ['{implementation}', '{admin}', '{data}'];
     let upgradeMethod: string | undefined;
@@ -1232,7 +1228,7 @@ export function addHelpers(
     }
 
     const proxyName = name + '_Proxy';
-    const {address: owner} = await getProxyOwner(options);
+    const { address: owner } = await getProxyOwner(options);
     const implementationArgs = options.args ? [...options.args] : [];
 
     // --- Implementation Deployment ---
@@ -1254,7 +1250,7 @@ export function addHelpers(
       waitConfirmations: options.waitConfirmations,
     };
 
-    const {artifact} = await getArtifactFromOptions(
+    const { artifact } = await getArtifactFromOptions(
       name,
       implementationOptions
     );
@@ -1270,7 +1266,7 @@ export function addHelpers(
     mergedABI.push(proxyContractConstructor); // use proxy constructor abi
 
     const constructor = artifact.abi.find(
-      (fragment: {type: string; inputs: any[]}) =>
+      (fragment: { type: string; inputs: any[] }) =>
         fragment.type === 'constructor'
     );
 
@@ -1290,7 +1286,7 @@ Please specify the correct number of arguments as part of the deploy options: "a
         inputs: any[];
         name: string;
       } = artifact.abi.find(
-        (fragment: {type: string; inputs: any[]; name: string}) =>
+        (fragment: { type: string; inputs: any[]; name: string }) =>
           fragment.type === 'function' && fragment.name === updateMethod
       );
       if (!updateMethodFound) {
@@ -1507,7 +1503,7 @@ Note that in this case, the contract deployment will not behave the same if depl
 
       let proxy = await getDeploymentOrNUll(proxyName);
       if (!proxy) {
-        const proxyOptions = {...options}; // ensure no change
+        const proxyOptions = { ...options }; // ensure no change
         delete proxyOptions.proxy;
         delete proxyOptions.libraries;
         proxyOptions.contract = proxyContract;
@@ -1543,7 +1539,7 @@ Note that in this case, the contract deployment will not behave the same if depl
         }
 
         const oldProxy = proxy.abi.find(
-          (frag: {name: string}) => frag.name === 'changeImplementation'
+          (frag: { name: string }) => frag.name === 'changeImplementation'
         );
         if (oldProxy) {
           upgradeMethod = 'changeImplementation';
@@ -1573,14 +1569,14 @@ Note that in this case, the contract deployment will not behave the same if depl
 
           executeReceipt = await execute(
             proxyAdminName,
-            {...options, from: currentProxyAdminOwner},
+            { ...options, from: currentProxyAdminOwner },
             upgradeMethod,
             ...upgradeArgs
           );
         } else {
           executeReceipt = await execute(
             name,
-            {...options, from},
+            { ...options, from },
             upgradeMethod,
             ...upgradeArgs
           );
@@ -1722,7 +1718,7 @@ Note that in this case, the contract deployment will not behave the same if depl
             ethersSigner.sendTransaction = async (
               txRequest: TransactionRequest
             ) => {
-              const response: {hash: string} = await enquirer.prompt({
+              const response: { hash: string } = await enquirer.prompt({
                 type: 'input',
                 name: 'hash',
                 message: `
@@ -1838,7 +1834,7 @@ Note that in this case, the contract deployment will not behave the same if depl
       ethersSigner = provider.getSigner(from);
     }
 
-    return {address: from, ethersSigner, hardwareWallet, unknown};
+    return { address: from, ethersSigner, hardwareWallet, unknown };
   }
 
   // async function findEvents(contract: Contract, event: string, blockHash: string): Promise<any[]> {
@@ -1860,7 +1856,7 @@ Note that in this case, the contract deployment will not behave the same if depl
     name: string,
     options: DiamondOptions
   ): Promise<DeployResult> {
-    const {isTronNetworkWithTronSolc} = deploymentManager;
+    const { isTronNetworkWithTronSolc } = deploymentManager;
     let proxy: Deployment | undefined;
     const proxyName = name + '_DiamondProxy';
     const oldDeployment = await getDeploymentOrNUll(name);
@@ -1894,7 +1890,7 @@ Note that in this case, the contract deployment will not behave the same if depl
       }
     }
 
-    const {address: owner} = await getDiamondOwner(options);
+    const { address: owner } = await getDiamondOwner(options);
     const newSelectors: string[] = [];
     const facetSnapshot: Facet[] = [];
     let oldFacets: Facet[] = [];
@@ -2001,7 +1997,7 @@ Note that in this case, the contract deployment will not behave the same if depl
         }
       }
       const constructor = artifact.abi.find(
-        (fragment: {type: string; inputs: any[]}) =>
+        (fragment: { type: string; inputs: any[] }) =>
           fragment.type === 'constructor'
       );
       if (!argsSpecific && (!constructor || constructor.inputs.length === 0)) {
@@ -2084,7 +2080,7 @@ Note that in this case, the contract deployment will not behave the same if depl
     }
 
     const oldSelectors: string[] = [];
-    const oldSelectorsFacetAddress: {[selector: string]: string} = {};
+    const oldSelectorsFacetAddress: { [selector: string]: string } = {};
     for (const oldFacet of oldFacets) {
       for (const selector of oldFacet.functionSelectors) {
         oldSelectors.push(selector);
@@ -2450,7 +2446,7 @@ Note that in this case, the contract deployment will not behave the same if depl
             value: options.value,
           });
 
-          await saveDeployment(proxyName, {...proxy, abi});
+          await saveDeployment(proxyName, { ...proxy, abi });
           await saveDeployment(name, {
             ...proxy,
             linkedData: options.linkedData,
@@ -2477,7 +2473,7 @@ Note that in this case, the contract deployment will not behave the same if depl
 
         const executeReceipt = await execute(
           name,
-          {...options, from: currentOwner},
+          { ...options, from: currentOwner },
           'diamondCut',
           facetCuts,
           executeData === '0x'
@@ -2540,7 +2536,7 @@ Note that in this case, the contract deployment will not behave the same if depl
     name: string,
     options: DeployOptions
   ): Promise<DeployResult> {
-    options = {...options}; // ensure no change
+    options = { ...options }; // ensure no change
     await init();
     if (!options.proxy) {
       return _deployOne(name, options);
@@ -2552,13 +2548,13 @@ Note that in this case, the contract deployment will not behave the same if depl
     name: string,
     options: DiamondOptions
   ): Promise<DeployResult> {
-    options = {...options}; // ensure no change
+    options = { ...options }; // ensure no change
     await init();
     return _deployViaDiamondProxy(name, options);
   }
 
   async function rawTx(tx: SimpleTx): Promise<Receipt> {
-    tx = {...tx};
+    tx = { ...tx };
     await init();
     const {
       address: from,
@@ -2612,7 +2608,7 @@ Note that in this case, the contract deployment will not behave the same if depl
 
   async function catchUnknownSigner(
     action: Promise<any> | (() => Promise<any>),
-    options?: {log?: boolean}
+    options?: { log?: boolean }
   ): Promise<null | {
     from: string;
     to?: string;
@@ -2628,7 +2624,7 @@ Note that in this case, the contract deployment will not behave the same if depl
       }
     } catch (e) {
       if (e instanceof UnknownSignerError) {
-        const {from, to, data, value, contract} = e.data;
+        const { from, to, data, value, contract } = e.data;
         if (outputLog) {
           console.log(
             `---------------------------------------------------------------------------------------`
@@ -2674,9 +2670,9 @@ data: ${data}
           );
         }
         if (!value || typeof value === 'string') {
-          return {from, to, value, data};
+          return { from, to, value, data };
         }
-        return {from, to, value: value?.toString(), data};
+        return { from, to, value: value?.toString(), data };
       } else {
         throw e;
       }
@@ -2690,7 +2686,7 @@ data: ${data}
     methodName: string,
     ...args: any[]
   ): Promise<Receipt> {
-    options = {...options}; // ensure no change
+    options = { ...options }; // ensure no change
     await init();
     const {
       address: from,
@@ -2742,7 +2738,7 @@ data: ${data}
 
     if (unknown) {
       const ethersArgs = args ? args.concat([overrides]) : [overrides];
-      const {data} = await ethersContract.populateTransaction[methodName](
+      const { data } = await ethersContract.populateTransaction[methodName](
         ...ethersArgs
       );
       throw new UnknownSignerError({
@@ -2831,7 +2827,7 @@ data: ${data}
       methodName = options;
       options = {};
     }
-    options = {...options}; // ensure no change
+    options = { ...options }; // ensure no change
     await init();
     if (typeof args === 'undefined') {
       args = [];
@@ -2843,7 +2839,7 @@ data: ${data}
       | zk.Signer
       | TronWeb3Provider
       | TronSigner = provider;
-    const {ethersSigner} = await getOptionalFrom(options.from);
+    const { ethersSigner } = await getOptionalFrom(options.from);
     if (ethersSigner) {
       caller = ethersSigner;
     }
@@ -2896,7 +2892,7 @@ data: ${data}
   }
   async function getSigner(address: string): Promise<Signer> {
     await init();
-    const {ethersSigner} = await getFrom(address);
+    const { ethersSigner } = await getFrom(address);
     return ethersSigner;
   }
 
@@ -3054,7 +3050,7 @@ data: ${data}
               console.log('waiting for newly broadcasted tx ...');
             } else {
               console.log('resigning the tx...');
-              const {ethersSigner, hardwareWallet} = await getOptionalFrom(
+              const { ethersSigner, hardwareWallet } = await getOptionalFrom(
                 tx.from
               );
               if (!ethersSigner) {
@@ -3104,7 +3100,7 @@ data: ${data}
             if (!tx) {
               throw new Error(`cannot resubmit a tx if info not available`);
             }
-            const {ethersSigner, hardwareWallet} = await getOptionalFrom(
+            const { ethersSigner, hardwareWallet } = await getOptionalFrom(
               tx.from
             );
             if (!ethersSigner) {
@@ -3259,11 +3255,11 @@ data: ${data}
     }
 
     const proxyName = name + '_DiamondProxy';
-    const {address: owner} = await getDiamondOwner(options);
+    const { address: owner } = await getDiamondOwner(options);
     const newSelectors: string[] = [];
     const facetSnapshot: Facet[] = [];
     const oldFacets: Facet[] = [];
-    const selectorToNotTouch: {[selector: string]: boolean} = {};
+    const selectorToNotTouch: { [selector: string]: boolean } = {};
     for (const selector of [
       '0xcdffacc6',
       '0x52ef6b2c',
@@ -3359,7 +3355,7 @@ data: ${data}
         }
       }
       const constructor = artifact.abi.find(
-        (fragment: {type: string; inputs: any[]}) =>
+        (fragment: { type: string; inputs: any[] }) =>
           fragment.type === 'constructor'
       );
       if ((!argsSpecific && !constructor) || constructor.inputs.length === 0) {
@@ -3406,7 +3402,7 @@ data: ${data}
     }
 
     const oldSelectors: string[] = [];
-    const oldSelectorsFacetAddress: {[selector: string]: string} = {};
+    const oldSelectorsFacetAddress: { [selector: string]: string } = {};
     for (const oldFacet of oldFacets) {
       for (const selector of oldFacet.functionSelectors) {
         oldSelectors.push(selector);
@@ -3501,7 +3497,7 @@ data: ${data}
 
         const executeReceipt = await execute(
           name,
-          {...options, from: currentOwner},
+          { ...options, from: currentOwner },
           'diamondCut',
           facetCuts,
           data === '0x'
@@ -3546,7 +3542,7 @@ data: ${data}
     }
   }
 
-  return {extension, utils};
+  return { extension, utils };
 }
 
 function pause(duration: number): Promise<void> {

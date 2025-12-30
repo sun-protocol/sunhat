@@ -1,4 +1,4 @@
-import {Artifact} from 'hardhat/types';
+import { Artifact } from 'hardhat/types';
 
 import {
   Deployment,
@@ -18,7 +18,7 @@ export interface PartialExtension {
   get(name: string): Promise<Deployment>;
   getOrNull(name: string): Promise<Deployment | null>;
   getDeploymentsFromAddress(address: string): Promise<Deployment[]>;
-  all(): Promise<{[name: string]: Deployment}>;
+  all(): Promise<{ [name: string]: Deployment }>;
   getExtendedArtifact(name: string): Promise<ExtendedArtifact>;
   getArtifact(name: string): Promise<Artifact>;
   run(
@@ -30,11 +30,11 @@ export interface PartialExtension {
       export?: string;
       exportAll?: string;
     }
-  ): Promise<{[name: string]: Deployment}>;
+  ): Promise<{ [name: string]: Deployment }>;
   fixture(
     tags?: string | string[],
-    options?: {fallbackToGlobal?: boolean; keepExistingDeployments?: boolean}
-  ): Promise<{[name: string]: Deployment}>;
+    options?: { fallbackToGlobal?: boolean; keepExistingDeployments?: boolean }
+  ): Promise<{ [name: string]: Deployment }>;
   createFixture<T, O>(
     func: FixtureFunc<T, O>,
     id?: string

@@ -1,9 +1,9 @@
-import {TronSigner} from './signer';
-import {Contract, ContractFactory, ContractInterface, ethers} from 'ethers';
-import {TransactionRequest} from '@ethersproject/providers';
-import {CreateSmartContract, MethodSymbol, TronTxMethods} from './types';
-import {strip0x} from './utils';
-export {Contract} from 'ethers';
+import { TronSigner } from './signer';
+import { Contract, ContractFactory, ContractInterface, ethers } from 'ethers';
+import { TransactionRequest } from '@ethersproject/providers';
+import { CreateSmartContract, MethodSymbol, TronTxMethods } from './types';
+import { strip0x } from './utils';
+export { Contract } from 'ethers';
 
 /**
  * A contract factory for deploying and interacting with smart contracts on the TRON network.
@@ -68,7 +68,7 @@ export class TronContractFactory extends ContractFactory {
   override getDeployTransaction(
     ...args: any[]
   ): ethers.providers.TransactionRequest {
-    const {data, value} = super.getDeployTransaction(
+    const { data, value } = super.getDeployTransaction(
       ...args
     ) as TransactionRequest;
 

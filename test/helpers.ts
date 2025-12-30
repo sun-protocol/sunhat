@@ -1,5 +1,5 @@
-import {resetHardhatContext} from 'hardhat/plugins-testing';
-import {HardhatRuntimeEnvironment} from 'hardhat/types';
+import { resetHardhatContext } from 'hardhat/plugins-testing';
+import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import path from 'path';
 
 declare module 'mocha' {
@@ -40,7 +40,6 @@ export function useTronEnvironment(
     try {
       this.env = require('hardhat');
       // console.log(this.env);
-      
     } catch (error) {
       console.error('Failed to load Hardhat environment:', error);
     }

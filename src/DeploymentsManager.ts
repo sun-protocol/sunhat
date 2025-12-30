@@ -8,13 +8,13 @@ import {
   Export,
   DeterministicDeploymentInfo,
 } from '../types';
-import {ExtendedArtifact} from '../types';
-import {PartialExtension} from './internal/types';
+import { ExtendedArtifact } from '../types';
+import { PartialExtension } from './internal/types';
 
 import fs from 'fs-extra';
 import path from 'path';
 
-import {BigNumber} from '@ethersproject/bignumber';
+import { BigNumber } from '@ethersproject/bignumber';
 
 import debug from 'debug';
 const log = debug('hardhat:sun-protocol:tron-studio');
@@ -30,11 +30,11 @@ import {
   getNetworkName,
   getDeployPaths,
 } from './utils';
-import {addHelpers, waitForTx} from './helpers';
-import {TransactionResponse} from '@ethersproject/providers';
-import {Artifact, HardhatRuntimeEnvironment, Network} from 'hardhat/types';
-import {store} from './globalStore';
-import {bnReplacer} from './internal/utils';
+import { addHelpers, waitForTx } from './helpers';
+import { TransactionResponse } from '@ethersproject/providers';
+import { Artifact, HardhatRuntimeEnvironment, Network } from 'hardhat/types';
+import { store } from './globalStore';
+import { bnReplacer } from './internal/utils';
 
 export class DeploymentsManager {
   public deploymentsExtension: DeploymentsExtension;
@@ -43,7 +43,7 @@ export class DeploymentsManager {
     gasUsed: BigNumber;
     bandwith: BigNumber;
     accountsLoaded: boolean;
-    namedAccounts: {[name: string]: string};
+    namedAccounts: { [name: string]: string };
     unnamedAccounts: string[];
     deploymentsLoaded: boolean;
     deployments: Record<string, Deployment>;
@@ -60,12 +60,12 @@ export class DeploymentsManager {
       };
     };
     logEnabled: boolean;
-    pendingTransactions: {[hash: string]: any};
+    pendingTransactions: { [hash: string]: any };
     savePendingTx: boolean;
     gasPrice?: string;
     maxFeePerGas?: string;
     maxPriorityFeePerGas?: string;
-    migrations: {[id: string]: number};
+    migrations: { [id: string]: number };
     onlyArtifacts?: string[];
     runAsNode: boolean;
   };
@@ -75,7 +75,7 @@ export class DeploymentsManager {
 
   public impersonateUnknownAccounts: boolean;
   public impersonatedAccounts: string[];
-  public addressesToProtocol: {[address: string]: string} = {};
+  public addressesToProtocol: { [address: string]: string } = {};
   public readonly isTronNetworkWithTronSolc: boolean = false;
 
   private network: Network;
@@ -292,7 +292,7 @@ export class DeploymentsManager {
         }
       ) => {
         await this.setup(tags === undefined);
-        options = {fallbackToGlobal: true, ...options};
+        options = { fallbackToGlobal: true, ...options };
         if (typeof tags === 'string') {
           tags = [tags];
         }
@@ -413,7 +413,7 @@ export class DeploymentsManager {
             maxPriorityFeePerGas = BigNumber.from(this.db.maxPriorityFeePerGas);
           }
         }
-        return {gasPrice, maxFeePerGas, maxPriorityFeePerGas};
+        return { gasPrice, maxFeePerGas, maxPriorityFeePerGas };
       },
       this.partialExtension.log,
       print
@@ -547,8 +547,8 @@ export class DeploymentsManager {
             chainId: tx.chainId,
           };
       this.db.pendingTransactions[tx.hash] = name
-        ? {name, deployment, rawTx, decoded}
-        : {rawTx, decoded};
+        ? { name, deployment, rawTx, decoded }
+        : { rawTx, decoded };
       fs.writeFileSync(
         pendingTxPath,
         JSON.stringify(this.db.pendingTransactions, bnReplacer, '  ')
@@ -568,7 +568,7 @@ export class DeploymentsManager {
           );
         }
         this.db.gasUsed = this.db.gasUsed.add(receipt.gasUsed);
-        if(rawTx){
+        if (rawTx) {
           this.db.bandwith = this.db.bandwith.add(rawTx?.length);
         }
         return receipt;
@@ -584,7 +584,7 @@ export class DeploymentsManager {
     return tx;
   }
 
-  public async getNamedAccounts(): Promise<{[name: string]: string}> {
+  public async getNamedAccounts(): Promise<{ [name: string]: string }> {
     await this.setupAccounts();
     return this.db.namedAccounts;
   }
@@ -632,7 +632,7 @@ export class DeploymentsManager {
 
   public async loadDeployments(
     chainIdExpected = true
-  ): Promise<{[name: string]: Deployment}> {
+  ): Promise<{ [name: string]: Deployment }> {
     let chainId: string | undefined;
     if (chainIdExpected) {
       chainId = await this.getChainId();
@@ -867,7 +867,7 @@ export class DeploymentsManager {
 
     let numDeployments = 1;
     const oldDeployment = this.db.deployments[name]
-      ? {...this.db.deployments[name]}
+      ? { ...this.db.deployments[name] }
       : undefined;
     if (oldDeployment) {
       numDeployments = (oldDeployment.numDeployments || 1) + 1;
@@ -880,7 +880,7 @@ export class DeploymentsManager {
       JSON.stringify(
         {
           address: deployment.address || actualReceipt?.contractAddress,
-          addressHex : deployment.addressHex,
+          addressHex: deployment.addressHex,
           abi: deployment.abi,
           transactionHash:
             deployment.transactionHash || actualReceipt?.transactionHash,
@@ -980,7 +980,7 @@ export class DeploymentsManager {
     return true;
   }
 
-  private companionManagers: {[name: string]: DeploymentsManager} = {};
+  private companionManagers: { [name: string]: DeploymentsManager } = {};
   public addCompanionManager(
     name: string,
     networkDeploymentsManager: DeploymentsManager
@@ -1009,7 +1009,7 @@ export class DeploymentsManager {
       writeDeploymentsToFiles: true,
       savePendingTx: false,
     }
-  ): Promise<{[name: string]: Deployment}> {
+  ): Promise<{ [name: string]: Deployment }> {
     log('runDeploy');
     this.setupNetwork();
     if (options.deletePreviousDeployments) {
@@ -1122,8 +1122,8 @@ export class DeploymentsManager {
     });
     log('deploy script folder parsed');
 
-    const funcByFilePath: {[filename: string]: DeployFunction} = {};
-    const scriptPathBags: {[tag: string]: string[]} = {};
+    const funcByFilePath: { [filename: string]: DeployFunction } = {};
+    const scriptPathBags: { [tag: string]: string[] } = {};
     const scriptFilePaths: string[] = [];
     for (const filepath of filepaths) {
       const scriptFilePath = path.resolve(filepath);
@@ -1170,7 +1170,7 @@ export class DeploymentsManager {
     log('tag collected');
 
     // console.log({ scriptFilePaths });
-    const scriptsRegisteredToRun: {[filename: string]: boolean} = {};
+    const scriptsRegisteredToRun: { [filename: string]: boolean } = {};
     const scriptsToRun: Array<{
       func: DeployFunction;
       filePath: string;
@@ -1483,7 +1483,7 @@ export class DeploymentsManager {
         snapshot,
         data,
         blockHash: latestBlock.hash,
-        deployments: {...this.db.deployments},
+        deployments: { ...this.db.deployments },
       };
     } catch (err) {
       log(`failed to create snapshot`);
@@ -1519,7 +1519,7 @@ export class DeploymentsManager {
       );
       if (blockRetrieved) {
         saved.snapshot = await this.network.provider.send('evm_snapshot', []); // it is necessary to re-snapshot it
-        this.db.deployments = {...saved.deployments};
+        this.db.deployments = { ...saved.deployments };
       } else {
         // TODO or should we throw ?
         return false;
@@ -1569,7 +1569,7 @@ export class DeploymentsManager {
   }
 
   public async setupAccounts(): Promise<{
-    namedAccounts: {[name: string]: string};
+    namedAccounts: { [name: string]: string };
     unnamedAccounts: string[];
   }> {
     if (!this.db.accountsLoaded) {

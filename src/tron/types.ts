@@ -1,4 +1,4 @@
-import {ContractExecutionParams} from 'tronweb/interfaces';
+import { ContractExecutionParams } from 'tronweb/interfaces';
 
 export const MethodSymbol = Symbol('method');
 

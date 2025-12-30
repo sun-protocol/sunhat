@@ -3,8 +3,8 @@ import fs from 'fs';
 import axios from 'axios';
 import qs from 'qs';
 import path from 'path';
-import {defaultAbiCoder, ParamType} from '@ethersproject/abi';
-import {HardhatRuntimeEnvironment} from 'hardhat/types';
+import { defaultAbiCoder, ParamType } from '@ethersproject/abi';
+import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import chalk from 'chalk';
 import matchAll from 'match-all';
 
@@ -64,7 +64,7 @@ function extractOneLicenseFromSourceFile(source: string): string | undefined {
 function extractLicenseFromSources(metadata: string): string[] {
   const regex = /\/\/\s*\t*SPDX-License-Identifier:\s*\t*(.*?)[\s\\]/g;
   const matches = matchAll(metadata, regex).toArray();
-  const licensesFound: {[license: string]: boolean} = {};
+  const licensesFound: { [license: string]: boolean } = {};
   const licenses = [];
   if (matches) {
     for (const match of matches) {
@@ -207,7 +207,7 @@ export async function submitSources(
         break;
       case '1284':
         host = 'https://api-moonbeam.moonscan.io';
-        break;      
+        break;
       case '1285':
         host = 'https://api-moonriver.moonscan.io';
         break;
@@ -233,11 +233,11 @@ export async function submitSources(
         host = 'https://api.snowtrace.io';
         break;
       case '338':
-          host = 'https://api-testnet.cronoscan.com/api';
-          break;
+        host = 'https://api-testnet.cronoscan.com/api';
+        break;
       case '25':
-          host = 'https://api.cronoscan.com/api';
-          break;
+        host = 'https://api.cronoscan.com/api';
+        break;
       case '11155111':
         host = 'https://api-sepolia.etherscan.io';
         break;
@@ -250,11 +250,11 @@ export async function submitSources(
 
   async function submit(name: string, useSolcInput?: boolean) {
     const deployment = all[name];
-    const {address, metadata: metadataString} = deployment;
+    const { address, metadata: metadataString } = deployment;
     const abiResponse = await axios.get(
       `${host}/api?module=contract&action=getabi&address=${address}&apikey=${etherscanApiKey}`
     );
-    const {data: abiData} = abiResponse;
+    const { data: abiData } = abiResponse;
     let contractABI;
     if (abiData.status !== '0') {
       try {
@@ -332,7 +332,7 @@ export async function submitSources(
     let solcInput: {
       language: string;
       settings: any;
-      sources: Record<string, {content: string}>;
+      sources: Record<string, { content: string }>;
     };
     if (useSolcInput) {
       const solcInputHash = deployment.solcInputHash;
@@ -350,7 +350,7 @@ export async function submitSources(
       }
       solcInput = JSON.parse(solcInputStringFromDeployment);
     } else {
-      const settings = {...metadata.settings};
+      const settings = { ...metadata.settings };
       delete settings.compilationTarget;
       solcInput = {
         language: metadata.language,
@@ -384,7 +384,7 @@ export async function submitSources(
 
     let constructorArguements: string | undefined;
     if (deployment.args) {
-      const constructor: {inputs: ParamType[]} = deployment.abi.find(
+      const constructor: { inputs: ParamType[] } = deployment.abi.find(
         (v) => v.type === 'constructor'
       );
       if (constructor) {
@@ -415,10 +415,10 @@ export async function submitSources(
     const submissionResponse = await axios.request({
       url: `${host}/api`,
       method: 'POST',
-      headers: {'content-type': 'application/x-www-form-urlencoded'},
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
       data: formDataAsString,
     });
-    const {data: submissionData} = submissionResponse;
+    const { data: submissionData } = submissionResponse;
 
     let guid: string;
     if (submissionData.status === '1') {
@@ -461,7 +461,7 @@ export async function submitSources(
           },
         }
       );
-      const {data: statusData} = statusResponse;
+      const { data: statusData } = statusResponse;
 
       // blockscout seems to return status == 1 in case of failure
       // so we check string first

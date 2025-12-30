@@ -8,9 +8,9 @@ import {
   TransactionResponse,
   Web3Provider,
 } from '@ethersproject/providers';
-import {HttpNetworkConfig} from 'hardhat/types';
-import {TronSigner} from './signer';
-import {BigNumber, Wallet} from 'ethers';
+import { HttpNetworkConfig } from 'hardhat/types';
+import { TronSigner } from './signer';
+import { BigNumber, Wallet } from 'ethers';
 import {
   Time,
   TronTransactionFailedError,
@@ -25,7 +25,7 @@ import {
   parseTransaction,
 } from 'ethers/lib/utils';
 import TronWeb from 'tronweb';
-import {Transaction, TronWebError1} from 'tronweb/interfaces';
+import { Transaction, TronWebError1 } from 'tronweb/interfaces';
 
 /**
  * A provider for interacting with the TRON blockchain, extending the Web3Provider.
@@ -52,7 +52,7 @@ import {Transaction, TronWebError1} from 'tronweb/interfaces';
 export class TronWeb3Provider extends Web3Provider {
   protected signers = new Map<string, TronSigner>();
   public ro_tronweb: TronWeb;
-  public gasPrice: {time: number; value?: BigNumber} = {time: Time.NOW};
+  public gasPrice: { time: number; value?: BigNumber } = { time: Time.NOW };
   public maxFeeLimit?: number;
   public FALLBACK_MAX_FEE_LIMIT = 15e9; // 15,000 TRX;
   private readonly fullHost: string;
@@ -64,13 +64,13 @@ export class TronWeb3Provider extends Web3Provider {
     network?: Networkish | undefined
   ) {
     super(provider, network);
-    const {httpHeaders: headers, url, accounts} = config;
+    const { httpHeaders: headers, url, accounts } = config;
     let fullHost = url;
     // the address of the tron node has the jsonrpc path chopped off
     fullHost = fullHost.replace(/\/jsonrpc\/?$/, '');
     this.fullHost = fullHost;
     this.headers = headers;
-    this.ro_tronweb = new TronWeb({fullHost, headers});
+    this.ro_tronweb = new TronWeb({ fullHost, headers });
     // instantiate Tron Signer
     if (Array.isArray(accounts)) {
       for (const pk of accounts) {
@@ -161,10 +161,10 @@ export class TronWeb3Provider extends Web3Provider {
    */
   override async getGasPrice(): Promise<BigNumber> {
     const DEFAULT_ENERGY_PRICE = BigNumber.from('1000');
-    const {time, value} = this.gasPrice;
+    const { time, value } = this.gasPrice;
     if (time > Time.NOW - 15 * Time.SECOND && value) return value;
     const gasPrice = (await super.getGasPrice()) ?? DEFAULT_ENERGY_PRICE;
-    this.gasPrice = {time: Time.NOW, value: gasPrice};
+    this.gasPrice = { time: Time.NOW, value: gasPrice };
     return gasPrice;
   }
 
@@ -182,7 +182,7 @@ export class TronWeb3Provider extends Web3Provider {
   ): Promise<TransactionResponse> {
     signedTransaction = await signedTransaction;
     const deser = parseTransaction(signedTransaction);
-    const {to, data, from, value} = deser;
+    const { to, data, from, value } = deser;
 
     // is this a send trx transaction?
     if (this.isSendTRX(to, from, data)) {
@@ -248,21 +248,21 @@ export class TronWeb3Provider extends Web3Provider {
     from: string,
     contract: string,
     funcSig: string,
-    params: {type: string; value: string | number}[],
+    params: { type: string; value: string | number }[],
     options: {
       gasLimit?: string | number | BigNumber;
       value?: string | BigNumber;
     }
   ) {
     const feeLimit = await this.getSigner<TronSigner>(from).getFeeLimit(
-      {to: contract},
+      { to: contract },
       options
     );
-    const {transaction} =
+    const { transaction } =
       await this.ro_tronweb.transactionBuilder.triggerSmartContract(
         this.ro_tronweb.address.toHex(contract),
         funcSig,
-        {feeLimit, callValue: options.value?.toString() ?? 0},
+        { feeLimit, callValue: options.value?.toString() ?? 0 },
         params,
         this.ro_tronweb.address.toHex(from)
       );
@@ -314,14 +314,12 @@ export class TronWeb3Provider extends Web3Provider {
       let curr_conf = initialConfirmations;
       while (targetConfirmations && curr_conf < targetConfirmations) {
         await Time.sleep(Time.SECOND); // sleep 1 sec
-        const {confirmations: latest_conf} = await this.getTransactionWithRetry(
-          hash,
-          3
-        );
+        const { confirmations: latest_conf } =
+          await this.getTransactionWithRetry(hash, 3);
         curr_conf = latest_conf;
       }
       const receipt = await this.getTransactionReceipt(ensure0x(hash));
-      const {status} = receipt;
+      const { status } = receipt;
       if (status === 0) {
         throw new TronTransactionFailedError(receipt);
       }
@@ -374,7 +372,7 @@ export class TronWeb3Provider extends Web3Provider {
   ): Promise<BigNumber> {
     const toDel = ['type', 'maxFeePerGas', 'maxPriorityFeePerGas', 'nonce'];
     for (const field of toDel) {
-      delete (transaction as {[key: string]: any})[field];
+      delete (transaction as { [key: string]: any })[field];
     }
     return super.estimateGas(transaction);
   }
@@ -432,7 +430,7 @@ export class TronWeb3Provider extends Web3Provider {
   async getMaxFeeLimit(): Promise<number> {
     if (this.maxFeeLimit == undefined) {
       const params = await this.ro_tronweb.trx.getChainParameters();
-      const param = params.find(({key}) => key === 'getMaxFeeLimit');
+      const param = params.find(({ key }) => key === 'getMaxFeeLimit');
       this.maxFeeLimit = param?.value ?? this.FALLBACK_MAX_FEE_LIMIT;
     }
     return this.maxFeeLimit;

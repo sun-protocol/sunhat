@@ -3,7 +3,7 @@
  * Original Source: https://github.com/daochild/tronweb-typescript
  */
 declare module 'tronweb' {
-  import {BigNumber} from 'bignumber.js';
+  import { BigNumber } from 'bignumber.js';
   import {
     Account,
     AccountMnemonic,
@@ -660,12 +660,15 @@ declare module 'tronweb/interfaces' {
   export interface TrxAccount {
     address: string;
     balance: number;
-    frozen: {frozen_balance: number; expire_time: number}[];
+    frozen: { frozen_balance: number; expire_time: number }[];
     create_time: number;
     latest_opration_time: number;
     latest_consume_free_time: number;
     account_resource: {
-      frozen_balance_for_energy: {frozen_balance: number; expire_time: number};
+      frozen_balance_for_energy: {
+        frozen_balance: number;
+        expire_time: number;
+      };
       latest_consume_time_for_energy: number;
     };
     owner_permission: {
@@ -681,8 +684,8 @@ declare module 'tronweb/interfaces' {
       operations: string;
       keys: [Array<any>];
     }[];
-    assetV2: {key: string; value: number}[];
-    free_asset_net_usageV2: {key: string; value: number}[];
+    assetV2: { key: string; value: number }[];
+    free_asset_net_usageV2: { key: string; value: number }[];
   }
 
   export interface ParameterValueOnTriggerSC {
@@ -724,11 +727,11 @@ declare module 'tronweb/interfaces' {
   }
 
   export interface TransactionResult {
-    result: {[key: string]: any} | boolean;
+    result: { [key: string]: any } | boolean;
     approved_list?: string[];
     transaction:
       | {
-          result: {result: boolean};
+          result: { result: boolean };
           txid: string;
           transaction: {
             signature: any[];
@@ -741,11 +744,11 @@ declare module 'tronweb/interfaces' {
   }
 
   export interface RawTransactionResult {
-    result: {[key: string]: any} | boolean;
+    result: { [key: string]: any } | boolean;
     txid: string;
     approved_list?: string[];
     transaction: {
-      result: {result: boolean};
+      result: { result: boolean };
       contract_address: string;
       visible: boolean;
       signature: string[];
@@ -758,8 +761,8 @@ declare module 'tronweb/interfaces' {
   export interface TronAccountResource {
     freeNetLimit: number;
     netLimit: number;
-    assetNetUsed: {key: string; value: number}[];
-    assetNetLimit: {key: string; value: number}[];
+    assetNetUsed: { key: string; value: number }[];
+    assetNetLimit: { key: string; value: number }[];
     totalNetLimit: number;
     totalNetWeight: number;
     energyLimit: number;
@@ -768,7 +771,7 @@ declare module 'tronweb/interfaces' {
   }
 
   export interface BlockTransaction {
-    ret: Array<{contractRet: string}>;
+    ret: Array<{ contractRet: string }>;
     signature: string[];
     txID: string;
     contract_address: string;
@@ -974,7 +977,7 @@ declare module 'tronweb/interfaces' {
   export interface Proposal {
     proposal_id: number;
     proposer_address: string;
-    parameters: {[key: string]: any}[]; // Assuming the parameters can be of any type
+    parameters: { [key: string]: any }[]; // Assuming the parameters can be of any type
     expiration_time: number;
     create_time: number;
     approvals: string[];

@@ -13,6 +13,8 @@ interface AuditIssue {
 
 const diagnosticCollection =
   vscode.languages.createDiagnosticCollection('SunhatAuditor');
+const compilationDiagnosticCollection =
+  vscode.languages.createDiagnosticCollection('SunhatCompilation');
 
 const SUPPORTED_LANGUAGE_IDS = ['solidity', 'vyper'];
 
@@ -49,7 +51,7 @@ function updateDiagnostics(document: vscode.TextDocument): void {
           line,
           0,
           line,
-          document.lineAt(line).range.end.character,
+          document.lineAt(line).range.end.character
         );
 
         const severityMap = {
@@ -64,7 +66,7 @@ function updateDiagnostics(document: vscode.TextDocument): void {
         const diagnostic = new vscode.Diagnostic(
           range,
           issue.message,
-          severity,
+          severity
         );
         diagnostic.code = issue.filePath;
         diagnostic.source = 'Sunhat Auditor';
@@ -83,6 +85,75 @@ function updateDiagnostics(document: vscode.TextDocument): void {
     diagnosticCollection.delete(document.uri);
   }
 }
+interface CompilationError {
+  filePath: string;
+  line: number;
+  column: number;
+  severity: string;
+  message: string;
+  original: string;
+}
+
+function updateCompilationDiagnostics(document?: vscode.TextDocument): void {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders) return;
+
+  const reportPath = path.join(
+    workspaceFolders[0].uri.fsPath,
+    'compilation-errors.json'
+  );
+  if (!fs.existsSync(reportPath)) {
+    compilationDiagnosticCollection.clear();
+    return;
+  }
+
+  try {
+    const reportContent = fs.readFileSync(reportPath, 'utf8');
+    const issues: CompilationError[] = JSON.parse(reportContent);
+
+    const diagnosticsMap = new Map<string, vscode.Diagnostic[]>();
+
+    // Group issues by file
+    for (const issue of issues) {
+      // Normalize path
+      let absolutePath = issue.filePath;
+      if (!path.isAbsolute(absolutePath)) {
+        absolutePath = path.join(
+          workspaceFolders[0].uri.fsPath,
+          issue.filePath
+        );
+      }
+      const uri = vscode.Uri.file(absolutePath);
+      const uriStr = uri.toString();
+
+      if (!diagnosticsMap.has(uriStr)) {
+        diagnosticsMap.set(uriStr, []);
+      }
+
+      const line = issue.line > 0 ? issue.line - 1 : 0;
+      const column = issue.column > 0 ? issue.column - 1 : 0;
+
+      const range = new vscode.Range(line, column, line, column + 100); // Approximate end
+
+      let severity = vscode.DiagnosticSeverity.Error;
+      if (issue.severity === 'warning')
+        severity = vscode.DiagnosticSeverity.Warning;
+      else if (issue.severity === 'info')
+        severity = vscode.DiagnosticSeverity.Information;
+
+      const diagnostic = new vscode.Diagnostic(range, issue.message, severity);
+      diagnostic.source = 'Sunhat';
+      diagnosticsMap.get(uriStr)!.push(diagnostic);
+    }
+
+    compilationDiagnosticCollection.clear();
+    diagnosticsMap.forEach((diags, uriStr) => {
+      compilationDiagnosticCollection.set(vscode.Uri.parse(uriStr), diags);
+    });
+  } catch (e) {
+    console.error(`[Sunhat] Error reading compilation errors: ${e}`);
+  }
+}
 
 function registerHoverProvider(): vscode.Disposable {
   return vscode.languages.registerHoverProvider(SUPPORTED_LANGUAGE_IDS, {
@@ -93,7 +164,7 @@ function registerHoverProvider(): vscode.Disposable {
       }
 
       const llmDiagnostic = diagnostics.find(
-        (d) => d.source === 'Sunhat Auditor' && d.range.contains(position),
+        (d) => d.source === 'Sunhat Auditor' && d.range.contains(position)
       );
 
       if (!llmDiagnostic || !(llmDiagnostic as any).auditInfo) {
@@ -107,10 +178,10 @@ function registerHoverProvider(): vscode.Disposable {
       contents.supportThemeIcons = true;
 
       contents.appendMarkdown(
-        `### $(zap) Sunhat Auditor: ${llmDiagnostic.message}\n\n`,
+        `### $(zap) Sunhat Auditor: ${llmDiagnostic.message}\n\n`
       );
       contents.appendMarkdown(
-        `**Details:** ${auditInfo.detailedDescription}\n\n---\n\n`,
+        `**Details:** ${auditInfo.detailedDescription}\n\n---\n\n`
       );
 
       contents.appendMarkdown(`**Suggestion:**\n`);
@@ -130,20 +201,21 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
       if (doc) updateDiagnostics(doc);
-    }),
+    })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
       if (doc) updateDiagnostics(doc);
-    }),
+    })
   );
 
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders) {
+    // Watch audit-report.json
     const reportPath = path.join(
       workspaceFolders[0].uri.fsPath,
-      'audit-report.json',
+      'audit-report.json'
     );
     const fileWatcher = vscode.workspace.createFileSystemWatcher(reportPath);
 
@@ -160,6 +232,20 @@ export function activate(context: vscode.ExtensionContext): void {
     fileWatcher.onDidDelete(updateDiagnosticsForAllOpenFiles);
 
     context.subscriptions.push(fileWatcher);
+
+    // Watch compilation-errors.json
+    const compilationWatcher = vscode.workspace.createFileSystemWatcher(
+      path.join(workspaceFolders[0].uri.fsPath, 'compilation-errors.json')
+    );
+    compilationWatcher.onDidCreate(() => updateCompilationDiagnostics());
+    compilationWatcher.onDidChange(() => updateCompilationDiagnostics());
+    compilationWatcher.onDidDelete(() =>
+      compilationDiagnosticCollection.clear()
+    );
+    context.subscriptions.push(compilationWatcher);
+
+    // Initial check
+    updateCompilationDiagnostics();
   }
 
   if (vscode.window.activeTextEditor) {
@@ -169,4 +255,5 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   diagnosticCollection.clear();
+  compilationDiagnosticCollection.clear();
 }
