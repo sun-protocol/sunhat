@@ -3,12 +3,12 @@
  *  gasPrice in EVM == energyPrice in TVM
  */
 
-import {BigNumber, Wallet} from 'ethers';
-import {Deferrable} from 'ethers/lib/utils';
+import { BigNumber, Wallet } from 'ethers';
+import { Deferrable } from 'ethers/lib/utils';
 import TronWeb from 'tronweb';
-import {TronWeb3Provider} from './provider';
-import {Time, TronWebGetTransactionError, strip0x} from './utils';
-import {CreateSmartContract, MethodSymbol, TronTxMethods} from './types';
+import { TronWeb3Provider } from './provider';
+import { Time, TronWebGetTransactionError, strip0x } from './utils';
+import { CreateSmartContract, MethodSymbol, TronTxMethods } from './types';
 import {
   BlockTransaction,
   ContractExecutionParams,
@@ -43,8 +43,8 @@ import {
  */
 export class TronSigner extends Wallet {
   protected tronweb: TronWeb;
-  public gasPrice: {time: number; value?: BigNumber} = {time: Time.NOW};
-  public energyFactors = new Map<string, {time: number; value: number}>();
+  public gasPrice: { time: number; value?: BigNumber } = { time: Time.NOW };
+  public energyFactors = new Map<string, { time: number; value: number }>();
   public MAX_ENERGY_FACTOR = 1.2;
   public MAX_ENERGY_DIVISOR = 1000;
 
@@ -250,7 +250,7 @@ export class TronSigner extends Wallet {
     if (contract_address == '') return energy_factor;
     const res = await this.tronweb.fullNode.request(
       'wallet/getcontractinfo',
-      {value: contract_address, visible: false},
+      { value: contract_address, visible: false },
       'post'
     );
 
@@ -281,7 +281,7 @@ export class TronSigner extends Wallet {
     if ('Error' in res) throw new TronWebGetTransactionError(res);
     return res;
   }
-  
+
   getTronWeb() {
     return this.tronweb;
   }

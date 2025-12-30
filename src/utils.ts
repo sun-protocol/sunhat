@@ -1,18 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import {Wallet} from '@ethersproject/wallet';
-import {getAddress, isAddress} from '@ethersproject/address';
-import {Interface, FunctionFragment, Fragment} from '@ethersproject/abi';
-import {Artifact, HardhatRuntimeEnvironment, Network} from 'hardhat/types';
-import {BigNumber} from '@ethersproject/bignumber';
-import {ABI, Export, ExtendedArtifact, MultiExport} from '../types';
-import {Artifacts} from 'hardhat/internal/artifacts';
+import { Wallet } from '@ethersproject/wallet';
+import { getAddress, isAddress } from '@ethersproject/address';
+import { Interface, FunctionFragment, Fragment } from '@ethersproject/abi';
+import { Artifact, HardhatRuntimeEnvironment, Network } from 'hardhat/types';
+import { BigNumber } from '@ethersproject/bignumber';
+import { ABI, Export, ExtendedArtifact, MultiExport } from '../types';
+import { Artifacts } from 'hardhat/internal/artifacts';
 import murmur128 from 'murmur-128';
-import {Transaction} from '@ethersproject/transactions';
-import {store} from './globalStore';
-import {ERRORS} from 'hardhat/internal/core/errors-list';
-import {HardhatError} from 'hardhat/internal/core/errors';
+import { Transaction } from '@ethersproject/transactions';
+import { store } from './globalStore';
+import { ERRORS } from 'hardhat/internal/core/errors-list';
+import { HardhatError } from 'hardhat/internal/core/errors';
 
 function getOldArtifactSync(
   name: string,
@@ -110,9 +110,9 @@ export function loadAllDeployments(
   hre: HardhatRuntimeEnvironment,
   deploymentsPath: string,
   onlyABIAndAddress?: boolean,
-  externalDeployments?: {[networkName: string]: string[]}
+  externalDeployments?: { [networkName: string]: string[] }
 ): MultiExport {
-  const networksFound: {[networkName: string]: Export} = {};
+  const networksFound: { [networkName: string]: Export } = {};
   const all: MultiExport = {}; // TODO any is chainConfig
   fs.readdirSync(deploymentsPath).forEach((fileName) => {
     const fPath = path.resolve(deploymentsPath, fileName);
@@ -167,7 +167,10 @@ export function loadAllDeployments(
                 `mismatch between external deployment network ${networkName} chainId: ${networkChainId} vs existing chainId: ${networkExist.chainId}`
               );
             }
-            networkExist.contracts = {...contracts, ...networkExist.contracts};
+            networkExist.contracts = {
+              ...contracts,
+              ...networkExist.contracts,
+            };
           } else {
             const network = {
               name: networkName,
@@ -203,7 +206,7 @@ function loadDeployments(
   expectedChainId?: string,
   truffleChainId?: string
 ) {
-  const deploymentsFound: {[name: string]: any} = {};
+  const deploymentsFound: { [name: string]: any } = {};
   const deployPath = path.join(deploymentsPath, subPath);
 
   let filesStats;
@@ -304,24 +307,24 @@ export function addDeployments(
 }
 
 function transformNamedAccounts(
-  configNamedAccounts: {[name: string]: any},
+  configNamedAccounts: { [name: string]: any },
   chainIdGiven: string | number,
   accounts: string[],
   networkConfigName: string
 ): {
-  namedAccounts: {[name: string]: string};
+  namedAccounts: { [name: string]: string };
   unnamedAccounts: string[];
   unknownAccounts: string[];
-  addressesToProtocol: {[address: string]: string};
+  addressesToProtocol: { [address: string]: string };
 } {
-  const addressesToProtocol: {[address: string]: string} = {};
-  const unknownAccountsDict: {[address: string]: boolean} = {};
-  const knownAccountsDict: {[address: string]: boolean} = {};
+  const addressesToProtocol: { [address: string]: string } = {};
+  const unknownAccountsDict: { [address: string]: boolean } = {};
+  const knownAccountsDict: { [address: string]: boolean } = {};
   for (const account of accounts) {
     knownAccountsDict[account.toLowerCase()] = true;
   }
-  const namedAccounts: {[name: string]: string} = {};
-  const usedAccounts: {[address: string]: boolean} = {};
+  const namedAccounts: { [name: string]: string } = {};
+  const usedAccounts: { [address: string]: boolean } = {};
   // TODO transform into checksum  address
   if (configNamedAccounts) {
     const accountNames = Object.keys(configNamedAccounts);
@@ -338,9 +341,7 @@ function transformNamedAccounts(
               addressesToProtocol[address.toLowerCase()] =
                 protocolSplit[0].toLowerCase();
               // knownAccountsDict[address.toLowerCase()] = true; // TODO ? this would prevent auto impersonation in fork/test
-            } else if (
-              protocolSplit[0].toLowerCase() === 'trezor'
-            ) {
+            } else if (protocolSplit[0].toLowerCase() === 'trezor') {
               address = protocolSplit[1];
               addressesToProtocol[address.toLowerCase()] =
                 protocolSplit[0].toLowerCase();
@@ -470,15 +471,15 @@ export function processNamedAccounts(
     [name: string]:
       | string
       | number
-      | {[network: string]: null | number | string};
+      | { [network: string]: null | number | string };
   },
   accounts: string[],
   chainIdGiven: string
 ): {
-  namedAccounts: {[name: string]: string};
+  namedAccounts: { [name: string]: string };
   unnamedAccounts: string[];
   unknownAccounts: string[];
-  addressesToProtocol: {[address: string]: string};
+  addressesToProtocol: { [address: string]: string };
 } {
   if (namedAccounts) {
     return transformNamedAccounts(
@@ -561,16 +562,19 @@ export function getDeployPaths(network: Network): string[] {
   }
 }
 
-export function filterABI(
-  abi: ABI,
-  excludeSighashes: Set<string>,
-): any[] {
-  return abi.filter(fragment => fragment.type !== 'function' || !excludeSighashes.has(Interface.getSighash(Fragment.from(fragment) as FunctionFragment)));
+export function filterABI(abi: ABI, excludeSighashes: Set<string>): any[] {
+  return abi.filter(
+    (fragment) =>
+      fragment.type !== 'function' ||
+      !excludeSighashes.has(
+        Interface.getSighash(Fragment.from(fragment) as FunctionFragment)
+      )
+  );
 }
 
 export function mergeABIs(
   abis: any[][],
-  options: {check: boolean; skipSupportsInterface: boolean}
+  options: { check: boolean; skipSupportsInterface: boolean }
 ): any[] {
   if (abis.length === 0) {
     return [];
@@ -661,7 +665,7 @@ export function countElements(arr: any) {
 
   for (const item of arr) {
     if (Array.isArray(item)) {
-      count += countElements(item); 
+      count += countElements(item);
     } else {
       count += 1;
     }

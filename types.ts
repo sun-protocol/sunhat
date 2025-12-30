@@ -6,8 +6,8 @@ import {
   Artifact,
   HardhatRuntimeEnvironment,
 } from 'hardhat/types';
-import type {BigNumber} from '@ethersproject/bignumber';
-import {Signer} from '@ethersproject/abstract-signer';
+import type { BigNumber } from '@ethersproject/bignumber';
+import { Signer } from '@ethersproject/abstract-signer';
 
 export type ExtendedArtifact = {
   abi: any[];
@@ -93,7 +93,7 @@ export interface DiamondOptions extends TxOptions {
   execute?: {
     contract?:
       | string
-      | {name: string; artifact: string | ArtifactData; args?: any[]};
+      | { name: string; artifact: string | ArtifactData; args?: any[] };
     methodName: string;
     args: any[];
   };
@@ -238,7 +238,7 @@ export interface DeploymentsExtension {
   fetchIfDifferent( // return true if new compiled code is different than deployed contract
     name: string,
     options: DeployOptions
-  ): Promise<{differences: boolean; address?: string}>;
+  ): Promise<{ differences: boolean; address?: string }>;
 
   readDotFile(name: string): Promise<string>;
   saveDotFile(name: string, content: string): Promise<void>;
@@ -249,7 +249,7 @@ export interface DeploymentsExtension {
   get(name: string): Promise<Deployment>; // fetch a deployment by name, throw if not existing
   getOrNull(name: string): Promise<Deployment | null>; // fetch deployment by name, return null if not existing
   getDeploymentsFromAddress(address: string): Promise<Deployment[]>;
-  all(): Promise<{[name: string]: Deployment}>; // return all deployments
+  all(): Promise<{ [name: string]: Deployment }>; // return all deployments
   getArtifact(name: string): Promise<Artifact>; // return a hardhat artifact (compiled contract without deployment)
   getExtendedArtifact(name: string): Promise<ExtendedArtifact>; // return a extended artifact (with more info) (compiled contract without deployment)
   run( // execute deployment scripts
@@ -261,11 +261,11 @@ export interface DeploymentsExtension {
       export?: string;
       exportAll?: string;
     }
-  ): Promise<{[name: string]: Deployment}>;
+  ): Promise<{ [name: string]: Deployment }>;
   fixture( // execute deployment as fixture for test // use evm_snapshot to revert back
     tags?: string | string[],
-    options?: {fallbackToGlobal?: boolean; keepExistingDeployments?: boolean}
-  ): Promise<{[name: string]: Deployment}>;
+    options?: { fallbackToGlobal?: boolean; keepExistingDeployments?: boolean }
+  ): Promise<{ [name: string]: Deployment }>;
   createFixture<T, O>( // execute a function as fixture using evm_snaphost to revert back each time
     func: FixtureFunc<T, O>,
     id?: string
@@ -284,7 +284,7 @@ export interface DeploymentsExtension {
   rawTx(tx: SimpleTx): Promise<Receipt>; // execute a simple transaction
   catchUnknownSigner( // you can wrap other function with this function and it will catch failure due to missing signer with the details of the tx to be executed
     action: Promise<any> | (() => Promise<any>),
-    options?: {log?: boolean}
+    options?: { log?: boolean }
   ): Promise<null | {
     from: string;
     to?: string;
@@ -311,14 +311,14 @@ export interface ContractExport {
 export interface Export {
   chainId: string;
   name: string;
-  contracts: {[name: string]: ContractExport};
+  contracts: { [name: string]: ContractExport };
 }
 
 export type MultiExport = {
   [chainId: string]: Export[];
 };
 
-export type Libraries = {[libraryName: string]: Address};
+export type Libraries = { [libraryName: string]: Address };
 
 export enum FacetCutAction {
   Add,

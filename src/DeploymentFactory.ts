@@ -43,7 +43,7 @@ export class DeploymentFactory {
       );
     } else if (this.isTron) {
       let contractName = '';
-      if ('contractName' in artifact) ({contractName} = artifact);
+      if ('contractName' in artifact) ({ contractName } = artifact);
       this.factory = new TronContractFactory(
         artifact.abi,
         artifact.bytecode,
@@ -129,14 +129,14 @@ export class DeploymentFactory {
     const prefix = isTron ? '0x41' : '0xff';
     return getAddress(
       '0x' +
-      solidityKeccak256(
-        ['bytes'],
-        [
-          `${prefix}${create2DeployerAddress.slice(2)}${salt.slice(
-            2
-          )}${solidityKeccak256(['bytes'], [deploymentTx.data]).slice(2)}`,
-        ]
-      ).slice(-40)
+        solidityKeccak256(
+          ['bytes'],
+          [
+            `${prefix}${create2DeployerAddress.slice(2)}${salt.slice(
+              2
+            )}${solidityKeccak256(['bytes'], [deploymentTx.data]).slice(2)}`,
+          ]
+        ).slice(-40)
     );
   }
 
@@ -182,7 +182,7 @@ export class DeploymentFactory {
 
       return transaction.data !== newData || currentFlattened != newFlattened;
     } else if (this.isTron) {
-     const tronDeployTx = newTransaction as CreateSmartContract;
+      const tronDeployTx = newTransaction as CreateSmartContract;
       const res = await (
         this.factory.signer as TronSigner
       ).getTronWebTransaction(transaction.hash);

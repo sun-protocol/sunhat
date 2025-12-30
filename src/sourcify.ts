@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios';
 import FormData from 'form-data';
-import {HardhatRuntimeEnvironment} from 'hardhat/types';
+import { HardhatRuntimeEnvironment } from 'hardhat/types';
 import chalk from 'chalk';
 import fs from 'fs-extra';
 import path from 'path';
-import {Readable} from 'stream';
+import { Readable } from 'stream';
 
 function log(...args: any[]) {
   console.log(...args);
@@ -51,13 +51,13 @@ export async function submitSourcesToSourcify(
 
   async function submit(name: string) {
     const deployment = all[name];
-    const {address, metadata: metadataString} = deployment;
+    const { address, metadata: metadataString } = deployment;
 
     try {
       const checkResponse = await axios.get(
         `${url}checkByAddresses?addresses=${address.toLowerCase()}&chainIds=${chainId}`
       );
-      const {data: checkData} = checkResponse;
+      const { data: checkData } = checkResponse;
       if (checkData[0].status === 'perfect') {
         log(`already verified: ${name} (${address}), skipping.`);
         return;

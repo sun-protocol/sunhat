@@ -286,15 +286,15 @@ async function handleInit(args: string[]) {
     colors.cyan(
       `\n☀️  Initializing SunHat Project in ${
         isCurrentDir ? 'current directory' : targetDir
-      }...\n`,
-    ),
+      }...\n`
+    )
   );
 
   if (!isCurrentDir && (await fs.pathExists(targetDir))) {
     const files = await fs.readdir(targetDir);
     if (files.length > 0) {
       console.error(
-        colors.red(`Error: Directory '${targetName}' is not empty.`),
+        colors.red(`Error: Directory '${targetName}' is not empty.`)
       );
       process.exit(1);
     }
@@ -319,28 +319,28 @@ async function handleInit(args: string[]) {
   await fs.outputFile(path.join(targetDir, 'tsconfig.json'), SCAFFOLD.tsconfig);
   await fs.outputFile(
     path.join(targetDir, 'contracts/TronGreeter.sol'),
-    SCAFFOLD.contract,
+    SCAFFOLD.contract
   );
   await fs.outputFile(
     path.join(targetDir, 'test/TronGreeter.t.sol'),
-    SCAFFOLD.foundryTest,
+    SCAFFOLD.foundryTest
   );
   await fs.outputFile(
     path.join(targetDir, 'test/TronGreeter.test.ts'),
-    SCAFFOLD.mochaTest,
+    SCAFFOLD.mochaTest
   );
   await fs.outputFile(
     path.join(targetDir, 'deploy/01_deploy_greeter.ts'),
-    SCAFFOLD.deployScript,
+    SCAFFOLD.deployScript
   );
   await fs.outputFile(
     path.join(targetDir, 'hardhat.config.ts'),
-    SCAFFOLD.hardhatConfig,
+    SCAFFOLD.hardhatConfig
   );
 
   const pkgJsonData = SCAFFOLD.packageJson(
     myPackageJson.version,
-    path.basename(targetDir),
+    path.basename(targetDir)
   );
   await fs.writeJSON(path.join(targetDir, 'package.json'), pkgJsonData, {
     spaces: 2,
@@ -369,8 +369,8 @@ async function handleInit(args: string[]) {
       } catch (e) {
         console.warn(
           colors.yellow(
-            "⚠️  Failed to initialize git repository. You may need to run 'git init' manually.",
-          ),
+            "⚠️  Failed to initialize git repository. You may need to run 'git init' manually."
+          )
         );
       }
       try {
@@ -383,8 +383,8 @@ async function handleInit(args: string[]) {
       } catch (e) {
         console.warn(
           colors.yellow(
-            "⚠️  Failed to initialize git repository. You may need to run 'npx hardhat init-foundry' manually.",
-          ),
+            "⚠️  Failed to initialize git repository. You may need to run 'npx hardhat init-foundry' manually."
+          )
         );
       }
       console.log(colors.green(`\n✅ Project ready!`));
@@ -402,7 +402,7 @@ async function handleProxy(args: string[]) {
     process.cwd(),
     'node_modules',
     '.bin',
-    'hardhat',
+    'hardhat'
   );
 
   let executable = localHardhatBin;
@@ -412,12 +412,12 @@ async function handleProxy(args: string[]) {
     !fs.existsSync(localHardhatBin + '.cmd')
   ) {
     console.error(
-      colors.yellow(`\n⚠️  Could not find local hardhat installation.`),
+      colors.yellow(`\n⚠️  Could not find local hardhat installation.`)
     );
     console.error(
       `Please run inside a project directory or run '${colors.cyan(
-        'sunhat init',
-      )}' to create one.\n`,
+        'sunhat init'
+      )}' to create one.\n`
     );
     process.exit(1);
   }

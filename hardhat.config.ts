@@ -1,15 +1,15 @@
-import {internalTask, task} from 'hardhat/config';
+import { internalTask, task } from 'hardhat/config';
 import {
   TASK_COMPILE_SOLIDITY_GET_COMPILER_INPUT,
   TASK_COMPILE,
 } from 'hardhat/builtin-tasks/task-names';
 import fs from 'fs-extra';
 import path from 'path';
-import {Artifact, BuildInfo} from 'hardhat/types';
+import { Artifact, BuildInfo } from 'hardhat/types';
 import murmur128 from 'murmur-128';
 // Somewhat counterintuive, @layerzerolabs/hardhat-deploy is a devDependency of itself.
 // It is required by hardhat-tron-solc who lists this package as a peerDependency.
-import {HardhatUserConfig} from '@layerzerolabs/hardhat-deploy';
+import { HardhatUserConfig } from '@layerzerolabs/hardhat-deploy';
 
 function addIfNotPresent(array: string[], value: string) {
   if (array.indexOf(value) === -1) {
@@ -18,8 +18,8 @@ function addIfNotPresent(array: string[], value: string) {
 }
 
 function setupExtraSolcSettings(settings: {
-  metadata?: {useLiteralContent?: boolean};
-  outputSelection: {[key: string]: {[key: string]: string[]}};
+  metadata?: { useLiteralContent?: boolean };
+  outputSelection: { [key: string]: { [key: string]: string[] } };
 }): void {
   settings.metadata = settings.metadata || {};
   settings.metadata.useLiteralContent = true;
