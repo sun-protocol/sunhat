@@ -213,6 +213,45 @@ Check the `deployments/` directory for your deployment files. You should see:
 
 ---
 
+## IDE Skills Integration
+
+Sunhat exposes a specialized **Skills** interface that acts as a "driver" for AI agents. By pointing your AI assistant to the skill definition in `skills/sunhat/`, you unlock expert-level capabilities for testing, deploying, and auditing TRON contracts autonomously.
+
+```
+skills/
+└── sunhat/
+    ├── SKILL.md            # Main entry point
+    └── workflows/
+        ├── sunhat-init.md
+        ├── sunhat-compile.md
+        ├── sunhat-test.md
+        ├── sunhat-deploy.md
+        └── sunhat-audit.md
+```
+
+### Supported IDEs
+
+| IDE | Setup |
+|-----|-------|
+| **Claude Code** | Place `skills/sunhat` in project root. Claude auto-discovers `SKILL.md`. |
+| **Google Antigravity** | Place `skills/sunhat` in `.agent/skills/sunhat`. Antigravity auto-discovers `SKILL.md`. |
+| **OpenCode** | Place `skills/sunhat` in `.opencode/skills/sunhat`. OpenCode auto-discovers `SKILL.md`. |
+| **Cursor** | Copy `SKILL.md` content into `.cursorrules` or reference workflow paths. |
+
+### Example Usage
+
+```
+# Claude Code
+> "Run the tests for the Lock contract using Sunhat."
+
+# Antigravity
+> "Deploy the Token contract to Nile testnet."
+```
+
+The AI agent will discover the skill, read the appropriate workflow, and execute the task deterministically.
+
+---
+
 ## Development
 To dive deeper into advanced topics of the sunhat project lifecycle, please see the [Documentation](https://hat-docs.sunagent.ai/) for guides and reference.
 
