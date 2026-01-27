@@ -1,4 +1,4 @@
-name: CI
+https://github.com/sun-protocol/sunhat.gitname: CI
 
 on:
   push:
