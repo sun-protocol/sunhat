@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sunhat TRON Development"
+  short_description: "Build, test, deploy, and audit TRON contracts with Sunhat"
+  default_prompt: "Use $sunhat to inspect this project and run the appropriate TRON smart contract workflow."

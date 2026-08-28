@@ -1,13 +1,13 @@
 ---
-name: Sunhat TRON Development
-description: The official detailed guide for developing, testing, deploying, and auditing TRON smart contracts using the Sunhat toolkit.
+name: sunhat
+description: Initialize, compile, test, deploy, or audit TRON smart contract projects that use the Sunhat Hardhat plugin.
 ---
 
 # Sunhat TRON Development Skill
 
-This skill enables you to develop, test, and deploy smart contracts on the TRON network.
+Use this skill to operate the Sunhat lifecycle for TRON smart contracts.
 
-**Rule:** Do not memorize the details of every task. Only read the specific workflow file relevant to your current objective.
+**Rule:** Read only the workflow file relevant to the current objective. If the request spans multiple objectives, read the required workflows in execution order.
 
 ## Capabilities
 

@@ -9,8 +9,9 @@ I will help you deploy your contracts to the Tron network (Mainnet, Nile, Shasta
 ## Guardrails
 
 - **CRITICAL**: Ensure `deployTron/` folder exists (Sunhat convention)
-- Verify `TRON_RPC_URL` and `PRIVATE_KEY` are in `.env`
+- Verify `TRON_RPC_URL` and `PRIVATE_KEY` are configured without printing their values
 - Ensure `network: tron` is configured in `hardhat.config.ts`
+- Before broadcasting, show the target network, deployer address, selected tags, and exact command, then obtain explicit user confirmation
 
 ## Steps
 
@@ -49,4 +50,5 @@ _Optional: Add `--tags [Tag]` to run specific scripts._
 ### 4. Verify Output
 
 - Check console logs for "deployed at" address
-- Note the address for verification
+- Record the transaction hash and deployed address for verification
+- Check the corresponding deployment artifact under `deployments/<network>/`
