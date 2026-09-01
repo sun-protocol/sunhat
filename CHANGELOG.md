@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Codex CLI and IDE skill discovery through `.agents/skills/sunhat`.
+- Codex skill metadata, invocation guidance, and npm packaging for `skills/sunhat`.
+
 ## [1.5.0] - 2026-01-21
 
 ### Added

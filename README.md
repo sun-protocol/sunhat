@@ -233,10 +233,19 @@ skills/
 
 | IDE | Setup |
 |-----|-------|
+| **Codex CLI / IDE** | Use `.agents/skills/sunhat`; this repository includes the discovery link. Invoke with `$sunhat` or let Codex select it automatically. |
 | **Claude Code** | Place `skills/sunhat` in project root. Claude auto-discovers `SKILL.md`. |
 | **Google Antigravity** | Place `skills/sunhat` in `.agent/skills/sunhat`. Antigravity auto-discovers `SKILL.md`. |
 | **OpenCode** | Place `skills/sunhat` in `.opencode/skills/sunhat`. OpenCode auto-discovers `SKILL.md`. |
 | **Cursor** | Copy `SKILL.md` content into `.cursorrules` or reference workflow paths. |
+
+### Codex Setup
+
+Codex discovers repository-scoped skills from `.agents/skills`. This repository maps `.agents/skills/sunhat` to the canonical `skills/sunhat` directory, so Codex CLI and the Codex IDE extension load the skill automatically when opened from this repository.
+
+For a project with a local `@sun-protocol/sunhat` dependency, copy `node_modules/@sun-protocol/sunhat/skills/sunhat` to `.agents/skills/sunhat`. You can also ask Codex to install the skill from this repository with `$skill-installer`.
+
+Run `/skills` to confirm discovery, then invoke the skill explicitly with `$sunhat` or describe a matching Sunhat task. See the [official Codex Skills documentation](https://developers.openai.com/codex/skills/) for discovery and installation details.
 
 ### Example Usage
 
@@ -246,6 +255,9 @@ skills/
 
 # Antigravity
 > "Deploy the Token contract to Nile testnet."
+
+# Codex
+> "$sunhat compile and test this TRON project."
 ```
 
 The AI agent will discover the skill, read the appropriate workflow, and execute the task deterministically.
