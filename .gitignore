@@ -2,11 +2,12 @@ dist
 node_modules
 pnpm-lock.yaml
 artifacts
-poc/hardhat3-p0/artifacts-vyper/
-poc/hardhat3-p0/artifacts-tron/
-poc/hardhat3-p0/cache-tron/
 cache
-extendedArtifacts/
+build-snapshots/
+deployments/
+verification/
+.env
+.DS_Store
 .vscode/
 *.swp
 *.swo

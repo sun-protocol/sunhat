@@ -2,7 +2,7 @@
 
 结论：Hardhat 3.15.0 的公共 API 足以承载 EVM、tron-solc 自定义构建、连接级 Sunhat 扩展和 Vyper 独立编译；TVM 执行尚未验证，因此 P0 仍有一个外部环境门槛，不能进入 TRON 部署实现验收。
 
-验证日期：2026-09-23。可运行夹具位于 [`poc/hardhat3-p0`](../poc/hardhat3-p0/README.md)。
+验证日期：2026-09-23。P0 夹具已在 P4 归并为 `src/v2` 生产实现与 `test-v2/build-integration.test.ts`、`test-v2/fixtures/hardhat3-release` 回归用例；重复 POC 已删除，原始验证版本由 Git 历史保留。
 
 | 验证项 | 结果 | 证据 |
 | --- | --- | --- |

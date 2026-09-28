@@ -7,14 +7,14 @@ P2 已闭合三类编译器的统一构建路径：`sunhat compile` 通过项目
 | 模块 | 代码 | 已验证行为 |
 | --- | --- | --- |
 | 构建协调器 | `src/v2/build/coordinator.ts` | 默认目标、显式目标和全目标复用 P1 解析规则；构建按目标串行执行，产物位于 `artifacts/sunhat/<target>` |
-| Hardhat 3 Solidity 适配 | `poc/hardhat3-p0/src/p2-hardhat-backend.ts` | 仅使用 `hardhat/hre` 与 `hre.solidity` 公共 API；solc、tron-solc 自定义路径、多版本和逐文件 override 交给 Hardhat 构建图校验 |
-| 依赖闭包 | `poc/hardhat3-p0/src/p2-hardhat-backend.ts` | Hardhat compilation job 的完整依赖图、包版本、源码哈希和原生 build ID 进入 Sunhat build ID；npm 依赖源码归档到 `sources/npm/...` |
+| Hardhat 3 Solidity 适配 | `src/v2/hardhat/solidity-backend.ts` | 仅使用 `hardhat/hre` 与 `hre.solidity` 公共 API；solc、tron-solc 自定义路径、多版本和逐文件 override 交给 Hardhat 构建图校验 |
+| 依赖闭包 | `src/v2/hardhat/solidity-backend.ts` | Hardhat compilation job 的完整依赖图、包版本、源码哈希和原生 build ID 进入 Sunhat build ID；npm 依赖源码归档到 `sources/npm/...` |
 | Vyper 适配 | `src/v2/build/vyper.ts` | 精确版本/范围 pragma、最高兼容版本、逐文件 override、编译器路径与哈希、实际版本、Python/pip 环境锁、超时和 64 MiB 输出上限 |
 | Vyper 隔离 | `src/v2/build/vyper.ts` | Standard JSON 只包含配置目录中收集的 `.vy`、`.vyi` 与 JSON 接口；编译进程使用空临时工作目录和 `shell: false`，不从项目目录隐式读取依赖 |
 | Vyper 产物 | `src/v2/build/vyper.ts` | 生成 `sunhat-vyper-artifact-1`，并按 build ID 分离保存 `sunhat-vyper-build-info-1` 与 `sunhat-vyper-build-info-output-1` |
 | 不可变快照 | `src/v2/build/snapshot.ts` | build ID 覆盖链、编译器、settings、override、Hardhat 依赖闭包和源码；manifest 校验拒绝哈希变化、缺失文件、额外文件与符号链接 |
 | 失败关闭 | `src/v2/build/coordinator.ts` | 编译器哈希不符、依赖解析失败、编译错误或快照篡改均清除旧工作产物，只保留 `compilation-errors.json` |
-| CLI 与任务 | `src/v2/cli/main.ts`、`poc/hardhat3-p0/src/sunhat-v2-plugin.ts` | `sunhat compile`/`sunhat build` 映射到懒加载的 `sunhat compile` Hardhat 任务；支持 `--target`、`--network`、`--all` 和 `--force` |
+| CLI 与任务 | `src/v2/cli/main.ts`、`src/v2/hardhat/plugin.ts` | `sunhat compile`/`sunhat build` 映射到懒加载的 `sunhat compile` Hardhat 任务；支持 `--target`、`--network`、`--all` 和 `--force` |
 
 Sunhat 配置仍是被管理目标的唯一编译配置来源。任务发现原生 `solidity` 与 `sunhat.compilation` 同时存在时直接失败，不合并两套 compiler/settings。
 
@@ -32,6 +32,6 @@ Hardhat 管理的标准 solc 通过原生 compilation build ID、完整版本和
 
 ## 阶段边界
 
-根包仍维持 Sunhat 1.x / Hardhat 2 发布边界。Hardhat 3 的 `definePlugin`、任务 builder 和 Solidity backend 暂放在固定版本 POC 适配层，纯配置、协调器、快照、Vyper 和任务执行逻辑位于 `src/v2`。根入口切换、`npm pack` 安装验证和测试任务接管留在 P4，避免在 `compile → test → deploy` 闭环形成前破坏 1.x。
+P2 阶段曾以固定版本 POC 隔离 Hardhat 3 的 `definePlugin`、任务 builder 和 Solidity backend。P4 完成 `compile → test → deploy` 闭环、根入口切换与 tarball 安装验证后，相关实现已全部归并到 `src/v2`，重复 POC 和 1.x 冻结副本已删除；需要复核阶段性实现时从 Git 历史恢复。
 
 P0 尚未完成的真实 TVM 部署/执行门槛不由本阶段编译成功替代。P2 只证明 tron-solc 构建目标隔离与编译失败语义；Vyper/TRON 字节码兼容和 Energy/Bandwidth 结果必须由后续真实 TVM 验收提供。
