@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Codex CLI and IDE skill discovery through `.agents/skills/sunhat`.
 - Codex skill metadata, invocation guidance, and npm packaging for `skills/sunhat`.
 
+### Fixed
+- Preserve the executable mode of the packed `sunhat` CLI and verify both local and global tarball command links.
+- Handle `sunhat --help` and `sunhat --version` before Hardhat project discovery.
+
 ## [1.5.0] - 2026-01-21
 
 ### Added

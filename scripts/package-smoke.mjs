@@ -11,6 +11,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -25,6 +26,7 @@ const temporaryRoot = await mkdtemp(
   path.join(os.tmpdir(), 'sunhat-package-smoke-')
 );
 const packDirectory = path.join(temporaryRoot, 'pack');
+const globalPrefixDirectory = path.join(temporaryRoot, 'global');
 const fixtureDirectory = path.join(temporaryRoot, 'sunhat-package-fixture');
 const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const childEnvironment = {
@@ -45,10 +47,48 @@ try {
     projectRoot
   );
   const packed = parsePackResult(packResult.stdout);
+  const packedBin = packed.files.find(
+    (file) => file.path === 'dist/cli/bin.js'
+  );
+  assert.ok(packedBin, 'tarball does not contain dist/cli/bin.js');
+  if (process.platform !== 'win32') {
+    assert.equal(
+      packedBin.mode & 0o111,
+      0o111,
+      'tarball CLI entry is not executable'
+    );
+  }
   const tarballPath = await resolvePackedTarball(
     packDirectory,
     packed.filename
   );
+
+  await run(
+    npmExecutable,
+    [
+      'install',
+      '--global',
+      '--prefix',
+      globalPrefixDirectory,
+      '--omit=peer',
+      '--no-audit',
+      '--no-fund',
+      tarballPath,
+    ],
+    temporaryRoot
+  );
+  const globalBinDirectory =
+    process.platform === 'win32'
+      ? globalPrefixDirectory
+      : path.join(globalPrefixDirectory, 'bin');
+  const commandName = process.platform === 'win32' ? 'sunhat.cmd' : 'sunhat';
+  const globalVersion = await run(
+    commandName,
+    ['--version'],
+    temporaryRoot,
+    withExecutablePath(globalBinDirectory)
+  );
+  assert.equal(globalVersion.stdout.trim(), packageJson.version);
 
   const templateModule = await import(
     pathToFileURL(path.join(projectRoot, 'dist', 'cli', 'template.js')).href
@@ -70,6 +110,13 @@ try {
   const hardhatBin = executablePath(fixtureDirectory, 'hardhat');
   const sunhatBin = executablePath(fixtureDirectory, 'sunhat');
   const nestedWorkingDirectory = path.join(fixtureDirectory, 'test');
+  const version = await run(
+    commandName,
+    ['--version'],
+    temporaryRoot,
+    withExecutablePath(path.dirname(sunhatBin))
+  );
+  assert.equal(version.stdout.trim(), packageJson.version);
   const help = await run(hardhatBin, ['--help'], nestedWorkingDirectory);
   for (const task of [
     'sunhat clean',
@@ -178,6 +225,12 @@ async function assertInstalledPackage(projectDirectory, expectedVersion) {
     false
   );
   await access(path.join(installedPackageRoot, 'dist', 'cli', 'bin.js'));
+  if (process.platform !== 'win32') {
+    await access(
+      path.join(installedPackageRoot, 'dist', 'cli', 'bin.js'),
+      constants.X_OK
+    );
+  }
   await access(path.join(installedPackageRoot, 'skills', 'sunhat', 'SKILL.md'));
   await access(executablePath(projectDirectory, 'sunhat'));
 }
@@ -270,6 +323,15 @@ function selectChildEnvironment(environment) {
   return selected;
 }
 
+function withExecutablePath(directory) {
+  return {
+    ...childEnvironment,
+    PATH: [directory, childEnvironment.PATH]
+      .filter(Boolean)
+      .join(path.delimiter),
+  };
+}
+
 async function pathExists(filePath) {
   try {
     await access(filePath);
@@ -279,12 +341,12 @@ async function pathExists(filePath) {
   }
 }
 
-async function run(executable, arguments_, cwd) {
+async function run(executable, arguments_, cwd, environment = childEnvironment) {
   try {
     return await execFileAsync(executable, arguments_, {
       cwd,
       encoding: 'utf8',
-      env: childEnvironment,
+      env: environment,
       maxBuffer: 16 * 1024 * 1024,
     });
   } catch (error) {

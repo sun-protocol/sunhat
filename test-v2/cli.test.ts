@@ -194,6 +194,23 @@ describe('Sunhat 2.x global-to-local delegation', () => {
 });
 
 describe('Sunhat 2.x command entry', () => {
+  it('reports help and version without requiring a Hardhat project', async () => {
+    const root = await temporaryDirectory();
+    const output: string[] = [];
+    const common = {
+      currentVersion: '2.0.0-alpha.1',
+      cwd: root,
+      env: {},
+      writeOutput: (value: string) => output.push(value),
+    } as const;
+
+    assert.equal(await runSunhatCli({ ...common, argv: ['--version'] }), 0);
+    assert.equal(output.pop(), '2.0.0-alpha.1\n');
+
+    assert.equal(await runSunhatCli({ ...common, argv: ['--help'] }), 0);
+    assert.match(output.pop() ?? '', /^Usage: sunhat <command>/u);
+  });
+
   it('initializes a pinned project and installs dependencies by default', async () => {
     const root = await temporaryDirectory();
     let installedAt: string | undefined;

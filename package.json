@@ -83,6 +83,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.v2.json",
+    "postbuild": "node scripts/prepare-bin.mjs",
     "check:public-api": "node scripts/check-public-api.mjs",
     "check:release": "npm run check:public-api && npm run typecheck && npm test && npm run pack:check",
     "typecheck": "tsc -p tsconfig.v2.json --noEmit",

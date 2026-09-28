@@ -20,6 +20,7 @@ export interface RunSunhatCliOptions {
   readonly currentVersion: string;
   readonly cwd: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly writeOutput?: (value: string) => void;
   readonly installDependencies?: (projectRoot: string) => Promise<number>;
   readonly runHardhat?: (
     cliPath: string,
@@ -34,6 +35,22 @@ export async function runSunhatCli(
 ): Promise<number> {
   const env = options.env ?? process.env;
   const command = options.argv[0];
+  const writeOutput =
+    options.writeOutput ?? ((value: string) => process.stdout.write(value));
+  if (
+    options.argv.length === 1 &&
+    (command === '--version' || command === '-v')
+  ) {
+    writeOutput(`${options.currentVersion}\n`);
+    return 0;
+  }
+  if (
+    options.argv.length === 1 &&
+    (command === '--help' || command === '-h')
+  ) {
+    writeOutput(cliHelp());
+    return 0;
+  }
   if (command === undefined) {
     throw new SunhatCliError(
       'COMMAND_ARGUMENT_INVALID',
@@ -72,6 +89,25 @@ export async function runSunhatCli(
   const hardhatArguments = mapHardhatArguments(options.argv);
   const runHardhat = options.runHardhat ?? spawnNodeCli;
   return runHardhat(runtime.hardhatCliPath, hardhatArguments, options.cwd, env);
+}
+
+function cliHelp(): string {
+  return [
+    'Usage: sunhat <command> [options]',
+    '',
+    'Commands:',
+    '  init [directory]       Create a pinned Hardhat 3 project',
+    '  compile | build        Build one or all configured targets',
+    '  test                   Run Hardhat 3 tests without rebuilding',
+    '  clean                  Remove reproducible Sunhat outputs',
+    '  deploy                 Deploy on an explicitly selected network',
+    '  verification sync      Recover an existing deployment attempt',
+    '',
+    'Options:',
+    '  -h, --help             Show this help',
+    '  -v, --version          Show the installed Sunhat version',
+    '',
+  ].join('\n');
 }
 
 export function mapHardhatArguments(argv: readonly string[]): readonly string[] {

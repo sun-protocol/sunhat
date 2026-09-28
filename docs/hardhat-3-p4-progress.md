@@ -29,7 +29,7 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 
 验证结果：
 
-- TypeScript `noEmit`、技能结构校验和 94 项无外部工具链回归全部通过。
+- TypeScript `noEmit`、技能结构校验和 95 项无外部工具链回归全部通过。
 - 根 `src/` 的 53 个生产源文件通过公共 API 门禁；`rg "hardhat/(internal|builtin-tasks)" src` 无匹配。
 - tarball 安装冒烟已纳入 CI 与 npm 发布门禁，不再依赖人工复验。
 - 冒烟子进程使用环境变量允许列表，不向依赖安装或测试过程透传发布令牌和用户私钥。
@@ -37,8 +37,9 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 - 本地 EDR 部署生成完整地址资料包，runtime 比对为 `exact`；未连接外部 RPC。
 - 持久化本地 HTTP 节点完成跨进程 `deploy → verification sync`：两次命令返回同一 attempt/交易/地址，节点只收到一次 `eth_sendTransaction`。
 - `sunhat clean` 实际移除 artifact/cache 后保留 snapshot、attempt 和 verification archive；再次编译以原 build ID 命中 `cacheHit: true`。
-- `npm pack` 产出 95.9 kB、222 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
-- 冗余清理删除 200 个受 Git 管理的旧文件和约 178 MB 的 POC 依赖/缓存；清理后 94 项回归、Hardhat 3 双测试、EDR 部署及隔离 tarball 安装全部复验通过。
+- `npm pack` 产出 96.7 kB、222 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
+- tarball 同时通过隔离的本地与 global-prefix 安装；两种安装均从 `PATH` 按名称执行 `sunhat --version`，Unix 包内入口保持 `0755`。
+- 冗余清理删除 200 个受 Git 管理的旧文件和约 178 MB 的 POC 依赖/缓存；清理后 95 项回归、Hardhat 3 双测试、EDR 部署及隔离 tarball 安装全部复验通过。
 - 干净模板首次安装发现 toolbox 浮动 peer 会选中要求 Hardhat 3.17 的 ethers 插件；模板改为直接精确锁定 4.0.3/3.1.0 后复验通过，依赖审计为 0 个已知漏洞。
 - 三编译器真实集成未重跑：当前环境未提供 `TRON_SOLC_PATH`、`TRON_SOLC_SHA256`、`VYPER_JSON_PATH` 和 `VYPER_JSON_SHA256`。
 

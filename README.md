@@ -15,6 +15,7 @@ The current `2.0.0-alpha.1` package has passed the local EVM/EDR `compile → te
 
 ```bash
 npm install -g @sun-protocol/sunhat@2.0.0-alpha.1
+sunhat --version
 sunhat init contracts-app
 cd contracts-app
 sunhat compile
@@ -22,6 +23,8 @@ sunhat test
 ```
 
 The global command only locates the project. All non-`init` commands delegate once to the project-local Sunhat and Hardhat versions, including calls made from a project subdirectory or with `--config`.
+
+For a packed tarball, install it globally with `npm install -g ./sun-protocol-sunhat-2.0.0-alpha.1.tgz`. A project-local installation intentionally exposes the command only through npm's local bin path; invoke it with `npx --no-install sunhat` or from an npm script. If a global installation succeeds but the shell still reports `command not found`, ensure `$(npm prefix -g)/bin` is present in `PATH` and reopen the shell.
 
 ## Configure Hardhat 3
 
