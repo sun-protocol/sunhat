@@ -1,41 +1,21 @@
 ---
-description: Compile Solidity and Vyper contracts using Sunhat (Hardhat)
+description: Compile configured Solidity, tron-solc, and Vyper targets through Sunhat's isolated build coordinator.
 ---
 
-# Sunhat Compile
+# Compile
 
-I will help you compile your smart contracts, ensuring Tron compatibility.
+1. Read `hardhat.config.ts` and identify the selected target, compiler kinds, exact versions, source roots, overrides, and network binding.
+2. For custom tron-solc or `vyper-json`, verify that `path` is absolute and the configured SHA-256 is present. Do not display secrets while resolving configuration variables.
+3. Run one of:
 
-## Guardrails
+   ```bash
+   sunhat compile
+   sunhat compile --target <target>
+   sunhat compile --network <network>
+   sunhat compile --all
+   ```
 
-- Ensure `hardhat.config.ts` exists
-- Check if `tronSolc` is enabled in config if using Tron-specific features
+4. Verify the emitted JSON includes a build ID, target, cache result, and immutable snapshot directory under `build-snapshots/<target>/<buildId>`.
+5. On failure, use the structured diagnostic. Do not deploy stale artifacts or fall back to another compiler.
 
-## Steps
-
-### 1. Check Configuration
-
-- Read `hardhat.config.ts`
-- Verify `networks.tron` exists and `tron: true` is set (good practice)
-- Verify `tronSolc` settings if applicable
-
-### 2. Run Compile
-
-Execute the compile task:
-
-```bash
-npx hardhat compile
-```
-
-### 3. Check Artifacts
-
-- Verify artifacts were generated in `artifacts/`
-- For Tron-specific builds, check `extendedArtifactsTron/`
-
-### 4. Handle Errors
-
-If compilation fails:
-
-- Check for Solidity version mismatches
-- Suggest installing `tronweb` if missing
-- Check for "Stack too deep" or similar common Solidity errors
+`--target` and `--network` must select the same target when combined. `--all` is mutually exclusive with both selectors.

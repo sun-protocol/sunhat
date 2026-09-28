@@ -1,276 +1,127 @@
-# Sunhat
-[![CI Status](https://github.com/sun-protocol/sunhat/actions/workflows/linux-test.yml/badge.svg)](https://github.com/sun-protocol/sunhat/actions)
-![NPM Version](https://img.shields.io/npm/v/%40sun-protocol%2Fsunhat)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+# Sunhat 2.x
 
-**An All-in-One Toolkit for the Complete TRON Smart Contract Lifecycle**
+Sunhat 2.x is an ESM-first Hardhat 3 plugin for configuration-driven Solidity, tron-solc, and Vyper builds. Every deployment is bound to an immutable build snapshot and produces a self-contained verification archive after the transaction reaches the configured confirmation threshold.
 
-Sunhat is a comprehensive [Hardhat](https://hardhat.org) plugin designed to provide a seamless, end-to-end development experience on [TRON](https://tron.network/). It manages every stage of your project—from writing code in multiple languages to deploying with confidence—all within a single, unified workflow.
+The current `2.0.0-alpha.1` package has passed the local EVM/EDR `compile → test → deploy → archive` flow. TRON compilation and archive primitives are implemented, but production task actions intentionally reject TRON broadcast and sync until Solidity/Vyper execution, receipts, Energy, and Bandwidth pass the real TVM matrix. Use Sunhat 1.x for existing TRON deployments until that gate closes.
 
-## What is it for?
+## Requirements
 
-This [hardhat](https://hardhat.org) plugin adds a mechanism to deploy contracts to any network, Especially to [Tron](https://tron.network/) , keeping track of them and replicating the same environment for testing.
+- Node.js `>=22.13.0`
+- Hardhat `>=3.15.0 <4`
+- An ESM project (`"type": "module"`)
+- `@nomicfoundation/hardhat-ethers >=4.0.3 <5` for EVM deployment and sync
 
-### A Closed-Loop Lifecycle: Develop, Test, Deploy
-
-Sunhat creates a complete, closed-loop process, ensuring consistency and reliability from the first line of code to the final on-chain transaction.
-
-*  **DEVELOP: Flexible & Powerful Compilation**
-   *   Write your smart contracts in the language you prefer with multi-language support for **Solidity** and **Vyper**.
-   *   Compile your code for maximum compatibility and performance using multiple compiler versions, including standard **solc** and the TRON-specific **tron-solc**.
-
-*  **TEST: Robust & Automated Validation**
-   *   Leverage automated, cross-framework testing. Sunhat integrates seamlessly with both **Hardhat**'s built-in testing environment and the high-speed **Foundry** toolkit.
-   *   Write clearer, more maintainable tests using named accounts instead of hardcoded addresses.
-
-*  **DEPLOY: Confident & Trackable**
-   *   Deploy your contracts reliably to any TRON network (Mainnet, Shasta, etc.). The plugin tracks all deployments, allowing you to manage and upgrade your contracts with ease.
-
-
-### Core Features at a Glance
-
-*   **Unified Development Environment**: Supports multiple compilers (**solc**, **tron-solc**) and languages (**Solidity**, **Vyper**), giving your team the flexibility to use the best tools for the job.
-
-*   **Cross-Framework Automated Testing**: Natively supports test suites written for both **Hardhat** and **Foundry**, eliminating the need to choose between frameworks.
-
-*   **Deterministic Deployments**: Reliably deploy contracts and track their history. This allows you to replicate the exact same on-chain state for testing, staging, or disaster recovery.
-
-*   **Named Accounts**: Replace ambiguous addresses (`accounts[0]`) with human-readable names (`deployer`, `tokenOwner`). This makes scripts and tests cleaner and simplifies multi-network configuration.
-
-*   **TRON-Specific Network Data**: Gain access to crucial network-specific parameters directly within your testing and deployment scripts, enabling more accurate pre-deployment simulations.
-
----
-
-## QuickStart
-
-This guide walks you through setting up sunhat in a new project from scratch.
-> You can get a complete demo [here](https://github.com/sun-protocol/sunhat-demo)
-
----
-
-### Installation
-
-This guide walks you through installing sunhat from scratch.
-
-#### Prerequisites
-
-*   **Node.js**: Version `22.14.0` or higher.
-    > [Download Node.js](https://nodejs.org/en/download)
-
-#### Install Sunhat
-
-You can install Sunhat by executing the following command:
+## Start a project
 
 ```bash
-npm install -g @sun-protocol/sunhat
+npm install -g @sun-protocol/sunhat@2.0.0-alpha.1
+sunhat init contracts-app
+cd contracts-app
+sunhat compile
+sunhat test
 ```
 
-#### Install Optional Extensions
+The global command only locates the project. All non-`init` commands delegate once to the project-local Sunhat and Hardhat versions, including calls made from a project subdirectory or with `--config`.
 
-For Vyper compiler support:
-> [Vyper Installation Guide](https://docs.vyperlang.org/en/stable/installing-vyper.html)
-```bash
-pip install vyper==0.2.8
-```
-
-For Foundry test support:
-> [Foundry Installation Guide](https://book.getfoundry.sh/getting-started/installation)
-
-```bash
-# Install Foundry
-curl -L https://foundry.paradigm.xyz | bash
-# Set Foundry to the nightly channel
-foundryup --install nightly
-```
-
----
-
-### Step 1: Configure Hardhat
-
-Add sunhat to your hardhat.config.ts:
+## Configure Hardhat 3
 
 ```ts
-import { HardhatUserConfig } from '@sun-protocol/sunhat';
+import hardhatEthers from "@nomicfoundation/hardhat-ethers";
+import hardhatMocha from "@nomicfoundation/hardhat-mocha";
+import sunhat from "@sun-protocol/sunhat";
+import { defineConfig } from "hardhat/config";
 
-const config: HardhatUserConfig = {
-  solidity: {
-    compilers: [
-      {
-        version: '0.8.23',
-        optimizer: {
-          enabled: true, // enabled for optimizer
-          runs: 999999, // runs time for optimizer run
-        },
-      },
-    ],
-  },
-  // settings for different networks
+export default defineConfig({
+  plugins: [hardhatEthers, hardhatMocha, sunhat],
   networks: {
-    tron: {
-      url: 'https://nile.trongrid.io/jsonrpc', // tron mainnet rpc url
-      tron: true, // enable tron network
-      deploy: ['deployTron/'], // folder for tron deploy scripts
-      accounts: [`${process.env.PRIVATE_KEY}`], // account private key for deploy
+    hardhatMainnet: {
+      type: "edr-simulated",
+      chainType: "l1",
+      sunhat: { target: "evm" },
     },
   },
-};
-
-export default config;
+  sunhat: {
+    compilation: {
+      defaultTarget: "evm",
+      targets: {
+        evm: {
+          chain: "evm",
+          sources: ["contracts"],
+          compilers: [
+            {
+              id: "evm-solidity",
+              kind: "solc",
+              version: "0.8.25",
+              settings: { optimizer: { enabled: true, runs: 200 } },
+            },
+          ],
+        },
+      },
+    },
+    test: { target: "evm" },
+    verification: {
+      outputDir: "verification",
+      sourceMode: "multi-file",
+      autoExport: true,
+    },
+  },
+});
 ```
 
----
+Sunhat configuration is the only compilation source for managed targets. Defining a native Hardhat `solidity` section at the same time is rejected instead of silently merging two compiler configurations.
 
-### Step 2: Create Your First Contract
+## Commands
 
-Create a simple contract in `contracts/Lock.sol`:
+| Command | Behavior |
+| --- | --- |
+| `sunhat init [directory]` | Creates a pinned Hardhat 3 ESM project without Forge. |
+| `sunhat compile [--target name] [--network name]` | Builds one configured target and records an immutable snapshot. |
+| `sunhat compile --all` | Builds every target without merging their artifacts. |
+| `sunhat test [files...]` | Builds once, then runs Hardhat 3 Mocha and native Solidity tests with `noCompile`. |
+| `sunhat deploy --network name` | Runs ordered ESM deployment scripts and archives a successful EVM deployment. |
+| `sunhat verification sync --network name --tx id` | Recovers a saved EVM deployment attempt without rebroadcasting. |
 
-```solidity
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.0;
+Deployment scripts export one async function and receive an explicit context:
 
-contract Lock {
-    uint public unlockTime;
-    address payable public owner;
+```ts
+import type { SunhatDeploymentContext } from "@sun-protocol/sunhat/deploy";
 
-    event Withdrawal(uint amount, uint when);
-
-    constructor(uint _unlockTime) payable {
-        require(_unlockTime > block.timestamp, "Unlock time should be in the future");
-        unlockTime = _unlockTime;
-        owner = payable(msg.sender);
-    }
-
-    function withdraw() public {
-        require(block.timestamp >= unlockTime, "You can't withdraw yet");
-        require(msg.sender == owner, "You aren't the owner");
-        emit Withdrawal(address(this).balance, block.timestamp);
-        owner.transfer(address(this).balance);
-    }
+export default async function deployCounter({
+  deploy,
+}: SunhatDeploymentContext): Promise<void> {
+  await deploy({
+    constructorArguments: ["42"],
+    fullyQualifiedName: "contracts/Counter.sol:Counter",
+  });
 }
 ```
 
----
+The public deployment barrel exposes this context together with the chain-independent archive and adapter types.
 
-### Step 3: Create Deploy Directory
+## Build integrity
 
-Create a `deployTron/` directory in your project root.
-
----
-
-### Step 4: Write Your First Deploy Script
-
-Create `deployTron/1.ts`:
-
-```ts
-module.exports = async ({
-  getNamedAccounts,
-  deployments,
-  getChainId,
-  getUnnamedAccounts,
-}) => {
-  const {deploy} = deployments;
-  const {deployer} = await getNamedAccounts();
-
-  // the following will only deploy "GenericMetaTxProcessor" if the contract was never deployed or if the code changed since last deployment
-  const res = await deploy('Lock', {
-    from: deployer,
-    gasLimit: 4000000,
-    args: [1893456000],
-    tags: 'lumi',
-  });
-  console.log(res)
-};
-
-module.exports.tags = ['lumi'];
-```
-
----
-
-### Step 5: Compile and Deploy
-
-Compile your contracts:
-
-```bash
-npx hardhat compile
-```
-
-Deploy to tron network:
-
-```bash
-npx hardhat --network tron deploy --tags lumi
-```
-
----
-
-### Step 6: Verify Deployment
-
-Check the `deployments/` directory for your deployment files. You should see:
-```
-├── deployments
-│   └── tron
-│       └── Lock.json
-```
-
----
-
-## IDE Skills Integration
-
-Sunhat exposes a specialized **Skills** interface that acts as a "driver" for AI agents. By pointing your AI assistant to the skill definition in `skills/sunhat/`, you unlock expert-level capabilities for testing, deploying, and auditing TRON contracts autonomously.
-
-```
-skills/
-└── sunhat/
-    ├── SKILL.md            # Main entry point
-    └── workflows/
-        ├── sunhat-init.md
-        ├── sunhat-compile.md
-        ├── sunhat-test.md
-        ├── sunhat-deploy.md
-        └── sunhat-audit.md
-```
-
-### Supported IDEs
-
-| IDE | Setup |
-|-----|-------|
-| **Codex CLI / IDE** | Use `.agents/skills/sunhat`; this repository includes the discovery link. Invoke with `$sunhat` or let Codex select it automatically. |
-| **Claude Code** | Place `skills/sunhat` in project root. Claude auto-discovers `SKILL.md`. |
-| **Google Antigravity** | Place `skills/sunhat` in `.agent/skills/sunhat`. Antigravity auto-discovers `SKILL.md`. |
-| **OpenCode** | Place `skills/sunhat` in `.opencode/skills/sunhat`. OpenCode auto-discovers `SKILL.md`. |
-| **Cursor** | Copy `SKILL.md` content into `.cursorrules` or reference workflow paths. |
-
-### Codex Setup
-
-Codex discovers repository-scoped skills from `.agents/skills`. This repository maps `.agents/skills/sunhat` to the canonical `skills/sunhat` directory, so Codex CLI and the Codex IDE extension load the skill automatically when opened from this repository.
-
-For a project with a local `@sun-protocol/sunhat` dependency, copy `node_modules/@sun-protocol/sunhat/skills/sunhat` to `.agents/skills/sunhat`. You can also ask Codex to install the skill from this repository with `$skill-installer`.
-
-Run `/skills` to confirm discovery, then invoke the skill explicitly with `$sunhat` or describe a matching Sunhat task. See the [official Codex Skills documentation](https://developers.openai.com/codex/skills/) for discovery and installation details.
-
-### Example Usage
-
-```
-# Claude Code
-> "Run the tests for the Lock contract using Sunhat."
-
-# Antigravity
-> "Deploy the Token contract to Nile testnet."
-
-# Codex
-> "$sunhat compile and test this TRON project."
-```
-
-The AI agent will discover the skill, read the appropriate workflow, and execute the task deterministically.
-
----
+- solc, tron-solc, and Vyper targets have isolated caches and artifacts.
+- Custom compiler executables require an absolute path and expected SHA-256.
+- Build IDs include compiler identity, normalized settings, source-unit names, and dependency contents.
+- Failed builds cannot reuse stale successful output.
+- Deployment attempts are persisted before broadcast; unknown outcomes are recovered with `verification sync`, never by automatic rebroadcast.
+- Verification archives preserve source inputs, artifacts, build info, constructor data, receipt, queried runtime code, and per-file hashes.
 
 ## Development
-To dive deeper into advanced topics of the sunhat project lifecycle, please see the [Documentation](https://hat-docs.sunagent.ai/) for guides and reference.
 
----
+```bash
+npm install
+npm run typecheck
+npm test
+npm run test:p4:integration
+npm run test:p4:deploy
+npm run pack:check
+```
 
-## How to Contribute
+`npm run test:compiler-integration` additionally requires absolute, hash-pinned `TRON_SOLC_PATH` and `VYPER_JSON_PATH` toolchains. Real TRON broadcast is not part of the alpha test commands.
 
-We welcome contributions from everyone! Contributions to `sunhat` are released under the terms of the [MIT License](https://github.com/sun-protocol/sunhat/blob/main/LICENSE). By submitting a pull request, you agree to license your contribution under this license.
+The repository skill is under `skills/sunhat/`; Codex discovers the same directory through `.agents/skills/sunhat`.
 
-To contribute, see [CONTRIBUTE.md](https://github.com/sun-protocol/sunhat/blob/main/CONTRIBUTE.md)
+## License
+
+[MIT](LICENSE)

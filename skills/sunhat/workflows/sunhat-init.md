@@ -1,48 +1,12 @@
 ---
-description: Initialize a new Sunhat project for Tron smart contract development
+description: Initialize a pinned Hardhat 3 ESM project with the project-local Sunhat runtime.
 ---
 
-# Sunhat Init
+# Initialize
 
-I will help you scaffold a new project using the Sunhat toolkit.
+1. Confirm Node.js is at least `22.13.0` and the destination is empty or absent.
+2. Run `sunhat init <directory>`. Use `--no-install` only when dependency installation is intentionally deferred.
+3. Verify the generated project has `"type": "module"`, exact dependency versions, `hardhat.config.ts`, `contracts/`, and `test/`.
+4. Keep credentials in environment variables. Do not print private keys or write them into generated config.
 
-## Guardrails
-
-- Check if the current directory is empty or if a new directory name is provided
-- Ensure Node.js (v18+) is installed
-- Do not run if `hardhat.config.ts` already exists in the current directory (unless forcing)
-
-## Steps
-
-### 1. Verify Environment
-
-- Check Node.js version: `node --version`
-- Check if `sunhat` is installed globally: `npm list -g @sun-protocol/sunhat` (optional, can use npx)
-
-### 2. Determine Project Name
-
-- Ask the user for a project name (default to current directory if empty)
-
-### 3. Initialize Project
-
-Run the initialization command:
-
-```bash
-sunhat init [project-name]
-```
-
-_Note: If `sunhat` is not in PATH, use `npx @sun-protocol/sunhat init [project-name]`_
-
-### 4. Verify Structure
-
-After initialization, verify that the following exist:
-
-- `contracts/`
-- `test/`
-- `deployTron/` (or `deploy/`)
-- `hardhat.config.ts`
-
-### 5. Post-Init Setup
-
-- Remind user to fill in `.env` with `PRIVATE_KEY` and `TRON_RPC_URL`
-- Suggest running `npm install` if it wasn't run automatically
+The template uses Hardhat 3 Mocha and native Solidity tests. It does not install Forge or a legacy Hardhat Vyper plugin.

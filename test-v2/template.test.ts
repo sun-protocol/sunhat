@@ -31,6 +31,14 @@ describe('Sunhat 2.x project template', () => {
 
     assert.equal(packageJson.type, 'module');
     assert.equal(packageJson.devDependencies.hardhat, '3.15.0');
+    assert.equal(
+      packageJson.devDependencies['@nomicfoundation/hardhat-ethers'],
+      '4.0.3'
+    );
+    assert.equal(
+      packageJson.devDependencies['@nomicfoundation/hardhat-mocha'],
+      '3.1.0'
+    );
     assert.equal(packageJson.devDependencies['@sun-protocol/sunhat'], '2.0.0-rc.1');
     assert.deepEqual(packageJson.scripts, {
       clean: 'sunhat clean',
@@ -38,7 +46,7 @@ describe('Sunhat 2.x project template', () => {
       deploy: 'sunhat deploy --network nile',
       test: 'sunhat test',
     });
-    assert.match(config, /plugins: \[hardhatToolboxMochaEthers, sunhat\]/);
+    assert.match(config, /plugins: \[hardhatEthers, hardhatMocha, sunhat\]/);
     assert.match(template.files['test/Counter.ts'], /network\.create\(\)/);
     assert.match(template.files['contracts/Counter.t.sol'], /testIncrement/);
     assert.doesNotMatch(template.files['contracts/Counter.t.sol'], /require\(/);

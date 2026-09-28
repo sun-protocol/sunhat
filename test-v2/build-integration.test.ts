@@ -8,7 +8,7 @@ import {
   SunhatBuildError,
 } from '../src/v2/build/index.js';
 import { normalizeSunhatConfig } from '../src/v2/config/index.js';
-import { Hardhat3SolidityBackend } from '../poc/hardhat3-p0/src/p2-hardhat-backend.js';
+import { Hardhat3SolidityBackend } from '../src/v2/hardhat/solidity-backend.js';
 
 const tronSolcPath = requiredEnvironment('TRON_SOLC_PATH');
 const tronSolcSha256 = requiredSha256('TRON_SOLC_SHA256');

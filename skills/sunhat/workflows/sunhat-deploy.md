@@ -1,54 +1,31 @@
 ---
-description: Deploy contracts to the Tron network using Sunhat
+description: Deploy through Sunhat's recoverable state machine or restore a saved verification archive.
 ---
 
-# Sunhat Deploy
+# Deploy and recover
 
-I will help you deploy your contracts to the Tron network (Mainnet, Nile, Shasta).
+Deployment scripts live under `deploy/`, use ESM default exports, and receive `SunhatDeploymentContext`. Sunhat sorts scripts by normalized path and rejects symbolic links or paths outside the project.
 
-## Guardrails
+Before an external broadcast, inspect configuration and report:
 
-- **CRITICAL**: Ensure `deployTron/` folder exists (Sunhat convention)
-- Verify `TRON_RPC_URL` and `PRIVATE_KEY` are configured without printing their values
-- Ensure `network: tron` is configured in `hardhat.config.ts`
-- Before broadcasting, show the target network, deployer address, selected tags, and exact command, then obtain explicit user confirmation
+- network and verified chain identity;
+- deployer address without exposing its private key;
+- bound target and selected scripts;
+- native value and unit;
+- exact command.
 
-## Steps
-
-### 1. Prepare Deployment Script
-
-- Check `deployTron/` for existing scripts
-- If creating a new script, use this template:
-  ```typescript
-  import { DeployFunction } from 'hardhat-deploy/types';
-  import { HardhatRuntimeEnvironment } from 'hardhat/types';
-  const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-    const { deployments, getNamedAccounts } = hre;
-    const { deploy } = deployments;
-    const { deployer } = await getNamedAccounts();
-    await deploy('MyContract', { from: deployer, args: [], log: true });
-  };
-  export default func;
-  func.tags = ['MyContract'];
-  ```
-
-### 2. Check Network Status
-
-- Verify RPC connection (optional, via curl or script)
-- Check deployer balance (if possible)
-
-### 3. Execute Deployment
-
-Run the deploy command targeting the Tron network:
+Obtain explicit user confirmation, then run:
 
 ```bash
-npx hardhat deploy --network tron
+sunhat deploy --network <network>
 ```
 
-_Optional: Add `--tags [Tag]` to run specific scripts._
+After success, verify the returned transaction ID, address, runtime match status, and `verification/<networkKey>/verfication-<address>` directory. A complete archive contains source inputs, artifacts, build info, deployment data, receipt, queried runtime code, and a hashed manifest.
 
-### 4. Verify Output
+If broadcast outcome or archive creation is incomplete, do not rerun deploy. Recover the saved attempt with:
 
-- Check console logs for "deployed at" address
-- Record the transaction hash and deployed address for verification
-- Check the corresponding deployment artifact under `deployments/<network>/`
+```bash
+sunhat verification sync --network <network> --tx <transactionId>
+```
+
+The 2.0 alpha task currently permits EVM deployment/sync only. TRON broadcast remains blocked until its TVM execution and resource-accounting matrix passes.

@@ -49,12 +49,11 @@ export function createProjectTemplate(
       test: 'sunhat test',
     },
     devDependencies: {
-      '@nomicfoundation/hardhat-toolbox-mocha-ethers': '3.0.7',
+      '@nomicfoundation/hardhat-ethers': '4.0.3',
+      '@nomicfoundation/hardhat-mocha': '3.1.0',
       '@sun-protocol/sunhat': options.sunhatVersion,
-      '@types/chai': '5.2.3',
       '@types/mocha': '10.0.10',
       '@types/node': '24.5.2',
-      chai: '6.2.2',
       ethers: '6.17.0',
       hardhat: '3.15.0',
       mocha: '11.7.4',
@@ -112,12 +111,13 @@ contract CounterTest {
     }
 }
 `,
-    'hardhat.config.ts': `import hardhatToolboxMochaEthers from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
+    'hardhat.config.ts': `import hardhatEthers from "@nomicfoundation/hardhat-ethers";
+import hardhatMocha from "@nomicfoundation/hardhat-mocha";
 import sunhat from "@sun-protocol/sunhat";
 import { configVariable, defineConfig } from "hardhat/config";
 
 export default defineConfig({
-  plugins: [hardhatToolboxMochaEthers, sunhat],
+  plugins: [hardhatEthers, hardhatMocha, sunhat],
   networks: {
     hardhatMainnet: {
       type: "edr-simulated",

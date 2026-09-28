@@ -152,3 +152,13 @@ export interface DeploymentResult {
   readonly transactionId: string;
   readonly verificationDirectory: string;
 }
+
+export interface SunhatDeploymentRequest {
+  readonly constructorArguments?: readonly unknown[];
+  readonly fullyQualifiedName: string;
+  readonly value?: DecimalString;
+}
+
+export interface SunhatDeploymentContext {
+  deploy(request: SunhatDeploymentRequest): Promise<DeploymentResult>;
+}
