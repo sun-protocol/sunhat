@@ -7,13 +7,17 @@
     "build": "hardhat build --build-profile production",
     "build:tron": "hardhat --config hardhat.tron.config.ts build --build-profile tron-production",
     "test": "hardhat test mocha",
+    "test:p1-config": "node --import tsx --test ../../test-v2/config.test.ts",
+    "test:p1-cli": "node --import tsx --test ../../test-v2/cli.test.ts",
+    "test:p1-template": "node --import tsx --test ../../test-v2/template.test.ts",
+    "test:p1-plugin": "node --import tsx --test ../../test-v2/plugin-config.test.ts",
     "test:vyper": "hardhat test mocha p0-tests/Vyper.ts --no-compile",
     "inspect:artifacts": "node scripts/inspect-artifacts.mjs",
     "inspect:tron-artifacts": "node scripts/inspect-tron-artifacts.mjs",
     "verify:tron-solc": "npm run build:tron && npm run inspect:tron-artifacts",
     "verify:vyper": "node scripts/compile-vyper.mjs",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run build && npm run inspect:artifacts && npm run typecheck && npm test && npm run verify:vyper && npm run test:vyper"
+    "verify": "npm run build && npm run inspect:artifacts && npm run typecheck && npm run test:p1-config && npm run test:p1-cli && npm run test:p1-template && npm run test:p1-plugin && npm test && npm run verify:vyper && npm run test:vyper"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "4.0.3",

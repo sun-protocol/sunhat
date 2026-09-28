@@ -10,6 +10,8 @@
   },
   "include": [
     "hardhat.config.ts",
+    "../../src/v2/**/*.ts",
+    "../../test-v2/**/*.ts",
     "src/**/*.ts",
     "test/**/*.ts",
     "p0-tests/**/*.ts"
