@@ -6,7 +6,7 @@ P4 已把 Hardhat 3 适配层迁入根包并产出 `2.0.0-alpha.1` ESM tarball�
 
 直接把 `sunhat test` 转发到 `hardhat test` 会触发第二次原生构建，测试字节码可能与 Sunhat 目标产物不同。依赖聚合包使用宽松 peer 时还会在干净安装中自动选择未经验证的新插件版本，本次实际复现了 `hardhat-ethers@4.1.0` 与 Hardhat 3.15.0 的冲突。
 
-P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwidth 尚无验收环境；生产 task 因此拒绝 TRON deploy/sync。仓库保留的 1.x 源码仍含 Hardhat 2 内部导入，但不进入 2.x tarball；若发布规则要求对整个 `src/` 执行零匹配检查，还需把 1.x 实现移出 2.x 分支。
+P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwidth 尚无验收环境；生产 task 因此拒绝 TRON deploy/sync。冻结的 1.x 源码与测试已移至 `legacy/v1/`，不编译、不测试且不进入 2.x tarball；根 `src/` 只保留 Hardhat 3 生产代码。
 
 ## Optimized Implementation（优化实现）
 
@@ -21,15 +21,17 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 | 部署脚本 | `src/v2/deploy/scripts.ts` | ESM 动态加载、确定性顺序、受控 cache key、路径穿越与符号链接拒绝 |
 | 项目模板 | `src/v2/cli/template.ts` | 精确锁定已验证插件版本；同时生成 TypeScript 和原生 Solidity 测试，不引入 Forge/toolbox |
 | 发布包 | `package.json`、`tsconfig.v2.json` | NodeNext/ES2022、严格 exports、Hardhat 3 peer、根 lockfile；旧 1.x 源码不打包 |
+| 发布门禁 | `scripts/check-public-api.mjs`、`.github/workflows/linux-test.yml` | 拒绝 Hardhat 内部 API/旧 Vyper 插件；覆盖 Node 22/24 与 Hardhat 3.15/latest |
 
 验证结果：
 
 - TypeScript `noEmit`、技能结构校验和 87 项无外部工具链回归全部通过。
+- 根 `src/` 的 52 个生产源文件通过公共 API 门禁；`rg "hardhat/(internal|builtin-tasks)" src` 无匹配。
 - 正式入口运行 2 项 Hardhat 3 测试：1 项 TypeScript/Mocha、1 项原生 Solidity；测试阶段没有第二次编译。
 - 本地 EDR 部署生成完整地址资料包，runtime 比对为 `exact`；未连接外部 RPC。
 - 持久化本地 HTTP 节点完成跨进程 `deploy → verification sync`：两次命令返回同一 attempt/交易/地址，节点只收到一次 `eth_sendTransaction`。
 - `sunhat clean` 实际移除 artifact/cache 后保留 snapshot、attempt 和 verification archive；再次编译以原 build ID 命中 `cacheHit: true`。
-- `npm pack` 产出 90.9 kB、218 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
+- `npm pack` 产出 91.0 kB、218 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
 - 干净模板首次安装发现 toolbox 浮动 peer 会选中要求 Hardhat 3.17 的 ethers 插件；模板改为直接精确锁定 4.0.3/3.1.0 后复验通过，依赖审计为 0 个已知漏洞。
 - 三编译器真实集成未重跑：当前环境未提供 `TRON_SOLC_PATH`、`TRON_SOLC_SHA256`、`VYPER_JSON_PATH` 和 `VYPER_JSON_SHA256`。
 

@@ -112,12 +112,14 @@ The public deployment barrel exposes this context together with the chain-indepe
 
 ```bash
 npm install
+npm run check:public-api
 npm run typecheck
 npm test
 npm run test:p4:integration
 npm run test:p4:clean
 npm run test:p4:deploy
 npm run pack:check
+npm run check:release
 ```
 
 `npm run test:compiler-integration` additionally requires absolute, hash-pinned `TRON_SOLC_PATH` and `VYPER_JSON_PATH` toolchains. Real TRON broadcast is not part of the alpha test commands.

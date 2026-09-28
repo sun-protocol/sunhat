@@ -2,24 +2,70 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build and Test ubuntu
+  release-matrix:
+    name: Node ${{ matrix.node-version }} / Hardhat ${{ matrix.hardhat-channel }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node-version: '22.13.1'
+            hardhat-channel: minimum
+            hardhat-version: '3.15.0'
+            ethers-plugin-version: '4.0.3'
+            mocha-plugin-version: '3.1.0'
+          - node-version: '24'
+            hardhat-channel: minimum
+            hardhat-version: '3.15.0'
+            ethers-plugin-version: '4.0.3'
+            mocha-plugin-version: '3.1.0'
+          - node-version: '22.13.1'
+            hardhat-channel: latest-3
+            hardhat-version: '^3.15.0'
+            ethers-plugin-version: '^4.0.3'
+            mocha-plugin-version: '^3.1.0'
+          - node-version: '24'
+            hardhat-channel: latest-3
+            hardhat-version: '^3.15.0'
+            ethers-plugin-version: '^4.0.3'
+            mocha-plugin-version: '^3.1.0'
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
-      - uses: pnpm/action-setup@v4
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          version: 10
-      - name: build 
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Select Hardhat compatibility version
         run: |
-            pnpm install
-            pnpm run build
-      - name: test
+          npm install --no-save --package-lock=false \
+            "hardhat@${{ matrix.hardhat-version }}" \
+            "@nomicfoundation/hardhat-ethers@${{ matrix.ethers-plugin-version }}" \
+            "@nomicfoundation/hardhat-mocha@${{ matrix.mocha-plugin-version }}"
+
+      - name: Verify lockfile remains unchanged
+        run: git diff --exit-code -- package-lock.json
+
+      - name: Run release gate
+        run: npm run check:release
+
+      - name: Run Hardhat lifecycle tests
         run: |
-             pnpm run test
+          npm run test:p4:integration
+          npm run test:p4:clean
+          npm run test:p4:deploy

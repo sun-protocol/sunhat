@@ -83,6 +83,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.v2.json",
+    "check:public-api": "node scripts/check-public-api.mjs",
+    "check:release": "npm run check:public-api && npm run typecheck && npm test && npm run pack:check",
     "typecheck": "tsc -p tsconfig.v2.json --noEmit",
     "test": "node --import tsx --test test-v2/build.test.ts test-v2/clean.test.ts test-v2/cli.test.ts test-v2/config.test.ts test-v2/deploy-scripts.test.ts test-v2/deploy.test.ts test-v2/plugin-config.test.ts test-v2/template.test.ts test-v2/test-task.test.ts test-v2/vyper.test.ts",
     "test:compiler-integration": "node --import tsx --test test-v2/build-integration.test.ts",

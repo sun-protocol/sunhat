@@ -22,26 +22,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22.13.1'
+          cache: npm
           registry-url: 'https://registry.npmjs.org/'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - name: Install locked dependencies
+        run: npm ci
 
-      - name: Check and Update npm
-        run: |
-          echo "Initial npm version:"
-          npm --version
-          npm install -g npm@latest
-          echo "Updated npm version:"
-          npm --version
+      - name: Run release gate
+        run: npm run check:release
 
-      - name: Install dependencies and build
+      - name: Run Hardhat lifecycle tests
         run: |
-          pnpm install
-          pnpm run build
+          npm run test:p4:integration
+          npm run test:p4:clean
+          npm run test:p4:deploy
 
       - name: Publish to npm
-        run: npm publish --provenance
+        run: npm publish --provenance --access public
