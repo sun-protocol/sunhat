@@ -2,9 +2,13 @@ dist
 node_modules
 pnpm-lock.yaml
 artifacts
+poc/hardhat3-p0/artifacts-vyper/
+poc/hardhat3-p0/artifacts-tron/
+poc/hardhat3-p0/cache-tron/
 cache
 extendedArtifacts/
 package-lock.json
+!poc/hardhat3-p0/package-lock.json
 .vscode/
 *.swp
 *.swo

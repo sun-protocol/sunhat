@@ -1,0 +1,33 @@
+{
+  "name": "@sun-protocol/sunhat-hardhat3-p0",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "hardhat build --build-profile production",
+    "build:tron": "hardhat --config hardhat.tron.config.ts build --build-profile tron-production",
+    "test": "hardhat test mocha",
+    "test:vyper": "hardhat test mocha p0-tests/Vyper.ts --no-compile",
+    "inspect:artifacts": "node scripts/inspect-artifacts.mjs",
+    "inspect:tron-artifacts": "node scripts/inspect-tron-artifacts.mjs",
+    "verify:tron-solc": "npm run build:tron && npm run inspect:tron-artifacts",
+    "verify:vyper": "node scripts/compile-vyper.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run build && npm run inspect:artifacts && npm run typecheck && npm test && npm run verify:vyper && npm run test:vyper"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "4.0.3",
+    "@nomicfoundation/hardhat-mocha": "3.1.0",
+    "@types/mocha": "10.0.10",
+    "@types/node": "24.5.2",
+    "ethers": "6.17.0",
+    "hardhat": "3.15.0",
+    "mocha": "11.7.4",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "diff": "8.0.3",
+    "serialize-javascript": "7.0.5"
+  }
+}
