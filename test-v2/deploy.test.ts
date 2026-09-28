@@ -247,7 +247,7 @@ describe('Sunhat P3 deployment state machine', () => {
       projectRoot: fixture.projectRoot,
     });
     const deployed = await manager.deploy(fixture.plan);
-    const synced = await manager.sync(deployed.attemptId);
+    const synced = await manager.syncByTransactionId(deployed.transactionId);
 
     assert.equal(synced.verificationDirectory, deployed.verificationDirectory);
     assert.equal(synced.transactionId, deployed.transactionId);

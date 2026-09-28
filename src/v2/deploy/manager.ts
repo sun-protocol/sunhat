@@ -123,6 +123,26 @@ export class DeploymentManager {
     return this.finalize(attempt, transactionId);
   }
 
+  public async syncByTransactionId(
+    transactionId: string
+  ): Promise<DeploymentResult> {
+    if (!transactionId.trim()) {
+      invalid('transaction id is required for verification sync');
+    }
+    const network = await this.#adapter.getNetworkIdentity();
+    if (network.chain !== this.#adapter.chain) {
+      throw new SunhatDeploymentError(
+        'NETWORK_IDENTITY_MISMATCH',
+        'adapter chain and reported network chain differ'
+      );
+    }
+    const attempt = await this.#attempts.findByTransactionId(
+      networkKey(network),
+      transactionId
+    );
+    return this.sync(attempt.attemptId);
+  }
+
   private async validatePlan(plan: DeploymentPlan): Promise<NetworkIdentity> {
     if (path.resolve(plan.projectRoot) !== this.#projectRoot) {
       invalid('plan project root differs from manager project root');

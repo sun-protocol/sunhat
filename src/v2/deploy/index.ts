@@ -5,5 +5,6 @@ export * from './evm-adapter.js';
 export * from './manager.js';
 export * from './network-key.js';
 export * from './runtime-match.js';
+export * from './scripts.js';
 export * from './tron-adapter.js';
 export * from './types.js';

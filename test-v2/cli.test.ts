@@ -250,11 +250,21 @@ describe('Sunhat 2.x command entry', () => {
       'nile',
     ]);
     assert.deepEqual(mapHardhatArguments(['test', 'test/Counter.ts']), [
+      'sunhat',
       'test',
-      'mocha',
       'test/Counter.ts',
     ]);
     assert.deepEqual(mapHardhatArguments(['clean']), ['clean']);
+    assert.deepEqual(mapHardhatArguments(['deploy', '--network', 'nile']), [
+      'sunhat',
+      'deploy',
+      '--network',
+      'nile',
+    ]);
+    assert.deepEqual(
+      mapHardhatArguments(['verification', 'sync', '--tx', '0x1234']),
+      ['sunhat', 'verification', 'sync', '--tx', '0x1234']
+    );
   });
 
   it('runs delegated commands through the resolved project-local Hardhat CLI', async () => {
@@ -282,7 +292,7 @@ describe('Sunhat 2.x command entry', () => {
     assert.equal(exitCode, 9);
     assert.deepEqual(invocation, {
       cliPath: runtime.hardhatCliPath,
-      argv: ['test', 'mocha', 'test/Counter.ts'],
+      argv: ['sunhat', 'test', 'test/Counter.ts'],
       cwd: nested,
     });
   });

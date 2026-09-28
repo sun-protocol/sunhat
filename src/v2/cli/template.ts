@@ -95,6 +95,23 @@ contract Counter {
     }
 }
 `,
+    'contracts/Counter.t.sol': `// SPDX-License-Identifier: MIT
+pragma solidity 0.8.25;
+
+import {Counter} from "./Counter.sol";
+
+/// @title Native Hardhat 3 Solidity test.
+contract CounterTest {
+    error UnexpectedValue(uint256 actual, uint256 expected);
+
+    function testIncrement() external {
+        Counter counter = new Counter();
+        counter.increment();
+        uint256 actual = counter.value();
+        if (actual != 1) revert UnexpectedValue(actual, 1);
+    }
+}
+`,
     'hardhat.config.ts': `import hardhatToolboxMochaEthers from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import sunhat from "@sun-protocol/sunhat";
 import { configVariable, defineConfig } from "hardhat/config";

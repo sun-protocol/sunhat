@@ -108,6 +108,10 @@ describe('Sunhat Hardhat 3 config hook', () => {
 
     assert.equal(called, true);
     assert.equal(finalConfig.sunhat?.networks.hardhatMainnet.target, 'evm');
+    assert.equal(
+      (finalConfig.paths as { artifacts?: string }).artifacts,
+      '/project/artifacts/sunhat/evm/solidity'
+    );
     assert.deepEqual(await hooks.validateResolvedConfig!(finalConfig), []);
   });
 });

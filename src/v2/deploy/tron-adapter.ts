@@ -21,7 +21,7 @@ export interface TronDeploymentClient {
     transactionId: string,
     confirmations: number
   ): Promise<DeploymentReceipt>;
-  getCode(address: string): Promise<string>;
+  getCode(address: string): Promise<string | OnchainCode>;
 }
 
 /** Standalone TRON adapter; it deliberately does not inherit ethers Provider. */
@@ -53,6 +53,7 @@ export class TronAdapter implements NetworkAdapter {
   }
 
   public async getCode(address: string): Promise<OnchainCode> {
-    return { address, code: await this.#client.getCode(address) };
+    const result = await this.#client.getCode(address);
+    return typeof result === 'string' ? { address, code: result } : result;
   }
 }

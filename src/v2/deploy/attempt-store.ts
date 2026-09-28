@@ -5,6 +5,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   writeFile,
@@ -158,6 +159,52 @@ export class DeploymentAttemptStore {
       this.#projectRoot
     );
     return updated;
+  }
+
+  public async findByTransactionId(
+    networkKey: string,
+    transactionId: string
+  ): Promise<DeploymentAttempt> {
+    validateIdentifier(networkKey, 'network key');
+    const directory = path.dirname(this.pathFor(networkKey, 'lookup'));
+    await assertSafeParents(this.#projectRoot, path.join(directory, 'lookup.json'));
+    let names: string[];
+    try {
+      names = await readdir(directory);
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        throw new SunhatDeploymentError(
+          'ATTEMPT_NOT_FOUND',
+          `no deployment attempt found for transaction ${transactionId}`
+        );
+      }
+      throw error;
+    }
+    const matches: DeploymentAttempt[] = [];
+    for (const name of names.sort()) {
+      const match = /^([a-f0-9]{64})\.json$/.exec(name);
+      if (match === null) continue;
+      const attempt = await this.read(networkKey, match[1]);
+      if (
+        attempt.transactionId === transactionId ||
+        attempt.transaction.transactionId === transactionId
+      ) {
+        matches.push(attempt);
+      }
+    }
+    if (matches.length === 0) {
+      throw new SunhatDeploymentError(
+        'ATTEMPT_NOT_FOUND',
+        `no deployment attempt found for transaction ${transactionId}`
+      );
+    }
+    if (matches.length !== 1) {
+      throw new SunhatDeploymentError(
+        'ATTEMPT_CONFLICT',
+        `multiple deployment attempts reference transaction ${transactionId}`
+      );
+    }
+    return matches[0];
   }
 
   public pathFor(networkKey: string, attemptId: string): string {

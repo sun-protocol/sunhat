@@ -40,6 +40,8 @@ describe('Sunhat 2.x project template', () => {
     });
     assert.match(config, /plugins: \[hardhatToolboxMochaEthers, sunhat\]/);
     assert.match(template.files['test/Counter.ts'], /network\.create\(\)/);
+    assert.match(template.files['contracts/Counter.t.sol'], /testIncrement/);
+    assert.doesNotMatch(template.files['contracts/Counter.t.sol'], /require\(/);
     assert.doesNotMatch(template.files['contracts/Counter.sol'], /unchecked/);
     assert.doesNotMatch(combined, /forge|foundry|@nomiclabs\/hardhat-vyper/i);
     assert.doesNotMatch(combined, /PRIVATE_KEY=[0-9a-f]/i);

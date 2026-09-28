@@ -80,7 +80,13 @@ export function mapHardhatArguments(argv: readonly string[]): readonly string[] 
     return ['sunhat', 'compile', ...argumentsAfterCommand];
   }
   if (command === 'test') {
-    return ['test', 'mocha', ...argumentsAfterCommand];
+    return ['sunhat', 'test', ...argumentsAfterCommand];
+  }
+  if (command === 'deploy') {
+    return ['sunhat', 'deploy', ...argumentsAfterCommand];
+  }
+  if (command === 'verification' && argumentsAfterCommand[0] === 'sync') {
+    return ['sunhat', 'verification', 'sync', ...argumentsAfterCommand.slice(1)];
   }
   return argv;
 }

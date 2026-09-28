@@ -1,8 +1,10 @@
+import path from 'node:path';
 import { SunhatConfigError, normalizeSunhatConfig } from '../config/index.js';
 import type { SunhatConfigurationVariable } from '../config/index.js';
 import type {
   ConfigHooksLike,
   ConfigurationVariableResolverLike,
+  HardhatConfigLike,
   HardhatConfigValidationErrorLike,
   HardhatUserConfigLike,
 } from './contracts.js';
@@ -33,7 +35,22 @@ export default async function createConfigHooks(): Promise<
         resolvedSunhat,
         userConfig.networks
       );
-      return { ...resolvedConfig, sunhat };
+      const configuredArtifactPath =
+        userConfig.solidity === undefined
+          ? testArtifactPath(resolvedConfig, sunhat)
+          : undefined;
+      return {
+        ...resolvedConfig,
+        ...(configuredArtifactPath === undefined
+          ? {}
+          : {
+              paths: {
+                ...(resolvedConfig.paths as Record<string, unknown>),
+                artifacts: configuredArtifactPath,
+              },
+            }),
+        sunhat,
+      };
     },
     validateResolvedConfig: async (resolvedConfig) => {
       if (resolvedConfig.sunhat === undefined) {
@@ -47,6 +64,22 @@ export default async function createConfigHooks(): Promise<
       return [];
     },
   };
+}
+
+function testArtifactPath(
+  resolvedConfig: HardhatConfigLike,
+  sunhat: ReturnType<typeof normalizeSunhatConfig>
+): string | undefined {
+  const paths = readRecord(resolvedConfig.paths);
+  if (typeof paths?.root !== 'string') return undefined;
+  const evmTargetNames = Object.entries(sunhat.compilation.targets)
+    .filter(([, target]) => target.chain === 'evm')
+    .map(([name]) => name);
+  const targetName =
+    sunhat.test.target ??
+    (evmTargetNames.length === 1 ? evmTargetNames[0] : undefined);
+  if (targetName === undefined) return undefined;
+  return path.join(paths.root, 'artifacts', 'sunhat', targetName, 'solidity');
 }
 
 export function validateSunhatUserConfig(
