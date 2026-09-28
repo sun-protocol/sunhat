@@ -102,9 +102,11 @@ The public deployment barrel exposes this context together with the chain-indepe
 ## Build integrity
 
 - solc, tron-solc, and Vyper targets have isolated caches and artifacts.
+- Every compiler in a TRON target must set `settings.evmVersion` to `london`; a newer compiler default is rejected even if a particular build happens not to emit a newer opcode.
 - Custom compiler executables require an absolute path and expected SHA-256.
 - Build IDs include compiler identity, normalized settings, source-unit names, and dependency contents.
 - Failed builds cannot reuse stale successful output.
+- TRON creation bytecode is parsed at instruction boundaries before transaction preparation; the London release profile ignores PUSH data and validated Solidity/Vyper CBOR metadata, then rejects unsupported opcodes.
 - Deployment attempts are persisted before broadcast; unknown outcomes are recovered with `verification sync`, never by automatic rebroadcast.
 - Verification archives preserve source inputs, artifacts, build info, constructor data, receipt, queried runtime code, and per-file hashes.
 

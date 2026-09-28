@@ -28,6 +28,7 @@ import {
   EvmAdapter,
   SunhatDeploymentError,
   TronAdapter,
+  validateTvmBytecode,
 } from '../src/v2/deploy/index.js';
 import type {
   BroadcastResult,
@@ -115,6 +116,19 @@ describe('Sunhat P3 deployment state machine', () => {
     );
     assert.equal(deployment.value, '1000000');
     assert.equal(typeof deployment.value, 'string');
+  });
+
+  it('rejects incompatible TVM instructions before preparing or broadcasting', async () => {
+    const fixture = await deploymentFixture('tron', '0x5f');
+    const adapter = new FakeAdapter('tron', fixture.projectRoot);
+    const manager = new DeploymentManager({ adapter, projectRoot: fixture.projectRoot });
+
+    await assert.rejects(
+      () => manager.deploy(fixture.plan),
+      deploymentError('TVM_BYTECODE_INCOMPATIBLE')
+    );
+    assert.equal(adapter.prepareCount, 0);
+    assert.equal(adapter.broadcastCount, 0);
   });
 
   it('never rebroadcasts an unknown outcome and recovers through sync', async () => {
@@ -271,6 +285,35 @@ describe('Sunhat P3 runtime comparison', () => {
   });
 });
 
+describe('TVM bytecode validator', () => {
+  it('checks instruction boundaries instead of matching opcode substrings', () => {
+    const result = validateTvmBytecode('0x615f5e00');
+    assert.equal(result.instructionCount, 2);
+    assert.equal(result.executableBytes, 4);
+  });
+
+  it('excludes a valid trailing Solidity CBOR metadata section', () => {
+    const result = validateTvmBytecode('0x6000a164736f6c63435f0819000a');
+    assert.equal(result.executableBytes, 2);
+    assert.equal(result.metadataBytes, 12);
+  });
+
+  it('excludes Vyper array metadata whose length includes the footer', () => {
+    const result = validateTvmBytecode('0x60008201435f5e490008');
+    assert.equal(result.executableBytes, 2);
+    assert.equal(result.metadataBytes, 8);
+  });
+
+  it('rejects post-London, undefined, and truncated instructions', () => {
+    for (const bytecode of ['0x5f', '0x5e', '0x0c', '0x7f00']) {
+      assert.throws(
+        () => validateTvmBytecode(bytecode),
+        deploymentError('TVM_BYTECODE_INCOMPATIBLE')
+      );
+    }
+  });
+});
+
 class FakeAdapter implements NetworkAdapter {
   public readonly address: string;
   public addressOverride?: string;
@@ -278,6 +321,7 @@ class FakeAdapter implements NetworkAdapter {
   public broadcastCount = 0;
   public broadcastError?: Error;
   public readonly chain: 'evm' | 'tron';
+  public prepareCount = 0;
   public receiptStatus: DeploymentReceipt['status'] = 'success';
   public readonly transactionId = `0x${'2'.repeat(64)}`;
   readonly #projectRoot: string;
@@ -312,6 +356,7 @@ class FakeAdapter implements NetworkAdapter {
   }
 
   public async prepareDeployment(plan: DeploymentPlan): Promise<DeploymentTransaction> {
+    this.prepareCount += 1;
     return {
       data: plan.initCode,
       from: this.chain === 'evm' ? `0x${'3'.repeat(40)}` : `T${'2'.repeat(33)}`,
@@ -363,7 +408,10 @@ class FakeAdapter implements NetworkAdapter {
   }
 }
 
-async function deploymentFixture(chain: 'evm' | 'tron') {
+async function deploymentFixture(
+  chain: 'evm' | 'tron',
+  creationBytecode = '0x6000'
+) {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), `sunhat-p3-${chain}-`));
   temporaryDirectories.push(projectRoot);
   await mkdir(path.join(projectRoot, 'contracts'), { recursive: true });
@@ -373,7 +421,9 @@ async function deploymentFixture(chain: 'evm' | 'tron') {
   );
   const tronCompilerPath = path.join(projectRoot, 'tron-solc');
   await writeFile(tronCompilerPath, 'test-only tron compiler identity\n');
-  const coordinator = new BuildCoordinator({ solidity: new DeploymentBackend() });
+  const coordinator = new BuildCoordinator({
+    solidity: new DeploymentBackend(creationBytecode),
+  });
   const target = normalizeSunhatConfig({
     compilation: {
       targets: {
@@ -389,6 +439,7 @@ async function deploymentFixture(chain: 'evm' | 'tron') {
                     sha256: sha256('test-only tron compiler identity\n'),
                   }
                 : {}),
+              settings: chain === 'tron' ? { evmVersion: 'london' } : {},
               version: '0.8.25',
             },
           ],
@@ -404,7 +455,7 @@ async function deploymentFixture(chain: 'evm' | 'tron') {
     constructorArguments: ['1'],
     encodedConstructorArguments: '0x',
     fullyQualifiedName: 'contracts/Counter.sol:Counter',
-    initCode: '0x6000',
+    initCode: creationBytecode,
     projectRoot,
     snapshotDirectory: build.snapshotDirectory,
     target: chain,
@@ -414,6 +465,12 @@ async function deploymentFixture(chain: 'evm' | 'tron') {
 }
 
 class DeploymentBackend implements SolidityBuildBackend {
+  readonly #creationBytecode: string;
+
+  public constructor(creationBytecode: string) {
+    this.#creationBytecode = creationBytecode;
+  }
+
   public async build(request: SolidityBuildRequest): Promise<BackendBuildResult> {
     const artifactPath = path.join(
       request.artifactDirectory,
@@ -427,7 +484,7 @@ class DeploymentBackend implements SolidityBuildBackend {
       `${canonicalJson({
         _format: 'hh3-artifact-1',
         abi: [],
-        bytecode: '0x6000',
+        bytecode: this.#creationBytecode,
         contractName: 'Counter',
         deployedBytecode: runtimeCode,
         deployedLinkReferences: {},

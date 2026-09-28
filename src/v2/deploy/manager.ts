@@ -14,6 +14,7 @@ import {
   collectMutableReferences,
   compareRuntimeCode,
 } from './runtime-match.js';
+import { validateTvmBytecode } from './tvm-bytecode.js';
 import type {
   DeploymentAttempt,
   DeploymentPlan,
@@ -201,7 +202,10 @@ export class DeploymentManager {
       canonicalExpectedSnapshot,
       plan.fullyQualifiedName
     );
-    assertInitCodeMatchesArtifact(plan, snapshotArtifact.artifact);
+    const creationBytecode = assertInitCodeMatchesArtifact(
+      plan,
+      snapshotArtifact.artifact
+    );
     const sourceName = plan.fullyQualifiedName.slice(
       0,
       plan.fullyQualifiedName.lastIndexOf(':')
@@ -211,6 +215,9 @@ export class DeploymentManager {
         'INVALID_DEPLOYMENT_PLAN',
         'Vyper does not support flattened source export; use multi-file or both'
       );
+    }
+    if (manifest.chain === 'tron') {
+      validateTvmBytecode(creationBytecode);
     }
     const network = await this.#adapter.getNetworkIdentity();
     if (network.chain !== this.#adapter.chain || network.chain !== manifest.chain) {
@@ -385,7 +392,7 @@ function readRuntimeCode(artifact: Readonly<Record<string, unknown>>): string | 
 function assertInitCodeMatchesArtifact(
   plan: DeploymentPlan,
   artifact: Readonly<Record<string, unknown>>
-): void {
+): string {
   const expected = readBytecode(artifact.bytecode);
   if (expected === undefined) {
     throw new SunhatDeploymentError(
@@ -440,6 +447,10 @@ function assertInitCodeMatchesArtifact(
       'deployment initcode does not match artifact bytecode outside declared link ranges'
     );
   }
+  return `0x${stripHexPrefix(plan.initCode).slice(
+    0,
+    initCode.length - arguments_.length
+  )}`;
 }
 
 function readBytecode(value: unknown): string | undefined {

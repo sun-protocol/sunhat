@@ -165,6 +165,13 @@ function normalizeTarget(rawTarget: unknown, configPath: string): NormalizedComp
       normalized.kind,
       `${configPath}.compilers[${index}].kind`
     );
+    if (chain === 'tron' && normalized.settings.evmVersion !== 'london') {
+      fail(
+        'INVALID_CONFIG',
+        `${configPath}.compilers[${index}].settings.evmVersion`,
+        'TRON compilers must target the audited london bytecode profile'
+      );
+    }
     return normalized;
   });
 

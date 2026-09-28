@@ -78,6 +78,7 @@ describe('Sunhat P4 test task', () => {
                 kind: 'tron-solc',
                 path: '/tmp/tron-solc',
                 sha256: '0'.repeat(64),
+                settings: { evmVersion: 'london' },
                 version: '0.8.25',
               },
             ],

@@ -76,6 +76,18 @@ describe('Sunhat 2.x config normalization', () => {
     );
   });
 
+  it('requires every TRON compiler to target the London bytecode profile', () => {
+    const missing = dualTargetConfig();
+    delete missing.compilation.targets.tron.compilers[0].settings;
+    assertConfigError(() => normalizeSunhatConfig(missing), 'INVALID_CONFIG');
+
+    const newer = dualTargetConfig();
+    newer.compilation.targets.tron.compilers[1].settings = {
+      evmVersion: 'prague',
+    };
+    assertConfigError(() => normalizeSunhatConfig(newer), 'INVALID_CONFIG');
+  });
+
   it('requires a Vyper executable hash and absolute path', () => {
     const raw = singleEvmConfig();
     raw.compilation.targets.evm.compilers = [
@@ -295,7 +307,10 @@ function dualTargetConfig(): MutableSunhatConfig {
         id: 'tron-solidity',
         kind: 'tron-solc',
         version: '0.8.25',
-        settings: { optimizer: { enabled: true, runs: 200 } },
+        settings: {
+          evmVersion: 'london',
+          optimizer: { enabled: true, runs: 200 },
+        },
       },
       {
         id: 'tron-vyper',

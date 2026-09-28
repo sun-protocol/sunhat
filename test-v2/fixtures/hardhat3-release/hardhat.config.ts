@@ -54,7 +54,10 @@ export default defineConfig({
               id: 'tron-solidity',
               kind: 'tron-solc',
               version: '0.8.25',
-              settings: { optimizer: { enabled: true, runs: 200 } },
+              settings: {
+                evmVersion: 'london',
+                optimizer: { enabled: true, runs: 200 },
+              },
             },
           ],
         },

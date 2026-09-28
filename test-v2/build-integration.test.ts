@@ -325,7 +325,10 @@ function targets() {
               id: 'tron-solidity',
               kind: 'tron-solc',
               path: tronSolcPath,
-              settings: { optimizer: { enabled: true, runs: 200 } },
+              settings: {
+                evmVersion: 'london',
+                optimizer: { enabled: true, runs: 200 },
+              },
               sha256: tronSolcSha256,
               version: '0.8.25',
             },
