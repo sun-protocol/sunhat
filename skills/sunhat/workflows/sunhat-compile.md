@@ -19,3 +19,5 @@ description: Compile configured Solidity, tron-solc, and Vyper targets through S
 5. On failure, use the structured diagnostic. Do not deploy stale artifacts or fall back to another compiler.
 
 `--target` and `--network` must select the same target when combined. `--all` is mutually exclusive with both selectors.
+
+Use `sunhat clean` to remove only `artifacts/sunhat` and `cache/sunhat`. Confirm that `build-snapshots/`, `deployments/`, and `verification/` remain intact; these contain recovery and reproducibility evidence, not disposable build cache.

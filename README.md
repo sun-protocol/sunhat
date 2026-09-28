@@ -78,6 +78,7 @@ Sunhat configuration is the only compilation source for managed targets. Definin
 | `sunhat compile [--target name] [--network name]` | Builds one configured target and records an immutable snapshot. |
 | `sunhat compile --all` | Builds every target without merging their artifacts. |
 | `sunhat test [files...]` | Builds once, then runs Hardhat 3 Mocha and native Solidity tests with `noCompile`. |
+| `sunhat clean` | Removes `artifacts/sunhat` and `cache/sunhat`; preserves snapshots and deployment evidence. |
 | `sunhat deploy --network name` | Runs ordered ESM deployment scripts and archives a successful EVM deployment. |
 | `sunhat verification sync --network name --tx id` | Recovers a saved EVM deployment attempt without rebroadcasting. |
 
@@ -114,6 +115,7 @@ npm install
 npm run typecheck
 npm test
 npm run test:p4:integration
+npm run test:p4:clean
 npm run test:p4:deploy
 npm run pack:check
 ```

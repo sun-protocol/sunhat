@@ -9,6 +9,9 @@ import sunhatPluginDefinition from '../plugin/index.js';
 const tasks = [
   emptyTask(['sunhat'], 'Sunhat project tasks').build(),
   emptyTask(['sunhat', 'verification'], 'Sunhat verification tasks').build(),
+  task(['sunhat', 'clean'], 'Remove reproducible Sunhat artifacts and caches')
+    .setAction(() => import('./actions/clean.js'))
+    .build(),
   task(['sunhat', 'compile'], 'Compile configured Sunhat targets')
     .addOption({
       name: 'target',

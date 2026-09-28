@@ -12,8 +12,9 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 
 | 模块 | 代码 | 已验证行为 |
 | --- | --- | --- |
-| 正式插件入口 | `src/v2/index.ts`、`src/v2/hardhat/plugin.ts` | ESM 默认导出 Hardhat 3 plugin；compile/test/deploy/sync action 按需加载 |
+| 正式插件入口 | `src/v2/index.ts`、`src/v2/hardhat/plugin.ts` | ESM 默认导出 Hardhat 3 plugin；clean/compile/test/deploy/sync action 按需加载 |
 | 测试协调器 | `src/v2/test/task.ts` | 选择单一测试目标；构建一次后向 runner 强制传入 `noCompile: true` |
+| 安全清理 | `src/v2/clean/task.ts` | 仅移除可重建的 Sunhat artifact/cache；保留快照、attempt 和验证资料；拒绝 symlink |
 | Artifact 绑定 | `src/v2/plugin/config-hook.ts` | 将测试 artifact 根绑定到目标的 `solidity/` 子树；多 EVM 目标不做隐式首选 |
 | EVM 工作流 | `src/v2/hardhat/actions/deploy.ts`、`src/v2/hardhat/evm-client.ts` | 显式网络、ethers v6 capability check、P3 Manager 与资料归档；EDR 实例进入网络身份 |
 | Sync 入口 | `src/v2/hardhat/actions/verification-sync.ts` | 按交易 ID 查找 attempt，只恢复归档，不重新广播；alpha 仅启用 EVM |
@@ -23,10 +24,12 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 
 验证结果：
 
-- TypeScript `noEmit`、技能结构校验和 82 项无外部工具链回归全部通过。
+- TypeScript `noEmit`、技能结构校验和 87 项无外部工具链回归全部通过。
 - 正式入口运行 2 项 Hardhat 3 测试：1 项 TypeScript/Mocha、1 项原生 Solidity；测试阶段没有第二次编译。
 - 本地 EDR 部署生成完整地址资料包，runtime 比对为 `exact`；未连接外部 RPC。
-- `npm pack` 产出 88.4 kB、202 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat compile` 和 `sunhat test` 均通过。
+- 持久化本地 HTTP 节点完成跨进程 `deploy → verification sync`：两次命令返回同一 attempt/交易/地址，节点只收到一次 `eth_sendTransaction`。
+- `sunhat clean` 实际移除 artifact/cache 后保留 snapshot、attempt 和 verification archive；再次编译以原 build ID 命中 `cacheHit: true`。
+- `npm pack` 产出 90.9 kB、218 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
 - 干净模板首次安装发现 toolbox 浮动 peer 会选中要求 Hardhat 3.17 的 ethers 插件；模板改为直接精确锁定 4.0.3/3.1.0 后复验通过，依赖审计为 0 个已知漏洞。
 - 三编译器真实集成未重跑：当前环境未提供 `TRON_SOLC_PATH`、`TRON_SOLC_SHA256`、`VYPER_JSON_PATH` 和 `VYPER_JSON_SHA256`。
 

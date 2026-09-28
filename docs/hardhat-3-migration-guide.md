@@ -16,6 +16,8 @@ Hardhat 2 的全局 HRE 扩展、CommonJS 部署脚本、内部 compile subtask 
 6. 保留 `build-snapshots/`、`deployments/.sunhat/attempts/` 和 `verification/`。前者绑定实际编译输入，后两者用于避免重复广播和离线复现，不属于普通 build cache。
 7. 删除 Forge 初始化、`foundry.toml` 和自动 `forge test` 调用。原生 Solidity 测试可保留 `.t.sol` 命名，但由 Hardhat 3 Solidity runner 执行；新模板不依赖 `forge-std`。
 
+`sunhat clean` 只删除 `artifacts/sunhat` 与 `cache/sunhat`。命令遇到路径中的符号链接或异常文件类型会中止，不会递归进入项目外目录。
+
 最小配置以 `src/v2/cli/template.ts` 生成内容为准。自定义 tron-solc 和 Vyper 编译器必须同时配置绝对路径与 SHA-256；配置加载不下载编译器，也不会在 tron-solc 缺失时回退到 solc。
 
 ## Gas & Security Trade-offs（权衡分析）

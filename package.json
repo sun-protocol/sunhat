@@ -21,6 +21,10 @@
       "types": "./dist/build/index.d.ts",
       "default": "./dist/build/index.js"
     },
+    "./clean": {
+      "types": "./dist/clean/index.d.ts",
+      "default": "./dist/clean/index.js"
+    },
     "./config": {
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
@@ -80,9 +84,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.v2.json",
     "typecheck": "tsc -p tsconfig.v2.json --noEmit",
-    "test": "node --import tsx --test test-v2/build.test.ts test-v2/cli.test.ts test-v2/config.test.ts test-v2/deploy-scripts.test.ts test-v2/deploy.test.ts test-v2/plugin-config.test.ts test-v2/template.test.ts test-v2/test-task.test.ts test-v2/vyper.test.ts",
+    "test": "node --import tsx --test test-v2/build.test.ts test-v2/clean.test.ts test-v2/cli.test.ts test-v2/config.test.ts test-v2/deploy-scripts.test.ts test-v2/deploy.test.ts test-v2/plugin-config.test.ts test-v2/template.test.ts test-v2/test-task.test.ts test-v2/vyper.test.ts",
     "test:compiler-integration": "node --import tsx --test test-v2/build-integration.test.ts",
     "test:p4:integration": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat test",
+    "test:p4:clean": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat clean",
     "test:p4:deploy": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts --network hardhatMainnet sunhat deploy",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build"

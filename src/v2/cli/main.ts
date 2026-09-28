@@ -82,6 +82,9 @@ export function mapHardhatArguments(argv: readonly string[]): readonly string[] 
   if (command === 'test') {
     return ['sunhat', 'test', ...argumentsAfterCommand];
   }
+  if (command === 'clean') {
+    return ['sunhat', 'clean', ...argumentsAfterCommand];
+  }
   if (command === 'deploy') {
     return ['sunhat', 'deploy', ...argumentsAfterCommand];
   }

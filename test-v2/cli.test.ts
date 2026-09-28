@@ -254,7 +254,7 @@ describe('Sunhat 2.x command entry', () => {
       'test',
       'test/Counter.ts',
     ]);
-    assert.deepEqual(mapHardhatArguments(['clean']), ['clean']);
+    assert.deepEqual(mapHardhatArguments(['clean']), ['sunhat', 'clean']);
     assert.deepEqual(mapHardhatArguments(['deploy', '--network', 'nile']), [
       'sunhat',
       'deploy',

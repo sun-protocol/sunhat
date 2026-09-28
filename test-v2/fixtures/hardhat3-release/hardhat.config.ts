@@ -17,6 +17,12 @@ export default defineConfig({
       chainType: 'l1',
       sunhat: { target: 'evm' },
     },
+    localEvm: {
+      type: 'http',
+      chainType: 'l1',
+      url: 'http://127.0.0.1:8545',
+      sunhat: { target: 'evm' },
+    },
     tronOffline: {
       type: 'http',
       chainType: 'generic',
