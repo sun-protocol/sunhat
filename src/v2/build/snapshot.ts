@@ -13,20 +13,24 @@ import { randomBytes } from 'node:crypto';
 import { SunhatBuildError } from './errors.js';
 import { canonicalJson, sha256 } from './hash.js';
 import type {
+  BuildIdentity,
   BuildManifest,
   BuildManifestFile,
   BuildSource,
 } from './types.js';
-import type { NormalizedCompilationTarget } from '../config/index.js';
 
 export interface CommitSnapshotOptions {
   readonly artifactDirectory: string;
   readonly buildId: string;
+  readonly buildIdentity: BuildIdentity;
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly projectRoot: string;
   readonly sources: readonly BuildSource[];
-  readonly target: NormalizedCompilationTarget;
   readonly targetName: string;
+}
+
+export function buildIdForIdentity(identity: BuildIdentity): string {
+  return sha256(canonicalJson(identity));
 }
 
 export function snapshotDirectory(
@@ -72,6 +76,7 @@ export async function restoreSnapshotIfValid(
 export async function commitBuildSnapshot(
   options: CommitSnapshotOptions
 ): Promise<string> {
+  assertCommitIdentity(options);
   const finalDirectory = snapshotDirectory(
     options.projectRoot,
     options.targetName,
@@ -114,18 +119,11 @@ export async function commitBuildSnapshot(
     );
 
     const files = await hashSnapshotFiles(temporaryDirectory);
-    const sourceHashes: Record<string, string> = Object.create(null);
-    for (const source of options.sources) {
-      sourceHashes[source.sourceName] = source.sha256;
-    }
     const manifest: BuildManifest = {
-      schema: 'sunhat-build-snapshot-1',
+      schema: 'sunhat-build-snapshot-2',
       buildId: options.buildId,
-      chain: options.target.chain,
-      compilers: options.target.compilers,
+      build: options.buildIdentity,
       files,
-      sourceHashes,
-      target: options.targetName,
     };
     await writeFile(
       path.join(temporaryDirectory, 'manifest.json'),
@@ -144,6 +142,26 @@ export async function commitBuildSnapshot(
     return finalDirectory;
   } finally {
     await rm(temporaryDirectory, { force: true, recursive: true });
+  }
+}
+
+function assertCommitIdentity(options: CommitSnapshotOptions): void {
+  const sources = options.sources.map(({ sha256: sourceSha256, sourceName }) => ({
+    sha256: sourceSha256,
+    sourceName,
+  }));
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(options.targetName) ||
+    !/^[a-f0-9]{64}$/.test(options.buildId) ||
+    !isBuildIdentity(options.buildIdentity) ||
+    options.buildIdentity.target !== options.targetName ||
+    buildIdForIdentity(options.buildIdentity) !== options.buildId ||
+    canonicalJson(sources) !== canonicalJson(options.buildIdentity.sources)
+  ) {
+    throw new SunhatBuildError(
+      'SNAPSHOT_INTEGRITY_MISMATCH',
+      'snapshot commit identity does not match its target, build id, or sources'
+    );
   }
 }
 
@@ -171,8 +189,10 @@ export async function validateSnapshot(
     );
   }
   if (
-    manifest.schema !== 'sunhat-build-snapshot-1' ||
+    manifest.schema !== 'sunhat-build-snapshot-2' ||
     manifest.buildId !== expectedBuildId ||
+    !isBuildIdentity(manifest.build) ||
+    buildIdForIdentity(manifest.build) !== expectedBuildId ||
     !Array.isArray(manifest.files)
   ) {
     throw new SunhatBuildError(
@@ -223,24 +243,81 @@ export async function validateSnapshot(
       `snapshot contains untracked, duplicate, or missing files: ${directory}`
     );
   }
-  const actualSourceHashes: Record<string, string> = Object.create(null);
-  for (const file of actualFiles) {
-    if (file.path.startsWith('sources/')) {
-      actualSourceHashes[file.path.slice('sources/'.length)] = file.sha256;
-    }
-  }
-  if (
-    manifest.sourceHashes === null ||
-    typeof manifest.sourceHashes !== 'object' ||
-    Array.isArray(manifest.sourceHashes) ||
-    canonicalJson(actualSourceHashes) !== canonicalJson(manifest.sourceHashes)
-  ) {
+  const actualSources = actualFiles
+    .filter(({ path: filePath }) => filePath.startsWith('sources/'))
+    .map(({ path: filePath, sha256: fileSha256 }) => ({
+      sha256: fileSha256,
+      sourceName: filePath.slice('sources/'.length),
+    }));
+  const expectedSources = [...manifest.build.sources].sort((left, right) =>
+    left.sourceName.localeCompare(right.sourceName)
+  );
+  if (canonicalJson(actualSources) !== canonicalJson(expectedSources)) {
     throw new SunhatBuildError(
       'SNAPSHOT_INTEGRITY_MISMATCH',
       `snapshot source hashes do not match archived sources: ${directory}`
     );
   }
   return manifest;
+}
+
+function isBuildIdentity(value: unknown): value is BuildIdentity {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const identity = value as Record<string, unknown>;
+  if (
+    identity.schema !== 'sunhat-build-identity-2' ||
+    (identity.chain !== 'evm' && identity.chain !== 'tron') ||
+    typeof identity.target !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(identity.target) ||
+    !Array.isArray(identity.compilers) ||
+    !Array.isArray(identity.sources) ||
+    !isStringRecord(identity.overrides) ||
+    (identity.solidityFingerprint !== undefined &&
+      !isRecord(identity.solidityFingerprint))
+  ) {
+    return false;
+  }
+  return (
+    identity.compilers.every(isCompilerIdentity) &&
+    identity.sources.every(isSourceIdentity)
+  );
+}
+
+function isCompilerIdentity(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === 'string' &&
+    (value.kind === 'solc' ||
+      value.kind === 'tron-solc' ||
+      value.kind === 'vyper') &&
+    typeof value.version === 'string' &&
+    isRecord(value.settings) &&
+    (value.sha256 === undefined ||
+      (typeof value.sha256 === 'string' && /^[a-f0-9]{64}$/.test(value.sha256)))
+  );
+}
+
+function isSourceIdentity(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.sourceName === 'string' &&
+    value.sourceName.length > 0 &&
+    typeof value.sha256 === 'string' &&
+    /^[a-f0-9]{64}$/.test(value.sha256)
+  );
+}
+
+function isStringRecord(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === 'string')
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 async function hashSnapshotFiles(

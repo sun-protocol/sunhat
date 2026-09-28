@@ -2,9 +2,10 @@ import path from 'node:path';
 import { mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { discoverBuildSources } from './discovery.js';
 import { SunhatBuildError } from './errors.js';
-import { canonicalJson, sha256 } from './hash.js';
+import { canonicalJson } from './hash.js';
 import { verifyCompilerIntegrity } from './integrity.js';
 import {
+  buildIdForIdentity,
   commitBuildSnapshot,
   restoreSnapshotIfValid,
   snapshotDirectory,
@@ -12,6 +13,7 @@ import {
 import { selectVyperCompilerGroups, VyperCompiler } from './vyper.js';
 import type {
   BackendBuildResult,
+  BuildIdentity,
   SolidityBuildBackend,
   SolidityBuildFingerprint,
   TargetBuildRequest,
@@ -124,16 +126,17 @@ export class BuildCoordinator {
       await writeDiagnostics(artifactDirectory, error);
       throw error;
     }
-    const buildId = calculateBuildId(
-      request.targetName,
-      request.target,
-      mergeSnapshotSources(sources, solidityFingerprint?.sources),
-      solidityFingerprint?.metadata
-    );
     const snapshotSources = mergeSnapshotSources(
       sources,
       solidityFingerprint?.sources
     );
+    const buildIdentity = createBuildIdentity(
+      request.targetName,
+      request.target,
+      snapshotSources,
+      solidityFingerprint?.metadata
+    );
+    const buildId = buildIdForIdentity(buildIdentity);
     const finalSnapshotDirectory = snapshotDirectory(
       projectRoot,
       request.targetName,
@@ -210,10 +213,10 @@ export class BuildCoordinator {
     const committedSnapshot = await commitBuildSnapshot({
       artifactDirectory,
       buildId,
+      buildIdentity,
       metadata,
       projectRoot,
       sources: snapshotSources,
-      target: request.target,
       targetName: request.targetName,
     });
     return Object.freeze({
@@ -242,31 +245,32 @@ function mergeSnapshotSources(
   );
 }
 
-function calculateBuildId(
+function createBuildIdentity(
   targetName: string,
   target: TargetBuildRequest['target'],
   sources: Awaited<ReturnType<typeof discoverBuildSources>>,
   solidityFingerprint: Readonly<Record<string, unknown>> | undefined
-): string {
-  return sha256(
-    canonicalJson({
-      chain: target.chain,
-      compilers: target.compilers.map(({ id, kind, settings, sha256, version }) => ({
+): BuildIdentity {
+  return Object.freeze({
+    schema: 'sunhat-build-identity-2',
+    chain: target.chain,
+    compilers: target.compilers.map(
+      ({ id, kind, settings, sha256, version }) => ({
         id,
         kind,
         settings,
         sha256,
         version,
-      })),
-      overrides: target.overrides,
-      solidityFingerprint,
-      sources: sources.map(({ sourceName, sha256: sourceSha256 }) => ({
-        sha256: sourceSha256,
-        sourceName,
-      })),
-      target: targetName,
-    })
-  );
+      })
+    ),
+    overrides: target.overrides,
+    ...(solidityFingerprint === undefined ? {} : { solidityFingerprint }),
+    sources: sources.map(({ sourceName, sha256: sourceSha256 }) => ({
+      sha256: sourceSha256,
+      sourceName,
+    })),
+    target: targetName,
+  });
 }
 
 async function writeDiagnostics(

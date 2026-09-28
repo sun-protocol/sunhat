@@ -117,8 +117,9 @@ describe('Sunhat P2 build coordinator', () => {
       path.join(await realpath(projectRoot), 'artifacts', 'sunhat', 'evm')
     );
     const manifest = await validateSnapshot(first.snapshotDirectory, first.buildId);
-    assert.equal(manifest.target, 'evm');
-    assert.equal(manifest.sourceHashes['contracts/Counter.sol'].length, 64);
+    assert.equal(manifest.schema, 'sunhat-build-snapshot-2');
+    assert.equal(manifest.build.target, 'evm');
+    assert.equal(manifest.build.sources[0].sha256.length, 64);
     assert.match(
       await readFile(
         path.join(first.snapshotDirectory, 'sources', 'contracts', 'Counter.sol'),
@@ -326,7 +327,28 @@ describe('Sunhat P2 build coordinator', () => {
     });
     const manifestPath = path.join(result.snapshotDirectory, 'manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-    manifest.sourceHashes['contracts/Counter.sol'] = '0'.repeat(64);
+    manifest.build.sources[0].sha256 = '0'.repeat(64);
+    await writeFile(manifestPath, `${canonicalJson(manifest)}\n`);
+
+    await assert.rejects(
+      () => validateSnapshot(result.snapshotDirectory, result.buildId),
+      buildError('SNAPSHOT_INTEGRITY_MISMATCH')
+    );
+  });
+
+  it('binds manifest chain metadata to the build id', async () => {
+    const projectRoot = await projectFixture();
+    const coordinator = new BuildCoordinator({
+      solidity: new FakeSolidityBackend(),
+    });
+    const result = await coordinator.build({
+      projectRoot,
+      target: evmTarget(),
+      targetName: 'evm',
+    });
+    const manifestPath = path.join(result.snapshotDirectory, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.build.chain = 'tron';
     await writeFile(manifestPath, `${canonicalJson(manifest)}\n`);
 
     await assert.rejects(

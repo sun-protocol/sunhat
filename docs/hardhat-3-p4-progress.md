@@ -18,6 +18,7 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 | Artifact 绑定 | `src/v2/plugin/config-hook.ts` | 将测试 artifact 根绑定到目标的 `solidity/` 子树；多 EVM 目标不做隐式首选 |
 | EVM 工作流 | `src/v2/hardhat/actions/deploy.ts`、`src/v2/hardhat/evm-client.ts` | 显式网络、ethers v6 capability check、P3 Manager 与资料归档；EDR 实例进入网络身份 |
 | TVM 字节码闸门 | `src/v2/deploy/tvm-bytecode.ts`、`src/v2/deploy/manager.ts` | 按 London 指令集解析 instruction boundary；跳过 PUSH 数据及 Solidity/Vyper CBOR metadata；交易准备前失败关闭 |
+| 快照身份绑定 | `src/v2/build/coordinator.ts`、`src/v2/build/snapshot.ts` | schema v2 的 build ID 绑定 chain/target/compiler/override/fingerprint/source；manifest 身份字段不可独立改写 |
 | Sync 入口 | `src/v2/hardhat/actions/verification-sync.ts` | 按交易 ID 查找 attempt，只恢复归档，不重新广播；alpha 仅启用 EVM |
 | 部署脚本 | `src/v2/deploy/scripts.ts` | ESM 动态加载、确定性顺序、受控 cache key、路径穿越与符号链接拒绝 |
 | 项目模板 | `src/v2/cli/template.ts` | 精确锁定已验证插件版本；同时生成 TypeScript 和原生 Solidity 测试，不引入 Forge/toolbox |
@@ -27,7 +28,7 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 
 验证结果：
 
-- TypeScript `noEmit`、技能结构校验和 93 项无外部工具链回归全部通过。
+- TypeScript `noEmit`、技能结构校验和 94 项无外部工具链回归全部通过。
 - 根 `src/` 的 53 个生产源文件通过公共 API 门禁；`rg "hardhat/(internal|builtin-tasks)" src` 无匹配。
 - tarball 安装冒烟已纳入 CI 与 npm 发布门禁，不再依赖人工复验。
 - 冒烟子进程使用环境变量允许列表，不向依赖安装或测试过程透传发布令牌和用户私钥。
@@ -35,7 +36,7 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 - 本地 EDR 部署生成完整地址资料包，runtime 比对为 `exact`；未连接外部 RPC。
 - 持久化本地 HTTP 节点完成跨进程 `deploy → verification sync`：两次命令返回同一 attempt/交易/地址，节点只收到一次 `eth_sendTransaction`。
 - `sunhat clean` 实际移除 artifact/cache 后保留 snapshot、attempt 和 verification archive；再次编译以原 build ID 命中 `cacheHit: true`。
-- `npm pack` 产出 94.8 kB、222 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
+- `npm pack` 产出 95.9 kB、222 文件的 tarball。干净目录安装后，bin 可执行、插件可导入、`hardhat --help` 可见 Sunhat task，`sunhat clean`、`sunhat compile` 和 `sunhat test` 均通过。
 - 干净模板首次安装发现 toolbox 浮动 peer 会选中要求 Hardhat 3.17 的 ethers 插件；模板改为直接精确锁定 4.0.3/3.1.0 后复验通过，依赖审计为 0 个已知漏洞。
 - 三编译器真实集成未重跑：当前环境未提供 `TRON_SOLC_PATH`、`TRON_SOLC_SHA256`、`VYPER_JSON_PATH` 和 `VYPER_JSON_SHA256`。
 
@@ -46,8 +47,10 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 - `+` ESM 部署脚本按路径排序并拒绝 symlink，减少非确定执行和项目外代码注入面。
 - `+` TVM 校验器按指令边界而非十六进制子串扫描，不把 PUSH 常量或编译器 metadata 误判成 opcode。
 - `+` TRON snapshot 中的实际 creation bytecode 在 adapter 准备交易前完成校验，不兼容产物不会产生 attempt 或进入签名/广播路径。
+- `+` snapshot manifest 的链与构建身份由 build ID 直接承诺，不能通过只改 JSON 把 EVM 产物伪装成 TRON 产物。
 - `+` 发布包只有 ESM v2 产物和更新后的技能，不携带 Hardhat 2 运行时代码。
 - `-` Solidity 测试 artifact 当前绑定到目标的 `solidity/` 子树；Vyper 仍通过 JS/TS 测试直接读取目标隔离产物。
 - `-` 完整源码、build-info 和链上证据继续增加本地 I/O；不增加部署 gas、Energy 或 Bandwidth。
 - `-` London profile 是保守发布基线；Shanghai/Cancun 指令即使已在部分网络启用，仍需新增经实测的 profile 才会放行。
+- `-` schema v2 会生成不同 build ID；旧 schema 快照保留为历史证据，但不会被恢复为新构建缓存。
 - `=` EVM EDR 和 tarball 验收不能替代 TVM。真实 TRON 测试完成前版本保持 alpha，P4 状态保持“进行中”。

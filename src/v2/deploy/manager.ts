@@ -192,10 +192,10 @@ export class DeploymentManager {
       );
     }
     const manifest = await validateSnapshot(canonicalExpectedSnapshot, plan.buildId);
-    if (manifest.target !== plan.target) {
+    if (manifest.build.target !== plan.target) {
       throw new SunhatDeploymentError(
         'SNAPSHOT_MISMATCH',
-        `snapshot target ${manifest.target} does not match ${plan.target}`
+        `snapshot target ${manifest.build.target} does not match ${plan.target}`
       );
     }
     const snapshotArtifact = await loadSnapshotArtifact(
@@ -216,14 +216,17 @@ export class DeploymentManager {
         'Vyper does not support flattened source export; use multi-file or both'
       );
     }
-    if (manifest.chain === 'tron') {
+    if (manifest.build.chain === 'tron') {
       validateTvmBytecode(creationBytecode);
     }
     const network = await this.#adapter.getNetworkIdentity();
-    if (network.chain !== this.#adapter.chain || network.chain !== manifest.chain) {
+    if (
+      network.chain !== this.#adapter.chain ||
+      network.chain !== manifest.build.chain
+    ) {
       throw new SunhatDeploymentError(
         'NETWORK_IDENTITY_MISMATCH',
-        `snapshot chain ${manifest.chain} cannot deploy through ${network.chain} adapter`
+        `snapshot chain ${manifest.build.chain} cannot deploy through ${network.chain} adapter`
       );
     }
     networkKey(network);

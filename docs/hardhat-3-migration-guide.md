@@ -18,6 +18,8 @@ Hardhat 2 的全局 HRE 扩展、CommonJS 部署脚本、内部 compile subtask 
 
 `sunhat clean` 只删除 `artifacts/sunhat` 与 `cache/sunhat`。命令遇到路径中的符号链接或异常文件类型会中止，不会递归进入项目外目录。
 
+2.0 alpha 使用 `sunhat-build-snapshot-2`。升级后 build ID 会纳入 schema 版本并自动生成新快照；旧快照不会作为 cache hit 恢复，也不应手工改写 manifest 迁移。
+
 最小配置以 `src/v2/cli/template.ts` 生成内容为准。TRON 目标内每个编译器必须显式设置 `settings.evmVersion: "london"`；自定义 tron-solc 和 Vyper 编译器必须同时配置绝对路径与 SHA-256。配置加载不下载编译器，也不会在 tron-solc 缺失时回退到 solc。
 
 ## Gas & Security Trade-offs（权衡分析）

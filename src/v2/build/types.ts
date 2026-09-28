@@ -66,12 +66,32 @@ export interface BuildManifestFile {
   readonly size: number;
 }
 
-export interface BuildManifest {
-  readonly schema: 'sunhat-build-snapshot-1';
-  readonly buildId: string;
+export interface BuildCompilerIdentity {
+  readonly id: string;
+  readonly kind: 'solc' | 'tron-solc' | 'vyper';
+  readonly settings: Readonly<Record<string, unknown>>;
+  readonly sha256?: string;
+  readonly version: string;
+}
+
+export interface BuildSourceIdentity {
+  readonly sha256: string;
+  readonly sourceName: string;
+}
+
+export interface BuildIdentity {
+  readonly schema: 'sunhat-build-identity-2';
   readonly chain: 'evm' | 'tron';
-  readonly compilers: readonly NormalizedCompilerConfig[];
-  readonly files: readonly BuildManifestFile[];
-  readonly sourceHashes: Readonly<Record<string, string>>;
+  readonly compilers: readonly BuildCompilerIdentity[];
+  readonly overrides: Readonly<Record<string, string>>;
+  readonly solidityFingerprint?: Readonly<Record<string, unknown>>;
+  readonly sources: readonly BuildSourceIdentity[];
   readonly target: string;
+}
+
+export interface BuildManifest {
+  readonly schema: 'sunhat-build-snapshot-2';
+  readonly buildId: string;
+  readonly build: BuildIdentity;
+  readonly files: readonly BuildManifestFile[];
 }
