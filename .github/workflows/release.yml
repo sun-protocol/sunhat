@@ -38,5 +38,8 @@ jobs:
           npm run test:p4:clean
           npm run test:p4:deploy
 
+      - name: Install and test the packed release
+        run: npm run test:package
+
       - name: Publish to npm
         run: npm publish --provenance --access public

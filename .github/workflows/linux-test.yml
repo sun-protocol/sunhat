@@ -69,3 +69,7 @@ jobs:
           npm run test:p4:integration
           npm run test:p4:clean
           npm run test:p4:deploy
+
+      - name: Install and test the packed release
+        if: matrix.node-version == '22.13.1' && matrix.hardhat-channel == 'minimum'
+        run: npm run test:package

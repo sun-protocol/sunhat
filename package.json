@@ -91,6 +91,7 @@
     "test:p4:integration": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat test",
     "test:p4:clean": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat clean",
     "test:p4:deploy": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts --network hardhatMainnet sunhat deploy",
+    "test:package": "node scripts/package-smoke.mjs",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build"
   }

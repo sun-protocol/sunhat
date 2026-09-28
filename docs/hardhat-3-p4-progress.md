@@ -22,11 +22,14 @@ P4 仍未达到 RC 门槛：TRON 真实 TVM、Vyper/TRON 执行和 Energy/Bandwi
 | 项目模板 | `src/v2/cli/template.ts` | 精确锁定已验证插件版本；同时生成 TypeScript 和原生 Solidity 测试，不引入 Forge/toolbox |
 | 发布包 | `package.json`、`tsconfig.v2.json` | NodeNext/ES2022、严格 exports、Hardhat 3 peer、根 lockfile；旧 1.x 源码不打包 |
 | 发布门禁 | `scripts/check-public-api.mjs`、`.github/workflows/linux-test.yml` | 拒绝 Hardhat 内部 API/旧 Vyper 插件；覆盖 Node 22/24 与 Hardhat 3.15/latest |
+| 安装冒烟 | `scripts/package-smoke.mjs` | 打包后在隔离目录安装，以最小环境从项目子目录验证 help/compile/clean/快照恢复/双测试 |
 
 验证结果：
 
 - TypeScript `noEmit`、技能结构校验和 87 项无外部工具链回归全部通过。
 - 根 `src/` 的 52 个生产源文件通过公共 API 门禁；`rg "hardhat/(internal|builtin-tasks)" src` 无匹配。
+- tarball 安装冒烟已纳入 CI 与 npm 发布门禁，不再依赖人工复验。
+- 冒烟子进程使用环境变量允许列表，不向依赖安装或测试过程透传发布令牌和用户私钥。
 - 正式入口运行 2 项 Hardhat 3 测试：1 项 TypeScript/Mocha、1 项原生 Solidity；测试阶段没有第二次编译。
 - 本地 EDR 部署生成完整地址资料包，runtime 比对为 `exact`；未连接外部 RPC。
 - 持久化本地 HTTP 节点完成跨进程 `deploy → verification sync`：两次命令返回同一 attempt/交易/地址，节点只收到一次 `eth_sendTransaction`。

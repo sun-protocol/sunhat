@@ -118,6 +118,7 @@ npm test
 npm run test:p4:integration
 npm run test:p4:clean
 npm run test:p4:deploy
+npm run test:package
 npm run pack:check
 npm run check:release
 ```
