@@ -77,7 +77,7 @@ export async function runSunhatCli(
 export function mapHardhatArguments(argv: readonly string[]): readonly string[] {
   const [command, ...argumentsAfterCommand] = argv;
   if (command === 'compile' || command === 'build') {
-    return ['build', ...argumentsAfterCommand];
+    return ['sunhat', 'compile', ...argumentsAfterCommand];
   }
   if (command === 'test') {
     return ['test', 'mocha', ...argumentsAfterCommand];

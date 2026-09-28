@@ -26,6 +26,10 @@ export type JsonValue =
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue };
 
+export interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
+
 export interface CompilerUserConfig {
   id: string;
   kind: CompilerKind;
@@ -71,7 +75,7 @@ export interface NormalizedCompilerConfig {
   readonly version: string;
   readonly path?: string;
   readonly sha256?: string;
-  readonly settings: JsonValue;
+  readonly settings: JsonObject;
 }
 
 export interface NormalizedCompilationTarget {

@@ -4,6 +4,7 @@ import type { SunhatConfigErrorCode } from './errors.js';
 import type {
   ChainKind,
   CompilerKind,
+  JsonObject,
   JsonValue,
   NormalizedCompilationTarget,
   NormalizedCompilerConfig,
@@ -134,6 +135,7 @@ function normalizeTarget(rawTarget: unknown, configPath: string): NormalizedComp
     fail('INVALID_CONFIG', `${configPath}.compilers`, 'at least one compiler is required');
   }
   const compilerIds = new Set<string>();
+  const compilerKinds = new Map<string, CompilerKind>();
   const compilerCoordinates = new Set<string>();
   const compilers = rawCompilers.map((compiler, index) => {
     const normalized = normalizeCompiler(
@@ -148,6 +150,7 @@ function normalizeTarget(rawTarget: unknown, configPath: string): NormalizedComp
       );
     }
     compilerIds.add(normalized.id);
+    compilerKinds.set(normalized.id, normalized.kind);
     const coordinate = `${normalized.kind}@${normalized.version}`;
     if (compilerCoordinates.has(coordinate)) {
       fail(
@@ -181,6 +184,28 @@ function normalizeTarget(rawTarget: unknown, configPath: string): NormalizedComp
         'INVALID_CONFIG',
         `${configPath}.overrides.${sourcePath}`,
         `compiler id "${compilerId}" is not defined in this target`
+      );
+    }
+    const compilerKind = compilerKinds.get(compilerId) as CompilerKind;
+    const expectedKind = normalizedSourcePath.endsWith('.sol')
+      ? chain === 'tron'
+        ? 'tron-solc'
+        : 'solc'
+      : normalizedSourcePath.endsWith('.vy')
+        ? 'vyper'
+        : undefined;
+    if (expectedKind === undefined) {
+      fail(
+        'INVALID_CONFIG',
+        `${configPath}.overrides.${sourcePath}`,
+        'compiler overrides are only supported for .sol and .vy source files'
+      );
+    }
+    if (compilerKind !== expectedKind) {
+      fail(
+        'COMPILER_CHAIN_MISMATCH',
+        `${configPath}.overrides.${sourcePath}`,
+        `${normalizedSourcePath} requires compiler kind ${expectedKind}, not ${compilerKind}`
       );
     }
     overrides[normalizedSourcePath] = compilerId;
@@ -247,7 +272,14 @@ function normalizeCompiler(
     );
   }
 
-  const settings = cloneJsonValue(compiler.settings ?? {}, `${configPath}.settings`);
+  const rawSettings = readObject(
+    compiler.settings ?? {},
+    `${configPath}.settings`
+  );
+  const settings = cloneJsonValue(
+    rawSettings,
+    `${configPath}.settings`
+  ) as JsonObject;
   return Object.freeze({
     id,
     kind,

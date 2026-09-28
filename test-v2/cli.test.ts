@@ -242,9 +242,10 @@ describe('Sunhat 2.x command entry', () => {
   });
 
   it('maps stable Sunhat commands to public Hardhat 3 tasks', () => {
-    assert.deepEqual(mapHardhatArguments(['compile']), ['build']);
+    assert.deepEqual(mapHardhatArguments(['compile']), ['sunhat', 'compile']);
     assert.deepEqual(mapHardhatArguments(['build', '--network', 'nile']), [
-      'build',
+      'sunhat',
+      'compile',
       '--network',
       'nile',
     ]);

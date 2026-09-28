@@ -93,6 +93,12 @@ describe('Sunhat 2.x config normalization', () => {
     assertConfigError(() => normalizeSunhatConfig(raw), 'INVALID_VERSION');
   });
 
+  it('rejects non-object compiler settings', () => {
+    const raw = singleEvmConfig();
+    raw.compilation.targets.evm.compilers[0].settings = [];
+    assertConfigError(() => normalizeSunhatConfig(raw), 'INVALID_CONFIG');
+  });
+
   it('rejects duplicate compiler coordinates', () => {
     const raw = singleEvmConfig();
     raw.compilation.targets.evm.compilers.push({
@@ -110,6 +116,24 @@ describe('Sunhat 2.x config normalization', () => {
       'contracts/Legacy.sol': 'missing',
     };
     assertConfigError(() => normalizeSunhatConfig(raw), 'INVALID_CONFIG');
+  });
+
+  it('rejects overrides that select a compiler for the wrong source language', () => {
+    const raw = singleEvmConfig();
+    raw.compilation.targets.evm.compilers.push({
+      id: 'vyper',
+      kind: 'vyper',
+      version: '0.4.3',
+      path: '/opt/vyper/bin/vyper-json',
+      sha256: 'a'.repeat(64),
+    });
+    raw.compilation.targets.evm.overrides = {
+      'contracts/Counter.sol': 'vyper',
+    };
+    assertConfigError(
+      () => normalizeSunhatConfig(raw),
+      'COMPILER_CHAIN_MISMATCH'
+    );
   });
 
   it('rejects TRON targets bound to an EDR network', () => {
