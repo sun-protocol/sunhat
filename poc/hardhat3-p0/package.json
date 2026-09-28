@@ -14,6 +14,8 @@
     "test:p2-build": "node --import tsx --test ../../test-v2/build.test.ts",
     "test:p2-integration": "node --import tsx --test ../../test-v2/build-integration.test.ts",
     "test:p2-vyper": "node --import tsx --test ../../test-v2/vyper.test.ts",
+    "test:p3-deploy": "node --import tsx --test ../../test-v2/deploy.test.ts",
+    "test:p3-evm": "hardhat test mocha p3-tests/DeploymentArchive.ts --no-compile",
     "test:vyper": "hardhat test mocha p0-tests/Vyper.ts --no-compile",
     "inspect:artifacts": "node scripts/inspect-artifacts.mjs",
     "inspect:tron-artifacts": "node scripts/inspect-tron-artifacts.mjs",
