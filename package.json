@@ -1,99 +1,29 @@
 {
-  "name": "@sun-protocol/sunhat",
-  "version": "2.0.0-alpha.1",
-  "description": "Configuration-driven Hardhat 3 toolkit for reproducible EVM and TRON contract builds",
+  "name": "sunhat",
+  "version": "2.0.0",
+  "description": "Project-bound Hardhat and Foundry CLI for EVM and TRON development",
   "type": "module",
-  "repository": "https://github.com/sun-protocol/sunhat.git",
-  "author": "sun-protocol",
-  "license": "MIT",
-  "publishConfig": {
-    "access": "public"
-  },
-  "engines": {
-    "node": ">=22.13.0"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./build": {
-      "types": "./dist/build/index.d.ts",
-      "default": "./dist/build/index.js"
-    },
-    "./clean": {
-      "types": "./dist/clean/index.d.ts",
-      "default": "./dist/clean/index.js"
-    },
-    "./config": {
-      "types": "./dist/config/index.d.ts",
-      "default": "./dist/config/index.js"
-    },
-    "./deploy": {
-      "types": "./dist/deploy/index.d.ts",
-      "default": "./dist/deploy/index.js"
-    },
-    "./test": {
-      "types": "./dist/test/index.d.ts",
-      "default": "./dist/test/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "types": "./dist/index.d.ts",
+  "license": "MIT OR Apache-2.0",
   "bin": {
-    "sunhat": "./dist/cli/bin.js"
+    "sunhat": "bin/sunhat.js"
   },
-  "keywords": [
-    "ethereum",
-    "smart-contracts",
-    "hardhat",
-    "hardhat-plugin",
-    "tron",
-    "vyper"
-  ],
   "files": [
+    "bin/",
     "dist/",
-    "skills/",
-    "LICENSE",
+    "templates/",
     "README.md"
   ],
-  "peerDependencies": {
-    "@nomicfoundation/hardhat-ethers": ">=4.0.3 <5",
-    "hardhat": ">=3.15.0 <4"
-  },
-  "peerDependenciesMeta": {
-    "@nomicfoundation/hardhat-ethers": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "4.0.3",
-    "@nomicfoundation/hardhat-mocha": "3.1.0",
-    "@types/mocha": "10.0.10",
-    "@types/node": "24.5.2",
-    "ethers": "6.17.0",
-    "hardhat": "3.15.0",
-    "mocha": "11.7.4",
-    "tsx": "4.23.1",
-    "typescript": "5.9.3"
-  },
-  "overrides": {
-    "diff": "8.0.3",
-    "serialize-javascript": "7.0.5"
+  "engines": {
+    "node": ">=20.11"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.v2.json",
-    "postbuild": "node scripts/prepare-bin.mjs",
-    "check:public-api": "node scripts/check-public-api.mjs",
-    "check:release": "npm run check:public-api && npm run typecheck && npm test && npm run pack:check",
-    "typecheck": "tsc -p tsconfig.v2.json --noEmit",
-    "test": "node --import tsx --test test-v2/build.test.ts test-v2/clean.test.ts test-v2/cli.test.ts test-v2/config.test.ts test-v2/deploy-scripts.test.ts test-v2/deploy.test.ts test-v2/plugin-config.test.ts test-v2/template.test.ts test-v2/test-task.test.ts test-v2/vyper.test.ts",
-    "test:compiler-integration": "node --import tsx --test test-v2/build-integration.test.ts",
-    "test:p4:integration": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat test",
-    "test:p4:clean": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts sunhat clean",
-    "test:p4:deploy": "hardhat --config test-v2/fixtures/hardhat3-release/hardhat.config.ts --network hardhatMainnet sunhat deploy",
-    "test:package": "node scripts/package-smoke.mjs",
-    "pack:check": "npm pack --dry-run",
-    "prepack": "npm run build"
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "test": "npm run build && node --test test/**/*.test.js",
+    "pack:check": "npm run build && npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.7.2"
   }
 }

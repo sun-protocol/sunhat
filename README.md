@@ -1,137 +1,71 @@
-# Sunhat 2.x
+# Sunhat
 
-Sunhat 2.x is an ESM-first Hardhat 3 plugin for configuration-driven Solidity, tron-solc, and Vyper builds. Every deployment is bound to an immutable build snapshot and produces a self-contained verification archive after the transaction reaches the configured confirmation threshold.
-
-The current `2.0.0-alpha.1` package has passed the local EVM/EDR `compile → test → deploy → archive` flow. TRON compilation and archive primitives are implemented, but production task actions intentionally reject TRON broadcast and sync until Solidity/Vyper execution, receipts, Energy, and Bandwidth pass the real TVM matrix. Use Sunhat 1.x for existing TRON deployments until that gate closes.
-
-## Requirements
-
-- Node.js `>=22.13.0`
-- Hardhat `>=3.15.0 <4`
-- An ESM project (`"type": "module"`)
-- `@nomicfoundation/hardhat-ethers >=4.0.3 <5` for EVM deployment and sync
-
-## Start a project
-
-```bash
-npm install -g @sun-protocol/sunhat@2.0.0-alpha.1
-sunhat --version
-sunhat init contracts-app
-cd contracts-app
-sunhat compile
-sunhat test
-```
-
-The global command only locates the project. All non-`init` commands delegate once to the project-local Sunhat and Hardhat versions, including calls made from a project subdirectory or with `--config`.
-
-For a packed tarball, install it globally with `npm install -g ./sun-protocol-sunhat-2.0.0-alpha.1.tgz`. A project-local installation intentionally exposes the command only through npm's local bin path; invoke it with `npx --no-install sunhat` or from an npm script. If a global installation succeeds but the shell still reports `command not found`, ensure `$(npm prefix -g)/bin` is present in `PATH` and reopen the shell.
-
-## Configure Hardhat 3
-
-```ts
-import hardhatEthers from "@nomicfoundation/hardhat-ethers";
-import hardhatMocha from "@nomicfoundation/hardhat-mocha";
-import sunhat from "@sun-protocol/sunhat";
-import { defineConfig } from "hardhat/config";
-
-export default defineConfig({
-  plugins: [hardhatEthers, hardhatMocha, sunhat],
-  networks: {
-    hardhatMainnet: {
-      type: "edr-simulated",
-      chainType: "l1",
-      sunhat: { target: "evm" },
-    },
-  },
-  sunhat: {
-    compilation: {
-      defaultTarget: "evm",
-      targets: {
-        evm: {
-          chain: "evm",
-          sources: ["contracts"],
-          compilers: [
-            {
-              id: "evm-solidity",
-              kind: "solc",
-              version: "0.8.25",
-              settings: { optimizer: { enabled: true, runs: 200 } },
-            },
-          ],
-        },
-      },
-    },
-    test: { target: "evm" },
-    verification: {
-      outputDir: "verification",
-      sourceMode: "multi-file",
-      autoExport: true,
-    },
-  },
-});
-```
-
-Sunhat configuration is the only compilation source for managed targets. Defining a native Hardhat `solidity` section at the same time is rejected instead of silently merging two compiler configurations.
-
-## Commands
-
-| Command | Behavior |
-| --- | --- |
-| `sunhat init [directory]` | Creates a pinned Hardhat 3 ESM project without Forge. |
-| `sunhat compile [--target name] [--network name]` | Builds one configured target and records an immutable snapshot. |
-| `sunhat compile --all` | Builds every target without merging their artifacts. |
-| `sunhat test [files...]` | Builds once, then runs Hardhat 3 Mocha and native Solidity tests with `noCompile`. |
-| `sunhat clean` | Removes `artifacts/sunhat` and `cache/sunhat`; preserves snapshots and deployment evidence. |
-| `sunhat deploy --network name` | Runs ordered ESM deployment scripts and archives a successful EVM deployment. |
-| `sunhat verification sync --network name --tx id` | Recovers a saved EVM deployment attempt without rebroadcasting. |
-
-Deployment scripts export one async function and receive an explicit context:
-
-```ts
-import type { SunhatDeploymentContext } from "@sun-protocol/sunhat/deploy";
-
-export default async function deployCounter({
-  deploy,
-}: SunhatDeploymentContext): Promise<void> {
-  await deploy({
-    constructorArguments: ["42"],
-    fullyQualifiedName: "contracts/Counter.sol:Counter",
-  });
-}
-```
-
-The public deployment barrel exposes this context together with the chain-independent archive and adapter types.
-
-## Build integrity
-
-- solc, tron-solc, and Vyper targets have isolated caches and artifacts.
-- Every compiler in a TRON target must set `settings.evmVersion` to `london`; a newer compiler default is rejected even if a particular build happens not to emit a newer opcode.
-- Custom compiler executables require an absolute path and expected SHA-256.
-- Snapshot schema v2 derives the build ID from chain, target, compiler identity, normalized settings, overrides, dependency fingerprint, and source hashes; manifest identity rewrites fail validation.
-- Failed builds cannot reuse stale successful output.
-- TRON creation bytecode is parsed at instruction boundaries before transaction preparation; the London release profile ignores PUSH data and validated Solidity/Vyper CBOR metadata, then rejects unsupported opcodes.
-- Deployment attempts are persisted before broadcast; unknown outcomes are recovered with `verification sync`, never by automatic rebroadcast.
-- Verification archives preserve source inputs, artifacts, build info, constructor data, receipt, queried runtime code, and per-file hashes.
-
-## Development
+Sunhat is a TypeScript npm CLI that binds a project to Hardhat 2 or Foundry and to an EVM or TRON target through `sunhat.toml`. It handles project initialization, binding, command routing, and child-process management without replacing the framework's compiler, test runner, or argument parser.
 
 ```bash
 npm install
-npm run check:public-api
-npm run typecheck
+npm run build
 npm test
-npm run test:p4:integration
-npm run test:p4:clean
-npm run test:p4:deploy
-npm run test:package
-npm run pack:check
-npm run check:release
 ```
 
-`npm run test:compiler-integration` additionally requires absolute, hash-pinned `TRON_SOLC_PATH` and `VYPER_JSON_PATH` toolchains. Real TRON broadcast is not part of the alpha test commands.
+## Initialize or adopt a project
 
-The repository skill is under `skills/sunhat/`; Codex discovers the same directory through `.agents/skills/sunhat`.
+New projects use Foundry by default. Pass `--framework hardhat` explicitly when creating a Hardhat project:
 
-## License
+```bash
+sunhat init --target tron contracts
+sunhat init --framework hardhat --target evm app
+```
 
-[MIT](LICENSE)
+Adopting an existing project does not modify its native configuration. Specify the target when Sunhat cannot determine it unambiguously:
+
+```bash
+sunhat init --framework hardhat --adopt --target tron .
+sunhat init --adopt .
+```
+
+The binding file is the sole source of truth for command routing:
+
+```toml
+[project]
+framework = "hardhat"
+target = "evm"
+```
+
+Initialization uses exclusive file creation. It fails if a destination file already exists and never overwrites unknown content. Dependency installation remains under the project's control.
+
+## Commands
+
+Hardhat projects use native Hardhat tasks:
+
+```bash
+sunhat compile --force
+sunhat test --grep Counter
+sunhat node
+sunhat custom-plugin-task --flag value
+```
+
+Foundry projects use native Foundry commands:
+
+```bash
+sunhat build --sizes
+sunhat test --match-contract CounterTest
+sunhat cast block-number
+sunhat anvil
+sunhat toolchain check
+```
+
+Sunhat does not rewrite core commands across frameworks. Compile Hardhat projects with `sunhat compile` and Foundry projects with `sunhat build`. Based on the `sunhat.toml` binding, Sunhat forwards each command and its arguments directly to the selected framework. The former `sunhat hardhat ...` and `sunhat foundry ...` three-part command forms are no longer supported. Anvil and Chisel are unavailable for TRON Foundry projects.
+
+The target project must install Hardhat major version 2. The current template pins `hardhat@2.29.1`, which supports Node.js 24. Sunhat resolves the absolute Hardhat entry point from the project's dependencies and does not invoke `npx`.
+
+Hardhat dependencies use exact versions published on the npm registry. Projects generated from a local Sunhat build use a `file:` dependency on the package that ran initialization instead of requesting the unpublished `sunhat@2.0.0`. Foundry does not depend on a placeholder npm package. After initialization and `npm install`, run:
+
+```bash
+sunhat toolchain install
+sunhat toolchain check
+```
+
+EVM projects download `foundry-rs/foundry@v1.8.6`. TRON projects download the public release for `elsvv/foundry-tron@9ea07db4b342fd606f6f7c3f99be1757e90d5e90`. Sunhat verifies the archive against a pinned SHA-256 digest before extracting it to `.sunhat/toolchains/`, then verifies the selected binary's digest on every invocation.
+
+Child processes receive a structured argv array and run with `shell: false`. They inherit stdout and stderr, and Sunhat forwards SIGINT, SIGTERM, and the native exit status.
