@@ -59,6 +59,8 @@ Sunhat does not rewrite core commands across frameworks. Compile Hardhat project
 
 The target project must install Hardhat major version 2. The current template pins `hardhat@2.29.1`, which supports Node.js 24. Sunhat resolves the absolute Hardhat entry point from the project's dependencies and does not invoke `npx`.
 
+Hardhat TRON projects require a running Docker daemon. Their generated configuration selects the `tre` network, compiles with `tron-solc`, and starts `tronbox/tre:dev` automatically for `sunhat test`. Set `TRE_URL` and `TRE_PRIVATE_KEY` to use an existing TRE instance instead of the generated local defaults.
+
 Hardhat dependencies use exact versions published on the npm registry. Projects generated from a local Sunhat build use a `file:` dependency on the package that ran initialization instead of requesting the unpublished `sunhat@2.0.0`. Foundry does not depend on a placeholder npm package. After initialization and `npm install`, run:
 
 ```bash

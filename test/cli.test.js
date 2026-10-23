@@ -44,6 +44,15 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   assert.equal(pkg.scripts.build, 'sunhat compile');
   assert.equal(run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]).status, 2);
 });
+test('TRON Hardhat scaffold selects TRE and loads its ethers bridge last', () => {
+  const root = temp('hardhat-tron'); const result = run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'tron', root]); assert.equal(result.status, 0, result.stderr);
+  const config = readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8');
+  assert.ok(config.indexOf('@nomicfoundation/hardhat-ethers') < config.indexOf('@openzeppelin/hardhat-tron'));
+  assert.match(config, /defaultNetwork: "tre"/u);
+  assert.match(config, /tron: true/u);
+  assert.match(config, /compiler: \{ target: "tron" \}/u);
+  assert.match(config, /0x0{63}1/u);
+});
 test('init rejects an invalid framework', () => { const result = run(temp('framework'), ['init', '--framework', 'unknown', '--target', 'evm']); assert.equal(result.status, 2); assert.match(result.stderr, /framework requires foundry or hardhat/u); });
 test('scaffold conflict is detected before any write', () => {
   const root = temp('atomic'); mkdirSync(resolve(root, 'contracts')); writeFileSync(resolve(root, 'contracts/Counter.sol'), 'owned');
