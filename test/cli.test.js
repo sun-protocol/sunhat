@@ -38,9 +38,10 @@ test('init accepts an explicit Foundry framework', () => {
 test('Hardhat scaffold requires explicit framework and refuses overwrite', () => {
   const root = temp('init'); const result = run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]); assert.equal(result.status, 0, result.stderr);
   assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /framework = "hardhat"/u);
-  assert.doesNotMatch(readFileSync(resolve(root, 'package.json'), 'utf8'), /hardhat-tron/u);
-  assert.match(readFileSync(resolve(root, 'package.json'), 'utf8'), /"sunhat": "file:.*sunhat2"/u);
-  assert.equal(JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts.build, 'sunhat compile');
+  const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
+  assert.equal(pkg.devDependencies.sunhat, `file:${process.cwd()}`);
+  assert.equal(pkg.scripts.build, 'sunhat compile');
   assert.equal(run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]).status, 2);
 });
 test('init rejects an invalid framework', () => { const result = run(temp('framework'), ['init', '--framework', 'unknown', '--target', 'evm']); assert.equal(result.status, 2); assert.match(result.stderr, /framework requires foundry or hardhat/u); });
