@@ -10,8 +10,10 @@ import type { Invocation } from './parser.js';
 export const HELP = `Sunhat project-bound framework CLI
 
 Usage:
-  sunhat init [--framework <foundry|hardhat>] --target <tron|evm> [--adopt] [path]
+  sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]
   sunhat <command> [args...]
+
+Init defaults: framework=foundry, target=tron
 `;
 export async function route(invocation: Invocation): Promise<number> {
   if (invocation.kind === 'help') { process.stdout.write(HELP); return 0; }

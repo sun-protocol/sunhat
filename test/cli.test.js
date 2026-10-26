@@ -25,15 +25,22 @@ function foundry(root, target) {
   json(resolve(root, '.sunhat/toolchain.json'), { version: 1, target, source: target === 'evm' ? 'foundry-rs/foundry' : 'elsvv/foundry-tron', release: target === 'evm' ? 'v1.8.6' : 'foundry-tron-latest', revision: target === 'evm' ? 'v1.8.6' : '9ea07db4b342fd606f6f7c3f99be1757e90d5e90', platform: 'test', binaries });
 }
 
-test('init defaults to Foundry', () => {
-  const root = temp('default-foundry'); const result = run(dirname(root), ['init', '--target', 'evm', root]); assert.equal(result.status, 0, result.stderr);
+test('init defaults to Foundry and TRON', () => {
+  const root = temp('default-foundry'); const result = run(dirname(root), ['init', root]); assert.equal(result.status, 0, result.stderr);
   assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /framework = "foundry"/u);
-  assert.match(readFileSync(resolve(root, 'foundry.toml'), 'utf8'), /\[profile\.default\]/u);
+  assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /target = "tron"/u);
+  assert.match(readFileSync(resolve(root, 'foundry.toml'), 'utf8'), /network = "tron"/u);
   assert.equal(JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).scripts.build, 'sunhat build');
+  const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
+  assert.match(readme, /Foundry TRON Project with Sunhat/u);
 });
-test('init accepts an explicit Foundry framework', () => {
-  const root = temp('explicit-foundry'); const result = run(dirname(root), ['init', '--framework', 'foundry', '--target', 'tron', root]); assert.equal(result.status, 0, result.stderr);
+test('init accepts an explicit Foundry EVM target', () => {
+  const root = temp('explicit-foundry'); const result = run(dirname(root), ['init', '--framework', 'foundry', '--target', 'evm', root]); assert.equal(result.status, 0, result.stderr);
   assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /framework = "foundry"/u);
+  assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /target = "evm"/u);
+  const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
+  assert.match(readme, /Foundry EVM Project with Sunhat/u);
+  assert.doesNotMatch(readme, /network = "tron"/u);
 });
 test('Hardhat scaffold requires explicit framework and refuses overwrite', () => {
   const root = temp('init'); const result = run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]); assert.equal(result.status, 0, result.stderr);
@@ -42,32 +49,43 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
   assert.equal(pkg.devDependencies.sunhat, `file:${process.cwd()}`);
   assert.equal(pkg.scripts.build, 'sunhat compile');
+  const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
+  assert.match(readme, /Hardhat EVM Project with Sunhat/u);
+  assert.doesNotMatch(readme, /TRE_URL/u);
   assert.equal(run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]).status, 2);
 });
 test('TRON Hardhat scaffold selects TRE and loads its ethers bridge last', () => {
-  const root = temp('hardhat-tron'); const result = run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'tron', root]); assert.equal(result.status, 0, result.stderr);
+  const root = temp('hardhat-tron'); const result = run(dirname(root), ['init', '--framework', 'hardhat', root]); assert.equal(result.status, 0, result.stderr);
+  assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /target = "tron"/u);
   const config = readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8');
   assert.ok(config.indexOf('@nomicfoundation/hardhat-ethers') < config.indexOf('@openzeppelin/hardhat-tron'));
   assert.match(config, /defaultNetwork: "tre"/u);
   assert.match(config, /tron: true/u);
   assert.match(config, /compiler: \{ target: "tron" \}/u);
   assert.match(config, /0x0{63}1/u);
+  const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
+  assert.match(readme, /Hardhat TRON Project with Sunhat/u);
+  assert.match(readme, /TRE_URL/u);
 });
 test('init rejects an invalid framework', () => { const result = run(temp('framework'), ['init', '--framework', 'unknown', '--target', 'evm']); assert.equal(result.status, 2); assert.match(result.stderr, /framework requires foundry or hardhat/u); });
+test('help reports the TRON target default', () => {
+  const result = run(temp('help'), ['init', '--help']); assert.equal(result.status, 0, result.stderr); assert.match(result.stdout, /target=tron/u);
+});
 test('scaffold conflict is detected before any write', () => {
   const root = temp('atomic'); mkdirSync(resolve(root, 'contracts')); writeFileSync(resolve(root, 'contracts/Counter.sol'), 'owned');
   const result = run(dirname(root), ['init', '--framework', 'hardhat', '--target', 'evm', root]); assert.equal(result.status, 2);
   assert.equal(readFileSync(resolve(root, 'contracts/Counter.sol'), 'utf8'), 'owned'); assert.throws(() => readFileSync(resolve(root, 'package.json')));
 });
 test('foundry scaffold does not reference unpublished placeholder packages', () => {
-  const root = temp('foundry-init'); const result = run(dirname(root), ['init', '--target', 'tron', root]); assert.equal(result.status, 0, result.stderr);
+  const root = temp('foundry-init'); const result = run(dirname(root), ['init', root]); assert.equal(result.status, 0, result.stderr);
   const pkg = readFileSync(resolve(root, 'package.json'), 'utf8'); assert.doesNotMatch(pkg, /@sunhat\/foundry-tron-toolchain/u); assert.match(pkg, /elsvv\/foundry-tron/u);
   assert.doesNotMatch(readFileSync(resolve(root, 'script/Counter.s.sol'), 'utf8'), /forge-std/u);
   assert.doesNotMatch(readFileSync(resolve(root, 'test/Counter.t.sol'), 'utf8'), /forge-std/u);
 });
 test('adopt writes only the binding', () => {
   const root = temp('adopt'); const config = 'export default { solidity: "0.8.26" };\n'; writeFileSync(resolve(root, 'hardhat.config.ts'), config); json(resolve(root, 'package.json'), { devDependencies: { hardhat: '2.22.0' } });
-  const result = run(root, ['init', '--framework', 'hardhat', '--adopt', '--target', 'evm']); assert.equal(result.status, 0, result.stderr); assert.equal(readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'), config);
+  const result = run(root, ['init', '--framework', 'hardhat', '--adopt']); assert.equal(result.status, 0, result.stderr); assert.equal(readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'), config);
+  assert.match(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'), /target = "tron"/u);
 });
 test('hardhat receives literal argv and native exit code', () => {
   const root = temp('hh'); binding(root, 'hardhat', 'evm'); hardhat(root); const result = run(root, ['compile', '$HOME', 'test argument']);

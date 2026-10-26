@@ -8,20 +8,24 @@ npm run build
 npm test
 ```
 
+`npm test` initializes all four framework/target combinations and exercises the commands listed in the generated READMEs, npm scripts, argument forwarding, subdirectory resolution, exit codes, and toolchain rejection paths. Framework executables and download responses are fixtures; the suite does not run Solidity compilers, Docker/TRE, or real deployments.
+
 ## Initialize or adopt a project
 
-New projects use Foundry by default. Pass `--framework hardhat` explicitly when creating a Hardhat project:
+New projects use Foundry and the TRON target by default. Pass `--framework hardhat` to select Hardhat, or `--target evm` to select an EVM target:
 
 ```bash
-sunhat init --target tron contracts
-sunhat init --framework hardhat --target evm app
+sunhat init contracts
+sunhat init --target evm contracts-evm
+sunhat init --framework hardhat hardhat-tron
+sunhat init --framework hardhat --target evm hardhat-evm
 ```
 
-Adopting an existing project does not modify its native configuration. Specify the target when Sunhat cannot determine it unambiguously:
+Adopting an existing project does not modify its native configuration. Adoption also defaults to the TRON target; pass `--target evm` explicitly for an EVM project:
 
 ```bash
-sunhat init --framework hardhat --adopt --target tron .
 sunhat init --adopt .
+sunhat init --framework hardhat --adopt --target evm .
 ```
 
 The binding file is the sole source of truth for command routing:
