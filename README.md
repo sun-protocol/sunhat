@@ -1,20 +1,18 @@
 # Sunhat
 
-Sunhat is a TypeScript npm CLI that binds a project to Hardhat 2 or Foundry and to an EVM or TRON target through `sunhat.toml`. It handles project initialization, binding, command routing, and child-process management without replacing the framework's compiler, test runner, or argument parser.
+Sunhat's npm package is `sunhat`; these instructions use version `2.0.0`. It binds a project to Hardhat 2 or Foundry and to an EVM or TRON target through `sunhat.toml`. It handles project initialization, binding, command routing, and child-process management without replacing the framework's compiler, test runner, or argument parser.
 
 ## Global command prerequisites
 
-To run `sunhat ...` directly in a terminal, install Sunhat 2.0.0 globally and ensure npm's global executable directory is on `PATH`. The CLI requires Node.js `>=20.11`. From this Sunhat source checkout, build and install it with:
+To run `sunhat ...` directly in a terminal, install `sunhat@2.0.0` from npm globally and ensure npm's global executable directory is on `PATH`. The CLI requires Node.js `>=20.11`.
 
 ```bash
-npm install
-npm run build
-npm install --global .
+npm install --global sunhat@2.0.0
 sunhat --version
 sunhat --help
 ```
 
-`sunhat --version` should report `sunhat 2.0.0`. Run the installation command in the Sunhat source checkout, not in a generated contract project. Global installation is a separate step; `sunhat init` does not perform it.
+`sunhat --version` should report `sunhat 2.0.0`. Global installation is a separate step; `sunhat init` does not perform it.
 
 These commands are available without a project binding:
 
@@ -26,7 +24,7 @@ These commands are available without a project binding:
 
 All other commands require a valid `sunhat.toml` in the current directory or an ancestor. Run them from the project root or one of its subdirectories. Global Sunhat still resolves Hardhat from the project's dependencies and Foundry from the project's `.sunhat/` toolchain; global installation does not install either framework for the project.
 
-Generated projects also declare Sunhat as a local development dependency. After `npm install` in the project, use `npx --no-install sunhat ...` to run that local copy without a global installation. The examples below use the global `sunhat` command; replace it with `npx --no-install sunhat` for local use. `npm run build` and `npm test` resolve the local executable automatically.
+Install `sunhat@2.0.0` as an exact local development dependency using the project setup steps below. Then use `npx --no-install sunhat ...` to run that local copy without a global installation. The examples below use the global `sunhat` command; replace it with `npx --no-install sunhat` for local use. `npm run build` and `npm test` resolve the local executable automatically.
 
 The global CLI does not automatically delegate to the project's local Sunhat copy. Use `sunhat --version` and `npx --no-install sunhat --version` to check which CLI version each invocation uses.
 
@@ -58,13 +56,22 @@ target = "evm"
 
 Initialization uses exclusive file creation. It fails if a destination file already exists and never overwrites unknown content. Dependency installation remains under the project's control.
 
+After initialization, enter the project directory and install its dependencies:
+
+```bash
+cd contracts
+npm install --save-dev --save-exact sunhat@2.0.0
+```
+
+This command installs the project's declared dependencies and pins its local Sunhat to `2.0.0` from npm. The current scaffold initially writes a `file:` reference to the Sunhat installation that created it; the command replaces that reference so the project no longer depends on that installation path. Run the same installation command in an adopted project's root.
+
 ## Project commands
 
 The following lists use a globally installed Sunhat and require the project binding described above. Native command availability and options are determined by the project's installed framework and plugins.
 
 ### Hardhat projects: EVM and TRON
 
-Run `npm install` in the project first. Hardhat must be declared with an exact version matching the installed Hardhat 2 package.
+Complete the project dependency installation above first. Hardhat must be declared with an exact version matching the installed Hardhat 2 package.
 
 | Command | Purpose |
 | --- | --- |
@@ -111,7 +118,7 @@ The target project must install Hardhat major version 2. The current template pi
 
 Hardhat TRON projects require a running Docker daemon. Their generated configuration selects the `tre` network, compiles with `tron-solc`, and starts `tronbox/tre:dev` automatically for `sunhat test`. Set `TRE_URL` and `TRE_PRIVATE_KEY` to use an existing TRE instance instead of the generated local defaults.
 
-Hardhat dependencies use exact versions published on the npm registry. Generated projects use a `file:` dependency on the Sunhat package that ran initialization; keep that package location available when installing project dependencies. Foundry does not depend on a placeholder npm package. In a Foundry project, install and check the toolchain with:
+Hardhat dependencies use exact versions published on the npm registry. Sunhat's project dependency is pinned to `sunhat@2.0.0` by the installation step above. Foundry binaries are installed separately from pinned GitHub releases. In a Foundry project, install and check the toolchain with:
 
 ```bash
 sunhat toolchain install
@@ -123,6 +130,8 @@ EVM projects download `foundry-rs/foundry@v1.8.6`. TRON projects download the pu
 Child processes receive a structured argv array and run with `shell: false`. They inherit stdout and stderr, and Sunhat forwards SIGINT, SIGTERM, and the native exit status.
 
 ## Development
+
+Run these commands from a Sunhat source checkout:
 
 ```bash
 npm install
