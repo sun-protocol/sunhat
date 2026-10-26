@@ -12,7 +12,7 @@ export function initProject(argv: readonly string[]): number {
   const { framework } = options;
   const root = resolve(options.path); mkdirSync(root, { recursive: true });
   if (existsSync(resolve(root, 'sunhat.toml'))) return usage(`${root} is already bound by sunhat.toml`);
-  const target = options.adopt ? inferTarget(root, framework, options.target) : requiredTarget(options.target);
+  const target = options.target ?? 'tron';
   if (options.adopt) validateNativeProject(root, framework);
   else scaffold(root, framework, target);
   writeExclusive(resolve(root, 'sunhat.toml'), `[project]\nframework = "${framework}"\ntarget = "${target}"\n`);
@@ -30,39 +30,31 @@ function parseOptions(argv: readonly string[]): InitOptions {
     }
     else if (arg === '--target') { const value = argv[++i]; if (!value) return usage('--target requires tron or evm'); target = parseTarget(value); }
     else if (arg === '--adopt') adopt = true;
-    else if (arg === '-h' || arg === '--help') { process.stdout.write('Usage: sunhat init [--framework <foundry|hardhat>] --target <tron|evm> [--adopt] [path]\n'); return process.exit(0) as never; }
+    else if (arg === '-h' || arg === '--help') { process.stdout.write('Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n'); return process.exit(0) as never; }
     else if (arg.startsWith('-')) return usage(`unknown init option ${arg}`);
     else { if (positional) return usage('init accepts at most one path'); path = arg; positional = true; }
   }
   return target ? { framework, target, path, adopt } : { framework, path, adopt };
 }
-function requiredTarget(target: Target | undefined): Target { return target ?? usage('new projects require --target tron or --target evm'); }
 function validateNativeProject(root: string, framework: Framework): void {
   const found = framework === 'foundry' ? existsSync(resolve(root, 'foundry.toml')) : ['js', 'cjs', 'ts'].some(ext => existsSync(resolve(root, `hardhat.config.${ext}`)));
   if (!found) throw new CliError(`cannot adopt ${framework}: native configuration not found in ${root}`, 2);
 }
-function inferTarget(root: string, framework: Framework, explicit: Target | undefined): Target {
-  if (explicit) return explicit;
-  validateNativeProject(root, framework);
-  const names = framework === 'foundry' ? ['foundry.toml', 'package.json'] : ['hardhat.config.js', 'hardhat.config.cjs', 'hardhat.config.ts', 'package.json'];
-  const text = names.filter(name => existsSync(resolve(root, name))).map(name => readFileSync(resolve(root, name), 'utf8')).join('\n');
-  if (/hardhat-tron|foundry-tron|\btron\b/iu.test(text)) return 'tron';
-  if (/hardhat|\[profile\.|solc_version|evm_version/iu.test(text)) return 'evm';
-  return usage('target cannot be inferred uniquely; pass --target tron or --target evm');
-}
 function scaffold(root: string, framework: Framework, target: Target): void {
   const source = resolve(packageRoot, 'templates', framework);
   const destinations = framework === 'hardhat'
-    ? ['package.json', 'hardhat.config.ts', 'contracts/Counter.sol', 'scripts/deploy.ts', 'test/Counter.test.ts', 'tsconfig.json']
-    : ['package.json', 'foundry.toml', 'src/Counter.sol', 'script/Counter.s.sol', 'test/Counter.t.sol'];
+    ? ['package.json', 'README.md', 'hardhat.config.ts', 'contracts/Counter.sol', 'scripts/deploy.ts', 'test/Counter.test.ts', 'tsconfig.json']
+    : ['package.json', 'README.md', 'foundry.toml', 'src/Counter.sol', 'script/Counter.s.sol', 'test/Counter.t.sol'];
   const conflict = destinations.find(name => existsSync(resolve(root, name)));
   if (conflict) throw new CliError(`refusing to overwrite existing file ${resolve(root, conflict)}`, 2);
   if (framework === 'hardhat') {
     writeExclusive(resolve(root, 'package.json'), `${JSON.stringify(hardhatPackage(root, target), null, 2)}\n`);
+    copyExclusive(resolve(source, `README.${target}.md`), resolve(root, 'README.md'));
     writeExclusive(resolve(root, 'hardhat.config.ts'), hardhatConfig(target));
     for (const name of ['contracts/Counter.sol', 'scripts/deploy.ts', 'test/Counter.test.ts', 'tsconfig.json']) copyExclusive(resolve(source, name), resolve(root, name));
   } else {
     writeExclusive(resolve(root, 'package.json'), `${JSON.stringify(foundryPackage(root, target), null, 2)}\n`);
+    copyExclusive(resolve(source, `README.${target}.md`), resolve(root, 'README.md'));
     writeExclusive(resolve(root, 'foundry.toml'), foundryConfig(target));
     for (const name of ['src/Counter.sol', 'script/Counter.s.sol', 'test/Counter.t.sol']) copyExclusive(resolve(source, name), resolve(root, name));
   }
