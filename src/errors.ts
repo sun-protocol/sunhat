@@ -1,5 +1,25 @@
-export class CliError extends Error {
-  constructor(message: string, readonly exitCode = 2) { super(message); this.name = 'CliError'; }
+import { BigNumber } from '@ethersproject/bignumber';
+import { bnReplacer } from './internal/utils';
+
+export class UnknownSignerError extends Error {
+  constructor(
+    public data: {
+      from: string;
+      to?: string;
+      data?: string;
+      value?: string | BigNumber;
+      contract?: { name: string; method: string; args: unknown[] };
+    }
+  ) {
+    super(
+      `Unknown Signer for account: ${
+        data.from
+      } Trying to execute the following::\n ${JSON.stringify(
+        data,
+        bnReplacer,
+        '  '
+      )}`
+    );
+    Error.captureStackTrace(this, UnknownSignerError);
+  }
 }
-export function usage(message: string): never { throw new CliError(message, 2); }
-export function toolchainError(message: string): never { throw new CliError(message, 3); }
