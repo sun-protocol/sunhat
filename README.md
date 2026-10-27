@@ -141,3 +141,5 @@ npm test
 ```
 
 `npm test` builds Sunhat, initializes all four framework/target combinations, and exercises the commands listed in the generated READMEs, npm scripts, argument forwarding, subdirectory resolution, exit codes, and toolchain rejection paths. Framework executables and download responses are fixtures; the suite does not run Solidity compilers, Docker/TRE, or real deployments.
+
+Run `npm run test:templates` to generate fresh Hardhat EVM and TRON projects, install their declared dependencies, and check both with `tsc --noEmit`. This integration suite requires access to the npm registry and checks dependency declarations without enabling `skipLibCheck`. It does not require Docker or a blockchain connection.
