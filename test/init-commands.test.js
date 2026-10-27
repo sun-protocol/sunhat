@@ -34,6 +34,30 @@ const releases = {
   },
 };
 
+for (const flag of ['--help', '-h']) {
+  test(`init ${flag} returns to its caller without creating a project`, (t) => {
+    const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-help-'));
+    t.after(() => rmSync(temporary, { recursive: true, force: true }));
+    const destination = resolve(temporary, 'unused-project');
+    const moduleUrl = new URL('../dist/commands/init.js', import.meta.url).href;
+    const program = `
+      import { initProject } from ${JSON.stringify(moduleUrl)};
+      const status = await initProject(${JSON.stringify([flag, destination])});
+      process.stdout.write('returned:' + status + '\\n');
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', program],
+      { cwd: temporary, encoding: 'utf8', timeout: 10_000 },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, '');
+    assert.match(result.stdout, /Usage: sunhat init/u);
+    assert.match(result.stdout, /returned:0\n$/u);
+    assert.equal(existsSync(destination), false);
+  });
+}
+
 // Cover the template commands and every routing branch. Native frameworks own
 // their full task lists; these executables record dispatch without compiling or
 // broadcasting transactions, starting servers, or requiring Docker/network access.

@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { CliError, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
-import { installFoundry } from './toolchain.js';
+import { installFoundry } from '../toolchain/install.js';
 
 interface InitOptions {
   framework: Framework;
@@ -24,6 +24,12 @@ interface InitOptions {
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
+  if (!options) {
+    process.stdout.write(
+      'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
+    );
+    return 0;
+  }
   const { framework, target } = options;
   const root = resolve(options.path);
   mkdirSync(root, { recursive: true });
@@ -60,7 +66,7 @@ export async function initProject(argv: readonly string[]): Promise<number> {
   );
   return 0;
 }
-function parseOptions(argv: readonly string[]): InitOptions {
+function parseOptions(argv: readonly string[]): InitOptions | undefined {
   try {
     const { values, positionals } = parseArgs({
       args: [...argv],
@@ -74,10 +80,7 @@ function parseOptions(argv: readonly string[]): InitOptions {
       strict: true,
     });
     if (values.help) {
-      process.stdout.write(
-        'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
-      );
-      return process.exit(0) as never;
+      return undefined;
     }
     if (positionals.length > 1) {
       return usage('init accepts at most one path');
