@@ -19,7 +19,8 @@ export function platformKey(): Platform {
 }
 export function releaseFor(target: Target): Release {
   const platform = platformKey(); const extension = platform.startsWith('win32') ? 'zip' : 'tar.gz';
-  if (target === 'evm') return { source: 'foundry-rs/foundry', release: 'v1.8.6', revision: 'v1.8.6', archive: `foundry_v1.8.6_${platform.replace('-', '_')}.${extension}`, sha256: EVM_SHA[platform], tools: { forge: 'forge', cast: 'cast', anvil: 'anvil', chisel: 'chisel' } };
-  return { source: 'elsvv/foundry-tron', release: 'foundry-tron-latest', revision: '9ea07db4b342fd606f6f7c3f99be1757e90d5e90', archive: `foundry-tron_${platform.replace('-', '_')}.${extension}`, sha256: TRON_SHA[platform], tools: { forge: 'forge-tron', cast: 'cast-tron', anvil: 'anvil-tron', chisel: 'chisel-tron' } };
+  const executableExtension = platform.startsWith('win32') ? '.exe' : '';
+  if (target === 'evm') return { source: 'foundry-rs/foundry', release: 'v1.8.6', revision: 'v1.8.6', archive: `foundry_v1.8.6_${platform.replace('-', '_')}.${extension}`, sha256: EVM_SHA[platform], tools: { forge: `forge${executableExtension}`, cast: `cast${executableExtension}`, anvil: `anvil${executableExtension}`, chisel: `chisel${executableExtension}` } };
+  return { source: 'elsvv/foundry-tron', release: 'foundry-tron-latest', revision: '9ea07db4b342fd606f6f7c3f99be1757e90d5e90', archive: `foundry-tron_${platform.replace('-', '_')}.${extension}`, sha256: TRON_SHA[platform], tools: { forge: `forge-tron${executableExtension}`, cast: `cast-tron${executableExtension}`, anvil: `anvil-tron${executableExtension}`, chisel: `chisel-tron${executableExtension}` } };
 }
 export function releaseUrl(release: Release): string { return `https://github.com/${release.source}/releases/download/${release.release}/${release.archive}`; }
