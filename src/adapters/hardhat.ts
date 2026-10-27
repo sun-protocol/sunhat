@@ -1,39 +1,57 @@
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
-import { readFileSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { toolchainError } from '../errors.js';
 import { spawnNative } from '../process/spawn.js';
+import { isRecord, readJson } from '../project/json.js';
 interface PackageJson {
   version?: string;
   bin?: string | Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
 }
 export async function runHardhat(
   root: string,
   args: readonly string[],
 ): Promise<number> {
+  const project = readPackageJson(resolve(root, 'package.json'));
   const require = createRequire(resolve(root, 'package.json'));
   let manifestPath: string;
   try {
     manifestPath = require.resolve('hardhat/package.json');
-  } catch {
+  } catch (error) {
+    // Node 20 may fail while parsing metadata before returning its resolved path.
+    if (error instanceof SyntaxError || error instanceof TypeError) {
+      const path =
+        'path' in error && typeof error.path === 'string'
+          ? error.path
+          : require.resolve
+              .paths('hardhat')
+              ?.map((directory) => resolve(directory, 'hardhat/package.json'))
+              .find((candidate) => existsSync(candidate));
+      if (path) {
+        readPackageJson(path);
+      }
+    }
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_INVALID_PACKAGE_CONFIG'
+    ) {
+      return toolchainError(
+        `cannot resolve Hardhat in ${root}: ${error.message}`,
+      );
+    }
     return toolchainError(
       'local Hardhat dependency is missing; install the project lockfile dependencies',
     );
   }
-  const manifest = JSON.parse(
-    readFileSync(manifestPath, 'utf8'),
-  ) as PackageJson;
+  const manifest = readPackageJson(manifestPath);
   if (!manifest.version?.startsWith('2.')) {
     return toolchainError(
       `Hardhat 2 is required; resolved ${manifest.version ?? 'unknown'} at ${manifestPath}`,
     );
   }
-  const project = JSON.parse(
-    readFileSync(resolve(root, 'package.json'), 'utf8'),
-  ) as {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  };
   const expected =
     project.devDependencies?.hardhat ?? project.dependencies?.hardhat;
   if (!expected) {
@@ -62,4 +80,28 @@ export async function runHardhat(
     return toolchainError('Hardhat bin escapes package root');
   }
   return await spawnNative(process.execPath, [entry, ...args], root);
+}
+
+function readPackageJson(path: string): PackageJson {
+  const value = readJson(path);
+  if (
+    !isRecord(value) ||
+    (value.version !== undefined && typeof value.version !== 'string') ||
+    (value.bin !== undefined &&
+      typeof value.bin !== 'string' &&
+      !isStringRecord(value.bin)) ||
+    (value.dependencies !== undefined && !isStringRecord(value.dependencies)) ||
+    (value.devDependencies !== undefined &&
+      !isStringRecord(value.devDependencies))
+  ) {
+    return toolchainError(`invalid package manifest: ${path}`);
+  }
+  return value;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every((item) => typeof item === 'string')
+  );
 }

@@ -1,8 +1,9 @@
-import { readFileSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
 import { spawnNative } from '../process/spawn.js';
+import { isRecord, readJson } from '../project/json.js';
 
 type FoundryTool = 'forge' | 'cast' | 'anvil' | 'chisel';
 export interface ToolchainLock {
@@ -12,7 +13,7 @@ export interface ToolchainLock {
   release: string;
   revision: string;
   platform: string;
-  binaries: Record<FoundryTool, { path: string }>;
+  binaries: Partial<Record<FoundryTool, { path: string }>>;
 }
 
 export async function runFoundry(
@@ -39,18 +40,35 @@ export async function runFoundry(
 
 export function loadToolchain(root: string, target: Target): ToolchainLock {
   const path = resolve(root, '.sunhat/toolchain.json');
-  let lock: ToolchainLock;
-  try {
-    lock = JSON.parse(readFileSync(path, 'utf8')) as ToolchainLock;
-  } catch {
-    return toolchainError(
-      'Foundry toolchain is not installed; run `sunhat toolchain install`',
-    );
+  const lock = readJson(
+    path,
+    'Foundry toolchain is not installed; run `sunhat toolchain install`',
+  );
+  if (!isToolchainLock(lock)) {
+    return toolchainError(`invalid Foundry toolchain lock: ${path}`);
   }
-  if ((lock.version !== 1 && lock.version !== 2) || lock.target !== target) {
+  if (lock.target !== target) {
     return toolchainError(
-      `toolchain lock does not match the ${target} project; reinstall it`,
+      `toolchain lock ${path} does not match the ${target} project; reinstall it`,
     );
   }
   return lock;
+}
+
+function isToolchainLock(value: unknown): value is ToolchainLock {
+  return (
+    isRecord(value) &&
+    (value.version === 1 || value.version === 2) &&
+    (value.target === 'evm' || value.target === 'tron') &&
+    ['source', 'release', 'revision', 'platform'].every(
+      (key) => typeof value[key] === 'string',
+    ) &&
+    isRecord(value.binaries) &&
+    Object.values(value.binaries).every(
+      (binary) =>
+        isRecord(binary) &&
+        typeof binary.path === 'string' &&
+        binary.path.length > 0,
+    )
+  );
 }
