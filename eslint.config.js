@@ -35,7 +35,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['templates/hardhat/test/**/*.ts'],
+    files: ['templates/hardhat/**/test/**/*.ts'],
     languageOptions: { globals: globals.mocha },
   },
 ]);

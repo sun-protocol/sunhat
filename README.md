@@ -147,3 +147,5 @@ npm test
 Run `npm run test:templates` to generate fresh Hardhat EVM and TRON projects, install their declared dependencies, and check both with `tsc --noEmit`. This integration suite requires access to the npm registry and checks dependency declarations without enabling `skipLibCheck`. It does not require Docker or a blockchain connection.
 
 Use `npm run lint:fix` to apply ESLint fixes and `npm run format` to format JavaScript, TypeScript, Solidity templates, JSON, YAML, and Markdown. CI runs both lint and formatting checks. Generated files and local toolchains are excluded.
+
+Initialization assets live under `templates/<framework>/common/` and `templates/<framework>/<target>/`. The target directory supplies `package.json`, native framework configuration, `sunhat.toml`, and README; target files override matching common files. Edit these templates to change compiler versions, dependencies, scripts, or network defaults. Initialization copies the selected files and substitutes only the JSON string values `{{projectName}}` and `{{sunhatDependency}}`; adoption copies only the selected binding.

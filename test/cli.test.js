@@ -170,9 +170,9 @@ test('TRON Hardhat scaffold selects TRE and loads its ethers bridge last', () =>
     config.indexOf('@nomicfoundation/hardhat-ethers') <
       config.indexOf('@openzeppelin/hardhat-tron'),
   );
-  assert.match(config, /defaultNetwork: "tre"/u);
+  assert.match(config, /defaultNetwork: ['"]tre['"]/u);
   assert.match(config, /tron: true/u);
-  assert.match(config, /compiler: \{ target: "tron" \}/u);
+  assert.match(config, /compiler: \{ target: ['"]tron['"] \}/u);
   assert.match(config, /0x0{63}1/u);
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat TRON Project with Sunhat/u);
