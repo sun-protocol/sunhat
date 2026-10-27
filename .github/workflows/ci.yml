@@ -49,4 +49,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: node --test test/toolchain.test.js
+      - run: node --test test/toolchain.test.js test/process.test.js
