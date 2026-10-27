@@ -34,13 +34,16 @@ export async function initProject(argv: readonly string[]): Promise<number> {
   }
   const { framework, target } = options;
   const root = resolve(options.path);
-  mkdirSync(root, { recursive: true });
-  if (existsSync(resolve(root, 'sunhat.toml'))) {
+  if (options.adopt) {
+    validateNativeProject(root, framework);
+  } else {
+    mkdirSync(root, { recursive: true });
+  }
+  if (lstatSync(resolve(root, 'sunhat.toml'), { throwIfNoEntry: false })) {
     return usage(`${root} is already bound by sunhat.toml`);
   }
   const template = resolve(packageRoot, 'templates', framework, target);
   if (options.adopt) {
-    validateNativeProject(root, framework);
     const configuration = resolve(root, 'foundry-toolchain.json');
     if (framework === 'foundry' && !existsSync(configuration)) {
       copyExclusive(resolve(template, 'foundry-toolchain.json'), configuration);
@@ -107,11 +110,20 @@ function parseOptions(argv: readonly string[]): InitOptions | undefined {
 }
 
 function validateNativeProject(root: string, framework: Framework): void {
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+    return usage(
+      `cannot adopt ${framework}: project directory not found at ${root}`,
+    );
+  }
   const found =
     framework === 'foundry'
-      ? existsSync(resolve(root, 'foundry.toml'))
+      ? statSync(resolve(root, 'foundry.toml'), {
+          throwIfNoEntry: false,
+        })?.isFile()
       : ['js', 'cjs', 'ts'].some((ext) =>
-          existsSync(resolve(root, `hardhat.config.${ext}`)),
+          statSync(resolve(root, `hardhat.config.${ext}`), {
+            throwIfNoEntry: false,
+          })?.isFile(),
         );
   if (!found) {
     throw new CliError(

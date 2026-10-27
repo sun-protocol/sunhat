@@ -384,3 +384,101 @@ test('adoption reads the template binding without copying the remaining scaffold
     assert.equal(existsSync(resolve(project, name)), false);
   }
 });
+
+for (const framework of ['hardhat', 'foundry']) {
+  const native = framework === 'hardhat' ? 'hardhat.config.ts' : 'foundry.toml';
+
+  test(`${framework} adoption rejects invalid native configuration paths without writing`, (t) => {
+    const fixture = runtime(t);
+    for (const kind of ['directory', 'dangling-link', 'missing']) {
+      const project = resolve(fixture.temporary, kind);
+      mkdirSync(project);
+      const path = resolve(project, native);
+      if (kind === 'directory') {
+        mkdirSync(path);
+      } else if (kind === 'dangling-link') {
+        symlinkSync(resolve(fixture.temporary, 'absent-config'), path, 'file');
+      }
+      const before = readdirSync(project);
+      const result = run(fixture, [
+        '--framework',
+        framework,
+        '--target',
+        'evm',
+        '--adopt',
+        project,
+      ]);
+      assert.equal(result.status, 2, result.stderr);
+      assert.match(result.stderr, /native configuration not found/u);
+      assert.deepEqual(readdirSync(project), before);
+    }
+  });
+
+  test(`${framework} adoption requires an existing project directory`, (t) => {
+    const fixture = runtime(t);
+    const missingParent = resolve(fixture.temporary, 'missing-parent');
+    const result = run(fixture, [
+      '--framework',
+      framework,
+      '--adopt',
+      resolve(missingParent, 'project'),
+    ]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(existsSync(missingParent), false);
+
+    const file = resolve(fixture.temporary, 'owned-file');
+    writeFileSync(file, 'user-owned content');
+    const rejected = run(fixture, ['--framework', framework, '--adopt', file]);
+    assert.equal(rejected.status, 2, rejected.stderr);
+    assert.equal(readFileSync(file, 'utf8'), 'user-owned content');
+  });
+
+  test(`${framework} adoption rejects an existing dangling binding before copying configuration`, (t) => {
+    const fixture = runtime(t);
+    const project = resolve(fixture.temporary, 'bound-project');
+    mkdirSync(project);
+    writeFileSync(resolve(project, native), 'user-owned configuration');
+    symlinkSync(
+      resolve(fixture.temporary, 'absent-binding'),
+      resolve(project, 'sunhat.toml'),
+      'file',
+    );
+    const before = readdirSync(project);
+    const result = run(fixture, ['--framework', framework, '--adopt', project]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /already bound by sunhat.toml/u);
+    assert.deepEqual(readdirSync(project), before);
+    assert.equal(
+      readFileSync(resolve(project, native), 'utf8'),
+      'user-owned configuration',
+    );
+  });
+
+  test(`${framework} adoption accepts a native configuration file symlink`, (t) => {
+    const fixture = runtime(t);
+    const project = resolve(fixture.temporary, 'linked-project');
+    mkdirSync(project);
+    const original = resolve(fixture.temporary, 'native-config');
+    writeFileSync(original, 'user-owned configuration');
+    symlinkSync(original, resolve(project, native), 'file');
+    if (framework === 'hardhat') {
+      // Invalid earlier candidates must not hide a valid TypeScript config.
+      mkdirSync(resolve(project, 'hardhat.config.js'));
+    }
+    const result = run(fixture, [
+      '--framework',
+      framework,
+      '--target',
+      'evm',
+      '--adopt',
+      project,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(original, 'utf8'), 'user-owned configuration');
+    assert.match(
+      readFileSync(resolve(project, 'sunhat.toml'), 'utf8'),
+      /target = "evm"/u,
+    );
+    assert.equal(existsSync(resolve(project, 'package.json')), false);
+  });
+}
