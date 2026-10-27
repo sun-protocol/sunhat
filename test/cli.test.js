@@ -4,29 +4,43 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import test, { after } from 'node:test';
 import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 
-const cli = resolve('bin/sunhat.js');
+const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
+const repository = resolve(dirname(cli), '..');
+const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-cli-'));
+after(() => rmSync(temporary, { recursive: true, force: true }));
+
 function temp(name) {
-  return mkdtempSync(resolve(tmpdir(), `sunhat-${name}-`));
+  return mkdtempSync(resolve(temporary, `${name}-`));
 }
+
 function run(cwd, args) {
   return spawnSync(
     process.execPath,
     [...(args[0] === 'init' ? foundryInitArgs : []), cli, ...args],
-    { cwd, encoding: 'utf8', env: { ...process.env, ...foundryInitEnv } },
+    {
+      cwd,
+      encoding: 'utf8',
+      timeout: 10_000,
+      env: { ...process.env, ...foundryInitEnv },
+    },
   );
 }
+
 function json(path, value) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value)}\n`);
 }
+
 function binding(root, framework, target) {
   writeFileSync(
     resolve(root, 'sunhat.toml'),
@@ -37,11 +51,13 @@ function binding(root, framework, target) {
     devDependencies: framework === 'hardhat' ? { hardhat: '2.22.0' } : {},
   });
 }
+
 function executable(path, body) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `#!/usr/bin/env node\n${body}\n`);
   chmodSync(path, 0o755);
 }
+
 function hardhat(root, version = '2.22.0') {
   const base = resolve(root, 'node_modules/hardhat');
   json(resolve(base, 'package.json'), {
@@ -54,6 +70,7 @@ function hardhat(root, version = '2.22.0') {
     `process.stdout.write(JSON.stringify(process.argv.slice(2))); process.exitCode = 17;`,
   );
 }
+
 function foundry(root, target) {
   const base = resolve(root, `.sunhat/toolchains/${target}`);
   const binaries = {};
@@ -149,7 +166,7 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   );
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
-  assert.equal(pkg.devDependencies.sunhat, `file:${process.cwd()}`);
+  assert.equal(pkg.devDependencies.sunhat, `file:${repository}`);
   assert.equal(pkg.scripts.build, 'sunhat compile');
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat EVM Project with Sunhat/u);

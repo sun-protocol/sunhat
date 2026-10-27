@@ -10,10 +10,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
 
-const cli = resolve('bin/sunhat.js');
+const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
+
 function fixture(t, framework) {
   const root = realpathSync(mkdtempSync(resolve(tmpdir(), 'sunhat-json-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -23,10 +25,12 @@ function fixture(t, framework) {
   );
   return root;
 }
+
 function json(path, value) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(value));
 }
+
 function run(root, args) {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: root,
@@ -34,6 +38,7 @@ function run(root, args) {
     timeout: 10_000,
   });
 }
+
 function assertInvalid(result, path) {
   assert.equal(result.status, 3, result.stderr);
   assert.ok(result.stderr.includes(path), result.stderr);
@@ -43,6 +48,7 @@ function assertInvalid(result, path) {
   );
   assert.equal(result.stdout, '');
 }
+
 function lock() {
   return {
     version: 2,
@@ -198,7 +204,12 @@ for (const [name, modify] of [
   test(`release configuration rejects ${name} with its path`, (t) => {
     const root = fixture(t, 'foundry');
     const value = JSON.parse(
-      readFileSync(resolve('templates/foundry/evm/foundry-toolchain.json')),
+      readFileSync(
+        new URL(
+          '../templates/foundry/evm/foundry-toolchain.json',
+          import.meta.url,
+        ),
+      ),
     );
     modify(value);
     const path = resolve(root, 'foundry-toolchain.json');
