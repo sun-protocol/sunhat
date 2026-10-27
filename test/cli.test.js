@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   mkdirSync,
@@ -11,13 +10,18 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 
 const cli = resolve('bin/sunhat.js');
 function temp(name) {
   return mkdtempSync(resolve(tmpdir(), `sunhat-${name}-`));
 }
 function run(cwd, args) {
-  return spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8' });
+  return spawnSync(
+    process.execPath,
+    [...(args[0] === 'init' ? foundryInitArgs : []), cli, ...args],
+    { cwd, encoding: 'utf8', env: { ...process.env, ...foundryInitEnv } },
+  );
 }
 function json(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -61,11 +65,10 @@ function foundry(root, target) {
     );
     binaries[tool] = {
       path: `.sunhat/toolchains/${target}/${tool}`,
-      sha256: createHash('sha256').update(readFileSync(path)).digest('hex'),
     };
   }
   json(resolve(root, '.sunhat/toolchain.json'), {
-    version: 1,
+    version: 2,
     target,
     source: target === 'evm' ? 'foundry-rs/foundry' : 'elsvv/foundry-tron',
     release: target === 'evm' ? 'v1.8.6' : 'foundry-tron-latest',
@@ -99,6 +102,9 @@ test('init defaults to Foundry and TRON', () => {
   );
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry TRON Project with Sunhat/u);
+  const build = run(root, ['build']);
+  assert.equal(build.status, 0, build.stderr);
+  assert.equal(build.stdout, '["build"]');
 });
 test('init accepts an explicit Foundry EVM target', () => {
   const root = temp('explicit-foundry');
@@ -122,6 +128,9 @@ test('init accepts an explicit Foundry EVM target', () => {
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry EVM Project with Sunhat/u);
   assert.doesNotMatch(readme, /network = "tron"/u);
+  const build = run(root, ['build']);
+  assert.equal(build.status, 0, build.stderr);
+  assert.equal(build.stdout, '["build"]');
 });
 test('Hardhat scaffold requires explicit framework and refuses overwrite', () => {
   const root = temp('init');
@@ -170,9 +179,9 @@ test('TRON Hardhat scaffold selects TRE and loads its ethers bridge last', () =>
     config.indexOf('@nomicfoundation/hardhat-ethers') <
       config.indexOf('@openzeppelin/hardhat-tron'),
   );
-  assert.match(config, /defaultNetwork: "tre"/u);
+  assert.match(config, /defaultNetwork: ['"]tre['"]/u);
   assert.match(config, /tron: true/u);
-  assert.match(config, /compiler: \{ target: "tron" \}/u);
+  assert.match(config, /compiler: \{ target: ['"]tron['"] \}/u);
   assert.match(config, /0x0{63}1/u);
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat TRON Project with Sunhat/u);
@@ -189,11 +198,56 @@ test('init rejects an invalid framework', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /framework requires foundry or hardhat/u);
 });
-test('help reports the TRON target default', () => {
-  const result = run(temp('help'), ['init', '--help']);
+for (const option of ['--help', '-h']) {
+  test(`init ${option} reports the TRON target default`, () => {
+    const result = run(temp('help'), ['init', option]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /target=tron/u);
+  });
+}
+test('init accepts equals options after the project path', () => {
+  const root = temp('equals-init');
+  const result = run(dirname(root), [
+    'init',
+    root,
+    '--framework=hardhat',
+    '--target=evm',
+  ]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /target=tron/u);
+  assert.match(
+    readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
+    /framework = "hardhat"\ntarget = "evm"/u,
+  );
 });
+test('init accepts a dash-prefixed project path after the option terminator', () => {
+  const root = temp('terminator-init');
+  const result = run(root, ['init', '--', '-project']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    readFileSync(resolve(root, '-project/sunhat.toml'), 'utf8'),
+    /framework = "foundry"\ntarget = "tron"/u,
+  );
+});
+for (const [name, args] of [
+  ['unknown long option', ['--unknown']],
+  ['unknown short option', ['-x']],
+  ['missing framework value', ['--framework']],
+  ['missing target value', ['--target']],
+  ['ambiguous target value', ['--target', '--adopt']],
+  ['invalid boolean value', ['--adopt=false']],
+  ['invalid target', ['--target', 'other']],
+  ['empty framework', ['--framework=']],
+  ['multiple project paths', ['first', 'second']],
+]) {
+  test(`init rejects ${name} with exit code 2`, () => {
+    const root = temp('invalid-init');
+    const result = run(root, ['init', ...args]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /^sunhat: /u);
+    assert.throws(() => readFileSync(resolve(root, 'sunhat.toml')));
+    assert.throws(() => readFileSync(resolve(root, 'first/package.json')));
+  });
+}
 test('scaffold conflict is detected before any write', () => {
   const root = temp('atomic');
   mkdirSync(resolve(root, 'contracts'));
@@ -219,7 +273,10 @@ test('foundry scaffold does not reference unpublished placeholder packages', () 
   assert.equal(result.status, 0, result.stderr);
   const pkg = readFileSync(resolve(root, 'package.json'), 'utf8');
   assert.doesNotMatch(pkg, /@sunhat\/foundry-tron-toolchain/u);
-  assert.match(pkg, /elsvv\/foundry-tron/u);
+  assert.match(
+    readFileSync(resolve(root, 'foundry-toolchain.json'), 'utf8'),
+    /elsvv\/foundry-tron/u,
+  );
   assert.doesNotMatch(
     readFileSync(resolve(root, 'script/Counter.s.sol'), 'utf8'),
     /forge-std/u,
@@ -254,6 +311,19 @@ test('hardhat receives literal argv and native exit code', () => {
   const result = run(root, ['compile', '$HOME', 'test argument']);
   assert.equal(result.status, 17);
   assert.equal(result.stdout, '["compile","$HOME","test argument"]');
+});
+test('invalid TOML stops command routing with exit code 4', () => {
+  const root = temp('invalid-toml');
+  binding(root, 'hardhat', 'evm');
+  hardhat(root);
+  writeFileSync(
+    resolve(root, 'sunhat.toml'),
+    '[project]\nframework = "hardhat"\ntarget = "evm"\ntarget = "tron"\n',
+  );
+  const result = run(root, ['compile']);
+  assert.equal(result.status, 4);
+  assert.match(result.stderr, /invalid TOML/u);
+  assert.equal(result.stdout, '');
 });
 test('legacy framework namespaces are rejected', () => {
   const result = run(temp('legacy'), ['foundry', 'build']);
@@ -307,12 +377,22 @@ test('Hardhat 3 is rejected with resolved version', () => {
   assert.equal(result.status, 3);
   assert.match(result.stderr, /Hardhat 2.*3\.0\.0/u);
 });
-test('tampered toolchain binary is rejected', () => {
+test('Foundry accepts a legacy lock without comparing its recorded digest', () => {
   const root = temp('digest');
   binding(root, 'foundry', 'evm');
   foundry(root, 'evm');
-  writeFileSync(resolve(root, '.sunhat/toolchains/evm/forge'), 'tampered');
+  const lockPath = resolve(root, '.sunhat/toolchain.json');
+  const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+  lock.version = 1;
+  for (const binary of Object.values(lock.binaries)) {
+    binary.sha256 = '0'.repeat(64);
+  }
+  json(lockPath, lock);
+  executable(
+    resolve(root, '.sunhat/toolchains/evm/forge'),
+    `process.stdout.write('updated:'+JSON.stringify(process.argv.slice(2)));`,
+  );
   const result = run(root, ['build']);
-  assert.equal(result.status, 3);
-  assert.match(result.stderr, /digest mismatch/u);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, 'updated:["build"]');
 });

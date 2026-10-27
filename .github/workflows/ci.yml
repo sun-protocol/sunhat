@@ -23,6 +23,22 @@ jobs:
       - run: npm run test:templates
       - run: npm run pack:check
 
+  minimum-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20.11.0
+      - run: npm ci --omit=dev --ignore-scripts
+      - run: npm run test:runtime
+
   windows-toolchain:
     runs-on: windows-latest
     steps:

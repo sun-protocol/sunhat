@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import {
   chmodSync,
   existsSync,
@@ -16,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const cli = resolve(repository, 'bin/sunhat.js');
@@ -93,12 +93,17 @@ const forgeCommands = [
 ];
 
 function run(cwd, args, { env = {}, preload = false } = {}) {
-  const nodeArgs = preload ? ['--import', downloadFixture] : [];
+  const nodeArgs = [
+    ...(args[0] === 'init' || (args[0] === 'toolchain' && args[1] === 'install')
+      ? foundryInitArgs
+      : []),
+    ...(preload ? ['--import', downloadFixture] : []),
+  ];
   return spawnSync(process.execPath, [...nodeArgs, cli, ...args], {
     cwd,
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...foundryInitEnv, ...env },
   });
 }
 
@@ -186,13 +191,10 @@ function installFrameworkFixture(project) {
       recorder(resolve(project.root, path), project, tool);
       binaries[tool] = {
         path,
-        sha256: createHash('sha256')
-          .update(readFileSync(resolve(project.root, path)))
-          .digest('hex'),
       };
     }
     json(resolve(project.root, '.sunhat/toolchain.json'), {
-      version: 1,
+      version: 2,
       target: project.target,
       ...releases[project.target],
       platform: 'test',
@@ -361,20 +363,19 @@ for (const framework of ['foundry', 'hardhat']) {
 
       if (framework === 'foundry') {
         await t.test(
-          'toolchain info/check use the initialized target without launching Forge',
+          'toolchain info uses the initialized target without launching Forge',
           () => {
             const before = initialized.calls().length;
-            for (const command of ['info', 'check']) {
-              const result = run(initialized.nested, ['toolchain', command]);
-              assert.equal(result.status, 0, result.stderr);
-              assert.equal(
-                result.stdout,
-                `framework=foundry\ntarget=${target}\nsource=${releases[target].source}\nrelease=${releases[target].release}\nrevision=${releases[target].revision}\nplatform=test\n`,
-              );
-            }
+            const info = run(initialized.nested, ['toolchain', 'info']);
+            assert.equal(info.status, 0, info.stderr);
+            assert.equal(
+              info.stdout,
+              `framework=foundry\ntarget=${target}\nsource=${releases[target].source}\nrelease=${releases[target].release}\nrevision=${releases[target].revision}\nplatform=test\n`,
+            );
             for (const args of [
               [],
               ['unknown'],
+              ['check'],
               ['check', '--extra'],
               ['install', 'extra'],
             ]) {
@@ -408,7 +409,7 @@ for (const framework of ['foundry', 'hardhat']) {
         }
 
         await t.test(
-          'toolchain check and native execution reject a tampered binary',
+          'native execution uses the current installed executable',
           () => {
             const before = initialized.calls().length;
             const lock = JSON.parse(
@@ -417,16 +418,21 @@ for (const framework of ['foundry', 'hardhat']) {
                 'utf8',
               ),
             );
-            writeFileSync(
-              resolve(initialized.root, lock.binaries.forge.path),
-              'tampered',
+            const executable = resolve(
+              initialized.root,
+              lock.binaries.forge.path,
             );
-            for (const args of [['toolchain', 'check'], ['build']]) {
-              const result = run(initialized.nested, args);
-              assert.equal(result.status, 3, result.stderr);
-              assert.match(result.stderr, /digest mismatch/u);
-            }
-            assert.equal(initialized.calls().length, before);
+            writeFileSync(
+              executable,
+              `${readFileSync(executable, 'utf8')}\n// changed after installation\n`,
+            );
+            const result = run(initialized.nested, ['build']);
+            assert.equal(result.status, 0, result.stderr);
+            assert.deepEqual(
+              JSON.parse(result.stdout),
+              expectedCall(initialized, 'forge', ['build']),
+            );
+            assert.equal(initialized.calls().length, before + 1);
           },
         );
       }
@@ -435,14 +441,36 @@ for (const framework of ['foundry', 'hardhat']) {
 }
 
 for (const target of ['evm', 'tron']) {
+  test(`init foundry/${target}: failed initialization reports a recoverable install error`, (t) => {
+    const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-failure-'));
+    t.after(() => rmSync(temporary, { recursive: true, force: true }));
+    const root = resolve(temporary, 'project');
+    const initialized = run(temporary, ['init', '--target', target, root], {
+      preload: true,
+      env: {
+        SUNHAT_TEST_DOWNLOAD: 'digest-mismatch',
+        SUNHAT_TEST_DOWNLOAD_LOG: resolve(temporary, 'download.txt'),
+      },
+    });
+    assert.equal(initialized.status, 3, initialized.stderr);
+    assert.match(initialized.stderr, /archive digest mismatch/u);
+    assert.match(initialized.stderr, /retry with `sunhat toolchain install`/u);
+    assert.ok(existsSync(resolve(root, 'sunhat.toml')));
+    assert.equal(existsSync(resolve(root, '.sunhat/toolchain.json')), false);
+    const retried = run(root, ['toolchain', 'install']);
+    assert.equal(retried.status, 0, retried.stderr);
+    const build = run(root, ['build']);
+    assert.equal(build.status, 0, build.stderr);
+    assert.equal(build.stdout, '["build"]');
+  });
   test(`init foundry/${target}: toolchain install download failures`, async (t) => {
     const initialized = project(t, 'foundry', target);
-    await t.test('check/info/build report a missing toolchain', () => {
-      for (const args of [
-        ['toolchain', 'check'],
-        ['toolchain', 'info'],
-        ['build'],
-      ]) {
+    rmSync(resolve(initialized.root, '.sunhat'), {
+      recursive: true,
+      force: true,
+    });
+    await t.test('info/build report a missing toolchain', () => {
+      for (const args of [['toolchain', 'info'], ['build']]) {
         const result = run(initialized.nested, args);
         assert.equal(result.status, 3, result.stderr);
         assert.match(result.stderr, /toolchain is not installed/u);

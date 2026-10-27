@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -17,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { releaseFor } from '../dist/toolchain/releases.js';
+import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const cli = resolve(repository, 'bin/sunhat.js');
@@ -34,6 +33,56 @@ const faults = new URL(
   import.meta.url,
 ).href;
 const tools = ['forge', 'cast', 'anvil', 'chisel'];
+
+for (const [name, modify] of [
+  [
+    'target mismatch',
+    (config) => {
+      config.target = 'tron';
+    },
+  ],
+  [
+    'archive path traversal',
+    (config) => {
+      config.platforms[platformKey()].archive = '../tools.tar.gz';
+    },
+  ],
+  [
+    'binary path traversal',
+    (config) => {
+      config.platforms[platformKey()].tools.forge = '../forge';
+    },
+  ],
+  [
+    'invalid checksum',
+    (config) => {
+      config.platforms[platformKey()].sha256 = 'not-a-sha256';
+    },
+  ],
+]) {
+  test(`toolchain configuration rejects ${name} before installation`, (t) => {
+    const root = mkdtempSync(resolve(tmpdir(), 'sunhat-toolchain-config-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const config = JSON.parse(
+      readFileSync(
+        resolve(repository, 'templates/foundry/evm/foundry-toolchain.json'),
+      ),
+    );
+    modify(config);
+    writeFileSync(
+      resolve(root, 'foundry-toolchain.json'),
+      JSON.stringify(config),
+    );
+    assert.throws(
+      () => releaseFor('evm', root),
+      (error) => {
+        assert.equal(error.exitCode, 3);
+        assert.match(error.message, /configuration/u);
+        return true;
+      },
+    );
+  });
+}
 
 function releaseOn(target, platform, arch) {
   const platformDescriptor = Object.getOwnPropertyDescriptor(
@@ -114,8 +163,26 @@ function installFixture(t, target, directory = tmpdir()) {
   writeArchive(fixture);
   const initialized = spawnSync(
     process.execPath,
-    [cli, 'init', '--target', target, fixture.root],
-    { encoding: 'utf8', timeout: 10_000 },
+    [
+      '--experimental-loader',
+      loader,
+      '--import',
+      download,
+      cli,
+      'init',
+      '--target',
+      target,
+      fixture.root,
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: {
+        ...process.env,
+        SUNHAT_TEST_ARCHIVE: fixture.archive,
+        SUNHAT_TEST_DOWNLOAD_LOG: fixture.log,
+      },
+    },
   );
   assert.equal(
     initialized.status,
@@ -181,7 +248,7 @@ function assertPreserved(root, previous) {
     assert.deepEqual(readFileSync(resolve(root, path)), bytes);
   }
   assertInstalled(
-    spawnSync(process.execPath, [cli, 'toolchain', 'check'], {
+    spawnSync(process.execPath, [cli, 'toolchain', 'info'], {
       cwd: root,
       encoding: 'utf8',
       timeout: 10_000,
@@ -220,7 +287,7 @@ for (const target of ['evm', 'tron']) {
     });
   }
 
-  test(`${process.platform} ${target} archive installs all executables and verifies the lock`, (t) => {
+  test(`${process.platform} ${target} archive installs all executables and records metadata`, (t) => {
     const windows = process.platform === 'win32';
     const fixture = installFixture(t, target);
     const { root, log, contents } = fixture;
@@ -233,7 +300,7 @@ for (const target of ['evm', 'tron']) {
     const lock = JSON.parse(
       readFileSync(resolve(root, '.sunhat/toolchain.json'), 'utf8'),
     );
-    assert.equal(lock.version, 1);
+    assert.equal(lock.version, 2);
     assert.equal(lock.target, target);
     assert.equal(
       lock.platform,
@@ -254,10 +321,7 @@ for (const target of ['evm', 'tron']) {
         readFileSync(resolve(root, item.path)),
         contents[filename],
       );
-      assert.equal(
-        item.sha256,
-        createHash('sha256').update(contents[filename]).digest('hex'),
-      );
+      assert.deepEqual(Object.keys(item), ['path']);
       if (windows) {
         assert.equal(
           existsSync(
@@ -270,18 +334,13 @@ for (const target of ['evm', 'tron']) {
         );
       }
     }
-    const checked = spawnSync(process.execPath, [cli, 'toolchain', 'check'], {
+    const info = spawnSync(process.execPath, [cli, 'toolchain', 'info'], {
       cwd: root,
       encoding: 'utf8',
       timeout: 10_000,
     });
-    assert.equal(
-      checked.status,
-      0,
-      checked.stderr || String(checked.error ?? ''),
-    );
+    assert.equal(info.status, 0, info.stderr || String(info.error ?? ''));
     assertClean(root, target);
-    writeFileSync(resolve(root, lock.binaries.forge.path), 'tampered');
     const rejected = spawnSync(process.execPath, [cli, 'toolchain', 'check'], {
       cwd: root,
       encoding: 'utf8',
@@ -289,10 +348,13 @@ for (const target of ['evm', 'tron']) {
     });
     assert.equal(
       rejected.status,
-      3,
+      2,
       rejected.stderr || String(rejected.error ?? ''),
     );
-    assert.match(rejected.stderr, /forge digest mismatch/u);
+    assert.match(
+      rejected.stderr,
+      /toolchain requires exactly one command: install or info/u,
+    );
   });
 
   test(`${target} reinstall works across simulated filesystem boundaries`, (t) => {
@@ -302,7 +364,7 @@ for (const target of ['evm', 'tron']) {
     writeArchive(fixture, { label: 'replacement' });
     assertInstalled(install(fixture, 'cross-device'));
     const installed = snapshot(fixture.root);
-    assert.notDeepEqual(installed.lock, previous.lock);
+    assert.deepEqual(installed.lock, previous.lock);
     for (const [path, bytes] of Object.entries(installed.binaries)) {
       assert.notDeepEqual(bytes, previous.binaries[path]);
       assert.deepEqual(bytes, fixture.contents[path.split('/').at(-1)]);

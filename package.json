@@ -11,6 +11,8 @@
     "bin/",
     "dist/",
     "templates/",
+    "docs/toml-binding.md",
+    "docs/QuickStart.md",
     "README.md"
   ],
   "engines": {
@@ -23,7 +25,8 @@
     "format:check": "prettier . --check",
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
-    "test": "npm run build && node --test test/cli.test.js test/init-commands.test.js test/toolchain.test.js",
+    "test": "npm run build && npm run test:runtime",
+    "test:runtime": "node --test test/toml.test.js test/binding.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
     "test:templates": "npm run build && node --test test/template-types.test.js",
     "pack:check": "npm run build && npm pack --dry-run"
   },
@@ -36,5 +39,8 @@
     "prettier-plugin-solidity": "2.4.1",
     "typescript": "5.7.2",
     "typescript-eslint": "8.72.1"
+  },
+  "dependencies": {
+    "smol-toml": "1.9.1"
   }
 }
