@@ -46,6 +46,8 @@ sunhat init --adopt .
 sunhat init --framework hardhat --adopt --target evm .
 ```
 
+For Foundry, initialization and adoption also download, verify, and install the selected toolchain. They require access to the configured GitHub release and `tar` on macOS/Linux or PowerShell on Windows. If installation fails, the generated project files are kept; enter the project directory and retry with `sunhat toolchain install`.
+
 The binding file is the sole source of truth for command routing:
 
 ```toml
@@ -89,12 +91,11 @@ Complete the project dependency installation above first. Hardhat must be declar
 
 ### Foundry projects: EVM and TRON
 
-Install the project toolchain with `sunhat toolchain install` before running native commands. The installer requires access to the pinned GitHub release and `tar` on macOS/Linux or PowerShell on Windows. It supports macOS/Linux arm64 and x64, and Windows x64.
+`sunhat init` installs and verifies the project toolchain before reporting success. Native commands then use that installation. The toolchain supports macOS/Linux arm64 and x64, and Windows x64.
 
 | Command                                    | Purpose                                           | Target    |
 | ------------------------------------------ | ------------------------------------------------- | --------- |
-| `sunhat toolchain install`                 | Download and verify the pinned project toolchain. | EVM, TRON |
-| `sunhat toolchain check`                   | Verify the installed binary digests.              | EVM, TRON |
+| `sunhat toolchain install`                 | Retry or reinstall the configured toolchain.      | EVM, TRON |
 | `sunhat toolchain info`                    | Print the installed toolchain metadata.           | EVM, TRON |
 | `sunhat build [--sizes]`                   | Compile contracts and optionally report sizes.    | EVM, TRON |
 | `sunhat test [-vvv]`                       | Run tests, optionally with verbose traces.        | EVM, TRON |
@@ -120,14 +121,15 @@ The target project must install Hardhat major version 2. The current template pi
 
 Hardhat TRON projects require a running Docker daemon. Their generated configuration selects the `tre` network, compiles with `tron-solc`, and starts `tronbox/tre:dev` automatically for `sunhat test`. Set `TRE_URL` and `TRE_PRIVATE_KEY` to use an existing TRE instance instead of the generated local defaults.
 
-Hardhat dependencies use exact versions published on the npm registry. Sunhat's project dependency is pinned to `sunhat@2.0.0` by the installation step above. Foundry binaries are installed separately from pinned GitHub releases. In a Foundry project, install and check the toolchain with:
+Hardhat dependencies use exact versions published on the npm registry. Sunhat's project dependency is pinned to `sunhat@2.0.0` by the installation step above. Foundry initialization installs the configured GitHub release automatically. Inspect the installed metadata with:
 
 ```bash
-sunhat toolchain install
-sunhat toolchain check
+sunhat toolchain info
 ```
 
-EVM projects download `foundry-rs/foundry@v1.8.6`. TRON projects download the public release for `elsvv/foundry-tron@9ea07db4b342fd606f6f7c3f99be1757e90d5e90`. Sunhat verifies the archive against a pinned SHA-256 digest before extracting it to `.sunhat/toolchains/`, then verifies the selected binary's digest on every invocation.
+Foundry release sources, versions, platform archives, executable names, and checksums live in `templates/foundry/<target>/foundry-toolchain.json`. Initialization copies the selected file into the project and uses it for installation. Existing projects without this file use the selected template's defaults. The installer verifies the archive before extracting it to `.sunhat/toolchains/`; native commands do not rehash binaries, probe their versions, or compare their release metadata with template defaults. New version-2 locks record executable paths without binary digests; existing version-1 locks remain readable. `toolchain info` prints installed metadata, and there is no separate `toolchain check` command.
+
+Compiler installation is handled by the framework on first compilation. In a Foundry project, run `sunhat build`: EVM projects resolve `solc`, while TRON projects resolve native `tron-solc`. Set `solc` in the project's `foundry.toml` to select a version or local executable. In a Hardhat project, install the declared npm dependencies, then run `npm run build`; compiler selection comes from `hardhat.config.ts`. Initialization installs the Foundry tools but does not predownload Solidity compilers.
 
 Installation stages all binaries on the project's toolchain filesystem before replacing an existing installation. The previous directory is kept until the new lock file is committed. If activation or lock replacement fails, Sunhat restores the previous directory; if restoration also fails, it retains the backup and reports its location.
 

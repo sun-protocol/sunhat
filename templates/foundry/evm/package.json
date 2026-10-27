@@ -8,11 +8,5 @@
   },
   "devDependencies": {
     "sunhat": "{{sunhatDependency}}"
-  },
-  "sunhat": {
-    "foundryToolchain": {
-      "target": "evm",
-      "source": "foundry-rs/foundry"
-    }
   }
 }

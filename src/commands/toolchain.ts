@@ -8,11 +8,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { usage, toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
-import { loadToolchain, sha256 } from '../adapters/foundry.js';
+import { loadToolchain } from '../adapters/foundry.js';
 import { platformKey, releaseFor, releaseUrl } from '../toolchain/releases.js';
 
 const execFileAsync = promisify(execFile);
@@ -23,34 +23,24 @@ export async function toolchain(
   args: readonly string[],
 ): Promise<number> {
   const command = args[0];
-  if (
-    !command ||
-    args.length !== 1 ||
-    !['install', 'check', 'info'].includes(command)
-  ) {
-    return usage(
-      'toolchain requires exactly one command: install, check or info',
-    );
+  if (!command || args.length !== 1 || !['install', 'info'].includes(command)) {
+    return usage('toolchain requires exactly one command: install or info');
   }
   if (command === 'install') {
-    return await install(root, target);
+    return await installFoundry(root, target);
   }
   const lock = loadToolchain(root, target);
-  if (command === 'check') {
-    for (const [tool, item] of Object.entries(lock.binaries)) {
-      if (sha256(resolve(root, item.path)) !== item.sha256) {
-        return toolchainError(`${tool} digest mismatch`);
-      }
-    }
-  }
   process.stdout.write(
     `framework=foundry\ntarget=${target}\nsource=${lock.source}\nrelease=${lock.release}\nrevision=${lock.revision}\nplatform=${lock.platform}\n`,
   );
   return 0;
 }
 
-async function install(root: string, target: Target): Promise<number> {
-  const release = releaseFor(target);
+export async function installFoundry(
+  root: string,
+  target: Target,
+): Promise<number> {
+  const release = releaseFor(target, root);
   const url = releaseUrl(release);
   const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok) {
@@ -86,19 +76,18 @@ async function install(root: string, target: Target): Promise<number> {
     }
     const prepared = resolve(temporary, 'binaries');
     mkdirSync(prepared);
-    const binaries: Record<string, { path: string; sha256: string }> = {};
+    const binaries: Record<string, { path: string }> = {};
     for (const [tool, filename] of Object.entries(release.tools)) {
       const source = resolve(extracted, filename);
-      const output = resolve(prepared, basename(filename));
+      const output = resolve(prepared, filename);
       renameSync(source, output);
       chmodSync(output, 0o755);
       binaries[tool] = {
-        path: `.sunhat/toolchains/${target}/${basename(filename)}`,
-        sha256: sha256(output),
+        path: `.sunhat/toolchains/${target}/${filename}`,
       };
     }
     const lock = {
-      version: 1,
+      version: 2,
       target,
       source: release.source,
       release: release.release,

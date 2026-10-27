@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { CliError, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
+import { installFoundry } from './toolchain.js';
 
 interface InitOptions {
   framework: Framework;
@@ -19,23 +20,38 @@ interface InitOptions {
   adopt: boolean;
 }
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export function initProject(argv: readonly string[]): number {
+export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
-  const { framework } = options;
+  const { framework, target } = options;
   const root = resolve(options.path);
   mkdirSync(root, { recursive: true });
   if (existsSync(resolve(root, 'sunhat.toml'))) {
     return usage(`${root} is already bound by sunhat.toml`);
   }
-  const { target } = options;
+  const template = resolve(packageRoot, 'templates', framework, target);
   if (options.adopt) {
     validateNativeProject(root, framework);
+    const configuration = resolve(root, 'foundry-toolchain.json');
+    if (framework === 'foundry' && !existsSync(configuration)) {
+      copyExclusive(resolve(template, 'foundry-toolchain.json'), configuration);
+    }
     copyExclusive(
-      resolve(packageRoot, 'templates', framework, target, 'sunhat.toml'),
+      resolve(template, 'sunhat.toml'),
       resolve(root, 'sunhat.toml'),
     );
   } else {
     scaffold(root, framework, target);
+  }
+  if (framework === 'foundry') {
+    try {
+      await installFoundry(root, target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CliError(
+        `${message}; project files are in ${root}; retry with \`sunhat toolchain install\``,
+        error instanceof CliError ? error.exitCode : 6,
+      );
+    }
   }
   process.stderr.write(
     `${options.adopt ? 'adopted' : 'initialized'} ${framework}/${target} project at ${root}\n`,

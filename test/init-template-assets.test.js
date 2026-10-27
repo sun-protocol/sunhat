@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
@@ -47,11 +48,20 @@ function json(path, value) {
 }
 
 function run(fixture, args) {
-  return spawnSync(process.execPath, [fixture.cli, 'init', ...args], {
-    cwd: fixture.temporary,
-    encoding: 'utf8',
-    timeout: 10_000,
-  });
+  return spawnSync(
+    process.execPath,
+    [...foundryInitArgs, fixture.cli, 'init', ...args],
+    {
+      cwd: fixture.temporary,
+      encoding: 'utf8',
+      timeout: 10_000,
+      env: {
+        ...process.env,
+        ...foundryInitEnv,
+        SUNHAT_TEST_PACKAGE_ROOT: fixture.packageRoot,
+      },
+    },
+  );
 }
 
 for (const framework of ['hardhat', 'foundry']) {
@@ -72,6 +82,15 @@ for (const framework of ['hardhat', 'foundry']) {
       manifest.devDependencies['@types/node'] = '22.10.2';
       manifest.scripts.typecheck = 'tsc --noEmit';
       json(resolve(variant, 'package.json'), manifest);
+      let toolchain;
+      if (framework === 'foundry') {
+        toolchain = JSON.parse(
+          readFileSync(resolve(variant, 'foundry-toolchain.json')),
+        );
+        toolchain.release = 'template-release';
+        toolchain.revision = 'template-revision';
+        json(resolve(variant, 'foundry-toolchain.json'), toolchain);
+      }
 
       const native =
         framework === 'hardhat' ? 'hardhat.config.ts' : 'foundry.toml';
@@ -118,6 +137,17 @@ for (const framework of ['hardhat', 'foundry']) {
       );
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
+      if (toolchain) {
+        assert.deepEqual(
+          JSON.parse(readFileSync(resolve(project, 'foundry-toolchain.json'))),
+          toolchain,
+        );
+        const installed = JSON.parse(
+          readFileSync(resolve(project, '.sunhat/toolchain.json')),
+        );
+        assert.equal(installed.release, 'template-release');
+        assert.equal(installed.revision, 'template-revision');
+      }
       assert.equal(
         readFileSync(resolve(project, native), 'utf8'),
         customizedConfig,

@@ -11,7 +11,7 @@ npm install --global sunhat@2.0.0
 sunhat --version
 ```
 
-Run project commands from this directory or a subdirectory. Install the project-pinned Foundry toolchain with `sunhat toolchain install` before building, testing, or using Cast, Anvil, or Chisel. Global Sunhat still uses the binaries in this project's `.sunhat/` directory.
+Run project commands from this directory or a subdirectory. `sunhat init` has already installed the Foundry toolchain. Global Sunhat uses the binaries in this project's `.sunhat/` directory.
 
 The quick start also installs `sunhat@2.0.0` as an exact local development dependency. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
 
@@ -19,15 +19,15 @@ The quick start also installs `sunhat@2.0.0` as an exact local development depen
 
 ```bash
 npm install --save-dev --save-exact sunhat@2.0.0
-sunhat toolchain install
-sunhat toolchain check
 npm run build
 npm test
 ```
 
 The install command replaces the scaffold's `file:` Sunhat reference with the npm version and installs the project's other declared dependencies.
 
-`toolchain install` downloads the Foundry release pinned by Sunhat and stores it under `.sunhat/toolchains/`. Subsequent commands verify the executable digest before running it.
+`sunhat init` installs and verifies the release declared in `foundry-toolchain.json` and stores the binaries under `.sunhat/toolchains/`. Subsequent commands run the installed executables without rehashing them or probing their versions. If initialization reported an installation failure, retry with `sunhat toolchain install`. Use `toolchain info` to inspect installed metadata.
+
+The first `sunhat build` downloads the `solc` version required by the sources if it is not cached. To select the compiler explicitly, set `solc = "0.8.28"` under `[profile.default]` in `foundry.toml`. Initialization does not predownload the compiler.
 
 ## Commands
 
@@ -45,8 +45,7 @@ The install command replaces the scaffold's `file:` Sunhat reference with the np
 | `sunhat cast <command>`                    | Run a Cast command through the selected toolchain. |
 | `sunhat anvil`                             | Start the project-pinned Anvil node.               |
 | `sunhat chisel`                            | Start the project-pinned Solidity REPL.            |
-| `sunhat toolchain install`                 | Download and verify the pinned project toolchain.  |
+| `sunhat toolchain install`                 | Retry or reinstall the configured toolchain.       |
 | `sunhat toolchain info`                    | Print the pinned toolchain metadata.               |
-| `sunhat toolchain check`                   | Verify the installed binary digests.               |
 
 Arguments after the Sunhat command are passed to Foundry unchanged.

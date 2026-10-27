@@ -8,11 +8,5 @@
   },
   "devDependencies": {
     "sunhat": "{{sunhatDependency}}"
-  },
-  "sunhat": {
-    "foundryToolchain": {
-      "target": "tron",
-      "source": "elsvv/foundry-tron"
-    }
   }
 }

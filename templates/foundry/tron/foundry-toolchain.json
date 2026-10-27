@@ -1,0 +1,58 @@
+{
+  "target": "tron",
+  "source": "elsvv/foundry-tron",
+  "release": "foundry-tron-latest",
+  "revision": "9ea07db4b342fd606f6f7c3f99be1757e90d5e90",
+  "platforms": {
+    "darwin-arm64": {
+      "archive": "foundry-tron_darwin_arm64.tar.gz",
+      "sha256": "b40d08504352475c937cc66bd69eacd35f9ac580abd55d5b294e5cbd0e23cf31",
+      "tools": {
+        "forge": "forge-tron",
+        "cast": "cast-tron",
+        "anvil": "anvil-tron",
+        "chisel": "chisel-tron"
+      }
+    },
+    "darwin-amd64": {
+      "archive": "foundry-tron_darwin_amd64.tar.gz",
+      "sha256": "dc2c3f22ec2292885d41617105a5356946bf3efa1d9736ea5d5fd68b802a937a",
+      "tools": {
+        "forge": "forge-tron",
+        "cast": "cast-tron",
+        "anvil": "anvil-tron",
+        "chisel": "chisel-tron"
+      }
+    },
+    "linux-arm64": {
+      "archive": "foundry-tron_linux_arm64.tar.gz",
+      "sha256": "4f2dbe50848d21708e44b2dde168298fa468d8fed0a6ebca0fe9e22ad0f0c27c",
+      "tools": {
+        "forge": "forge-tron",
+        "cast": "cast-tron",
+        "anvil": "anvil-tron",
+        "chisel": "chisel-tron"
+      }
+    },
+    "linux-amd64": {
+      "archive": "foundry-tron_linux_amd64.tar.gz",
+      "sha256": "7d684c883b72cc407fef77eab90c9304b5bdd310a465f18e8fd199e595e04331",
+      "tools": {
+        "forge": "forge-tron",
+        "cast": "cast-tron",
+        "anvil": "anvil-tron",
+        "chisel": "chisel-tron"
+      }
+    },
+    "win32-amd64": {
+      "archive": "foundry-tron_win32_amd64.zip",
+      "sha256": "c257cef8478334544521e3d6f1da58eaecc21ece8b404dea96831156d9979cc4",
+      "tools": {
+        "forge": "forge-tron.exe",
+        "cast": "cast-tron.exe",
+        "anvil": "anvil-tron.exe",
+        "chisel": "chisel-tron.exe"
+      }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "target": "evm",
+  "source": "foundry-rs/foundry",
+  "release": "v1.8.6",
+  "revision": "v1.8.6",
+  "platforms": {
+    "darwin-arm64": {
+      "archive": "foundry_v1.8.6_darwin_arm64.tar.gz",
+      "sha256": "d6bc05ee937b4308bded496068728c8ba140abe49dd7527f37e025bc335b91ec",
+      "tools": {
+        "forge": "forge",
+        "cast": "cast",
+        "anvil": "anvil",
+        "chisel": "chisel"
+      }
+    },
+    "darwin-amd64": {
+      "archive": "foundry_v1.8.6_darwin_amd64.tar.gz",
+      "sha256": "c0b032cdfda5fdce75ab6b782785f3f28aaf431bd55daecfb6437d01369f235e",
+      "tools": {
+        "forge": "forge",
+        "cast": "cast",
+        "anvil": "anvil",
+        "chisel": "chisel"
+      }
+    },
+    "linux-arm64": {
+      "archive": "foundry_v1.8.6_linux_arm64.tar.gz",
+      "sha256": "ca61f3f6e7d635f34e3e174409964d29126fa135794cd84cead8919dd50e0930",
+      "tools": {
+        "forge": "forge",
+        "cast": "cast",
+        "anvil": "anvil",
+        "chisel": "chisel"
+      }
+    },
+    "linux-amd64": {
+      "archive": "foundry_v1.8.6_linux_amd64.tar.gz",
+      "sha256": "58850106984038f3a7200f38a4182c8cb423d3a4f4c7848eacbc2453e6bc35fc",
+      "tools": {
+        "forge": "forge",
+        "cast": "cast",
+        "anvil": "anvil",
+        "chisel": "chisel"
+      }
+    },
+    "win32-amd64": {
+      "archive": "foundry_v1.8.6_win32_amd64.zip",
+      "sha256": "924d6395786af438e7cb315f6835185f99d727ed6127dbbc4e6a62eb14edcfff",
+      "tools": {
+        "forge": "forge.exe",
+        "cast": "cast.exe",
+        "anvil": "anvil.exe",
+        "chisel": "chisel.exe"
+      }
+    }
+  }
+}
