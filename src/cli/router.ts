@@ -16,19 +16,37 @@ Usage:
 Init defaults: framework=foundry, target=tron
 `;
 export async function route(invocation: Invocation): Promise<number> {
-  if (invocation.kind === 'help') { process.stdout.write(HELP); return 0; }
-  if (invocation.kind === 'version') { process.stdout.write('sunhat 2.0.0\n'); return 0; }
-  if (invocation.kind === 'init') return initProject(invocation.args);
-  const root = findProjectRoot(process.cwd()); const binding = readBinding(resolve(root, 'sunhat.toml'));
-  if (binding.framework === 'hardhat') return await runHardhat(root, [invocation.command, ...invocation.args]);
-  if (invocation.command === 'toolchain') return toolchain(root, binding.target, invocation.args);
+  if (invocation.kind === 'help') {
+    process.stdout.write(HELP);
+    return 0;
+  }
+  if (invocation.kind === 'version') {
+    process.stdout.write('sunhat 2.0.0\n');
+    return 0;
+  }
+  if (invocation.kind === 'init') {
+    return initProject(invocation.args);
+  }
+  const root = findProjectRoot(process.cwd());
+  const binding = readBinding(resolve(root, 'sunhat.toml'));
+  if (binding.framework === 'hardhat') {
+    return await runHardhat(root, [invocation.command, ...invocation.args]);
+  }
+  if (invocation.command === 'toolchain') {
+    return toolchain(root, binding.target, invocation.args);
+  }
   const command = invocation.command;
   if (command === 'anvil' || command === 'chisel') {
-    if (binding.target === 'tron') return usage(`${command} is unsupported for the TRON target`);
+    if (binding.target === 'tron') {
+      return usage(`${command} is unsupported for the TRON target`);
+    }
     return await runFoundry(root, binding.target, command, invocation.args);
   }
   if (command === 'cast') {
     return await runFoundry(root, binding.target, 'cast', invocation.args);
   }
-  return await runFoundry(root, binding.target, 'forge', [command, ...invocation.args]);
+  return await runFoundry(root, binding.target, 'forge', [
+    command,
+    ...invocation.args,
+  ]);
 }

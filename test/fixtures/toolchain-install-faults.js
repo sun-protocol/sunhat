@@ -16,22 +16,50 @@ function inside(parent, path) {
 }
 
 // Model separate mounts for OS temp, project metadata and the toolchains folder.
-function device(path) { return inside(toolchains, path) ? 'toolchains' : inside(root, path) ? 'project' : 'os-temp'; }
-function failure(code) { return Object.assign(new Error(`injected ${mode} failure (${code})`), { code }); }
+function device(path) {
+  return inside(toolchains, path)
+    ? 'toolchains'
+    : inside(root, path)
+      ? 'project'
+      : 'os-temp';
+}
+function failure(code) {
+  return Object.assign(new Error(`injected ${mode} failure (${code})`), {
+    code,
+  });
+}
 
 fs.renameSync = (from, to) => {
-  fs.appendFileSync(process.env.SUNHAT_TEST_RENAME_LOG, `${JSON.stringify({ from, to })}\n`);
-  if (mode === 'cross-device' && device(from) !== device(to)) throw failure('EXDEV');
+  fs.appendFileSync(
+    process.env.SUNHAT_TEST_RENAME_LOG,
+    `${JSON.stringify({ from, to })}\n`,
+  );
+  if (mode === 'cross-device' && device(from) !== device(to)) {
+    throw failure('EXDEV');
+  }
   const restoring = basename(from) === 'previous';
-  if ((mode === 'activate' || mode === 'rollback') && inside(destination, to) && !inside(destination, from) && !restoring) throw failure('EIO');
-  if (mode === 'rollback' && restoring) throw failure('EACCES');
-  if (mode === 'lock' && to === lock) throw failure('EIO');
+  if (
+    (mode === 'activate' || mode === 'rollback') &&
+    inside(destination, to) &&
+    !inside(destination, from) &&
+    !restoring
+  ) {
+    throw failure('EIO');
+  }
+  if (mode === 'rollback' && restoring) {
+    throw failure('EACCES');
+  }
+  if (mode === 'lock' && to === lock) {
+    throw failure('EIO');
+  }
   return rename(from, to);
 };
 
 fs.writeFileSync = (path, ...args) => {
   // Also fail the old direct-write implementation, before it can truncate its lock.
-  if (mode === 'lock' && path === lock) throw failure('EIO');
+  if (mode === 'lock' && path === lock) {
+    throw failure('EIO');
+  }
   return write(path, ...args);
 };
 

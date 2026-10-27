@@ -31,22 +31,22 @@ The install command replaces the scaffold's `file:` Sunhat reference with the np
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Compile contracts with `sunhat build`. |
-| `npm test` | Run the Foundry test suite with `sunhat test`. |
-| `sunhat build --sizes` | Compile contracts and report contract sizes. |
-| `sunhat test -vvv` | Run tests with verbose traces. |
-| `sunhat test --match-contract CounterTest` | Run one test contract. |
-| `sunhat snapshot` | Record gas snapshots. |
-| `sunhat coverage` | Generate a coverage report. |
-| `sunhat script <path>` | Run a Foundry script. |
-| `sunhat create <contract>` | Deploy a contract with Forge. |
-| `sunhat cast <command>` | Run a Cast command through the selected toolchain. |
-| `sunhat anvil` | Start the project-pinned Anvil node. |
-| `sunhat chisel` | Start the project-pinned Solidity REPL. |
-| `sunhat toolchain install` | Download and verify the pinned project toolchain. |
-| `sunhat toolchain info` | Print the pinned toolchain metadata. |
-| `sunhat toolchain check` | Verify the installed binary digests. |
+| Command                                    | Purpose                                            |
+| ------------------------------------------ | -------------------------------------------------- |
+| `npm run build`                            | Compile contracts with `sunhat build`.             |
+| `npm test`                                 | Run the Foundry test suite with `sunhat test`.     |
+| `sunhat build --sizes`                     | Compile contracts and report contract sizes.       |
+| `sunhat test -vvv`                         | Run tests with verbose traces.                     |
+| `sunhat test --match-contract CounterTest` | Run one test contract.                             |
+| `sunhat snapshot`                          | Record gas snapshots.                              |
+| `sunhat coverage`                          | Generate a coverage report.                        |
+| `sunhat script <path>`                     | Run a Foundry script.                              |
+| `sunhat create <contract>`                 | Deploy a contract with Forge.                      |
+| `sunhat cast <command>`                    | Run a Cast command through the selected toolchain. |
+| `sunhat anvil`                             | Start the project-pinned Anvil node.               |
+| `sunhat chisel`                            | Start the project-pinned Solidity REPL.            |
+| `sunhat toolchain install`                 | Download and verify the pinned project toolchain.  |
+| `sunhat toolchain info`                    | Print the pinned toolchain metadata.               |
+| `sunhat toolchain check`                   | Verify the installed binary digests.               |
 
 Arguments after the Sunhat command are passed to Foundry unchanged.

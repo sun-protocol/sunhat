@@ -1,5 +1,5 @@
 {
-  "name": "sunhat",
+  "name": "@sun-protocol/sunhat",
   "version": "2.0.0",
   "description": "Project-bound Hardhat and Foundry CLI for EVM and TRON development",
   "type": "module",
@@ -17,6 +17,10 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "test": "npm run build && node --test test/cli.test.js test/init-commands.test.js test/toolchain.test.js",
@@ -24,7 +28,13 @@
     "pack:check": "npm run build && npm pack --dry-run"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "22.10.2",
-    "typescript": "5.7.2"
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "prettier-plugin-solidity": "2.4.1",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.72.1"
   }
 }

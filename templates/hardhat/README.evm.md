@@ -27,15 +27,15 @@ The install command replaces the scaffold's `file:` Sunhat reference with the np
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Compile contracts with `sunhat compile`. |
-| `npm test` | Run the Hardhat test suite with `sunhat test`. |
-| `sunhat compile --force` | Recompile all contracts. |
-| `sunhat test --grep Counter` | Run matching tests. |
-| `sunhat node` | Start the configured local EVM network. |
-| `sunhat run scripts/deploy.ts` | Run the deployment script. |
-| `sunhat clean` | Remove generated Hardhat artifacts and cache files. |
-| `sunhat <plugin-task>` | Run a task registered by a Hardhat plugin. |
+| Command                        | Purpose                                             |
+| ------------------------------ | --------------------------------------------------- |
+| `npm run build`                | Compile contracts with `sunhat compile`.            |
+| `npm test`                     | Run the Hardhat test suite with `sunhat test`.      |
+| `sunhat compile --force`       | Recompile all contracts.                            |
+| `sunhat test --grep Counter`   | Run matching tests.                                 |
+| `sunhat node`                  | Start the configured local EVM network.             |
+| `sunhat run scripts/deploy.ts` | Run the deployment script.                          |
+| `sunhat clean`                 | Remove generated Hardhat artifacts and cache files. |
+| `sunhat <plugin-task>`         | Run a task registered by a Hardhat plugin.          |
 
 Arguments after the Sunhat command are passed to Hardhat unchanged.

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.sunhat/
+.codex/
+.agents/
+.aws/
+package-lock.json
+*.tgz
