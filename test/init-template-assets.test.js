@@ -8,6 +8,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,6 +33,11 @@ function runtime(t) {
       recursive: true,
     });
   }
+  symlinkSync(
+    resolve(repository, 'node_modules'),
+    resolve(packageRoot, 'node_modules'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
   return { temporary, packageRoot, cli: resolve(packageRoot, 'bin/sunhat.js') };
 }
 

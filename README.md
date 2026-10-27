@@ -54,6 +54,8 @@ framework = "hardhat"
 target = "evm"
 ```
 
+Sunhat parses this file with [smol-toml](https://github.com/squirrelchat/smol-toml). Standard TOML syntax is supported; invalid syntax or project bindings exit with code `4`.
+
 Initialization uses exclusive file creation. It fails if a destination file already exists and never overwrites unknown content. Dependency installation remains under the project's control.
 
 After initialization, enter the project directory and install its dependencies:

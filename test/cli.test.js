@@ -189,11 +189,56 @@ test('init rejects an invalid framework', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /framework requires foundry or hardhat/u);
 });
-test('help reports the TRON target default', () => {
-  const result = run(temp('help'), ['init', '--help']);
+for (const option of ['--help', '-h']) {
+  test(`init ${option} reports the TRON target default`, () => {
+    const result = run(temp('help'), ['init', option]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /target=tron/u);
+  });
+}
+test('init accepts equals options after the project path', () => {
+  const root = temp('equals-init');
+  const result = run(dirname(root), [
+    'init',
+    root,
+    '--framework=hardhat',
+    '--target=evm',
+  ]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /target=tron/u);
+  assert.match(
+    readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
+    /framework = "hardhat"\ntarget = "evm"/u,
+  );
 });
+test('init accepts a dash-prefixed project path after the option terminator', () => {
+  const root = temp('terminator-init');
+  const result = run(root, ['init', '--', '-project']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    readFileSync(resolve(root, '-project/sunhat.toml'), 'utf8'),
+    /framework = "foundry"\ntarget = "tron"/u,
+  );
+});
+for (const [name, args] of [
+  ['unknown long option', ['--unknown']],
+  ['unknown short option', ['-x']],
+  ['missing framework value', ['--framework']],
+  ['missing target value', ['--target']],
+  ['ambiguous target value', ['--target', '--adopt']],
+  ['invalid boolean value', ['--adopt=false']],
+  ['invalid target', ['--target', 'other']],
+  ['empty framework', ['--framework=']],
+  ['multiple project paths', ['first', 'second']],
+]) {
+  test(`init rejects ${name} with exit code 2`, () => {
+    const root = temp('invalid-init');
+    const result = run(root, ['init', ...args]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /^sunhat: /u);
+    assert.throws(() => readFileSync(resolve(root, 'sunhat.toml')));
+    assert.throws(() => readFileSync(resolve(root, 'first/package.json')));
+  });
+}
 test('scaffold conflict is detected before any write', () => {
   const root = temp('atomic');
   mkdirSync(resolve(root, 'contracts'));
@@ -254,6 +299,19 @@ test('hardhat receives literal argv and native exit code', () => {
   const result = run(root, ['compile', '$HOME', 'test argument']);
   assert.equal(result.status, 17);
   assert.equal(result.stdout, '["compile","$HOME","test argument"]');
+});
+test('invalid TOML stops command routing with exit code 4', () => {
+  const root = temp('invalid-toml');
+  binding(root, 'hardhat', 'evm');
+  hardhat(root);
+  writeFileSync(
+    resolve(root, 'sunhat.toml'),
+    '[project]\nframework = "hardhat"\ntarget = "evm"\ntarget = "tron"\n',
+  );
+  const result = run(root, ['compile']);
+  assert.equal(result.status, 4);
+  assert.match(result.stderr, /invalid TOML/u);
+  assert.equal(result.stdout, '');
 });
 test('legacy framework namespaces are rejected', () => {
   const result = run(temp('legacy'), ['foundry', 'build']);

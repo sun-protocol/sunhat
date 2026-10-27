@@ -7,13 +7,14 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { CliError, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
 
 interface InitOptions {
   framework: Framework;
-  target?: Target;
+  target: Target;
   path: string;
   adopt: boolean;
 }
@@ -26,7 +27,7 @@ export function initProject(argv: readonly string[]): number {
   if (existsSync(resolve(root, 'sunhat.toml'))) {
     return usage(`${root} is already bound by sunhat.toml`);
   }
-  const target = options.target ?? 'tron';
+  const { target } = options;
   if (options.adopt) {
     validateNativeProject(root, framework);
     copyExclusive(
@@ -42,45 +43,43 @@ export function initProject(argv: readonly string[]): number {
   return 0;
 }
 function parseOptions(argv: readonly string[]): InitOptions {
-  let framework: Framework = 'foundry';
-  let target: Target | undefined;
-  let path = '.';
-  let positional = false;
-  let adopt = false;
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i]!;
-    if (arg === '--framework') {
-      const value = argv[++i];
-      if (value !== 'foundry' && value !== 'hardhat') {
-        return usage('--framework requires foundry or hardhat');
-      }
-      framework = value;
-    } else if (arg === '--target') {
-      const value = argv[++i];
-      if (!value) {
-        return usage('--target requires tron or evm');
-      }
-      target = parseTarget(value);
-    } else if (arg === '--adopt') {
-      adopt = true;
-    } else if (arg === '-h' || arg === '--help') {
+  try {
+    const { values, positionals } = parseArgs({
+      args: [...argv],
+      options: {
+        framework: { type: 'string', default: 'foundry' },
+        target: { type: 'string', default: 'tron' },
+        adopt: { type: 'boolean', default: false },
+        help: { type: 'boolean', short: 'h' },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
+    if (values.help) {
       process.stdout.write(
         'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
       );
       return process.exit(0) as never;
-    } else if (arg.startsWith('-')) {
-      return usage(`unknown init option ${arg}`);
-    } else {
-      if (positional) {
-        return usage('init accepts at most one path');
-      }
-      path = arg;
-      positional = true;
     }
+    if (positionals.length > 1) {
+      return usage('init accepts at most one path');
+    }
+    const framework = values.framework;
+    if (framework !== 'foundry' && framework !== 'hardhat') {
+      return usage('--framework requires foundry or hardhat');
+    }
+    return {
+      framework,
+      target: parseTarget(values.target),
+      path: positionals[0] ?? '.',
+      adopt: values.adopt,
+    };
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+    return usage(error instanceof Error ? error.message : String(error));
   }
-  return target
-    ? { framework, target, path, adopt }
-    : { framework, path, adopt };
 }
 function validateNativeProject(root: string, framework: Framework): void {
   const found =

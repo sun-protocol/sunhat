@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { parse } from 'smol-toml';
+import type { TomlTable } from 'smol-toml';
 import { CliError } from '../errors.js';
 export type Framework = 'hardhat' | 'foundry';
 export type Target = 'tron' | 'evm';
@@ -13,29 +15,21 @@ export function readBinding(path: string): Binding {
   } catch (error) {
     throw new CliError(`cannot read ${path}: ${msg(error)}`, 4);
   }
-  let section = '';
-  const values = new Map<string, string>();
-  for (const raw of text.split(/\r?\n/u)) {
-    const line = raw.replace(/\s+#.*$/u, '').trim();
-    if (!line) {
-      continue;
-    }
-    const header = /^\[(.+)\]$/u.exec(line);
-    if (header) {
-      section = header[1] ?? '';
-      continue;
-    }
-    if (section !== 'project') {
-      continue;
-    }
-    const assignment = /^(framework|target)\s*=\s*"([^"]+)"\s*$/u.exec(line);
-    if (!assignment) {
-      throw new CliError(`invalid project binding in ${path}: ${line}`, 4);
-    }
-    values.set(assignment[1]!, assignment[2]!);
+  let document: TomlTable;
+  try {
+    document = parse(text);
+  } catch (error) {
+    throw new CliError(`invalid TOML in ${path}: ${msg(error)}`, 4);
   }
-  const framework = values.get('framework');
-  const target = values.get('target');
+  const project = document.project;
+  if (!project || typeof project !== 'object' || Array.isArray(project)) {
+    throw new CliError(
+      `invalid project binding in ${path}; expected a [project] table`,
+      4,
+    );
+  }
+  const framework = 'framework' in project ? project.framework : undefined;
+  const target = 'target' in project ? project.target : undefined;
   if (framework !== 'hardhat' && framework !== 'foundry') {
     throw new CliError(
       `invalid framework in ${path}; expected hardhat or foundry`,
