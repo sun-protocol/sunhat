@@ -4,7 +4,45 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { CliError } from '../dist/errors.js';
-import { readBinding } from '../dist/project/binding.js';
+import { readBinding, validateBinding } from '../dist/project/binding.js';
+
+test('Binding validation accepts plain parsed values without a TOML parser', () => {
+  for (const framework of ['hardhat', 'foundry']) {
+    for (const target of ['evm', 'tron']) {
+      assert.deepEqual(
+        validateBinding(
+          { project: { framework, target }, metadata: { value: 42n } },
+          'sunhat.toml',
+        ),
+        { framework, target },
+      );
+    }
+  }
+});
+
+test('Binding validation rejects malformed parsed project values', () => {
+  for (const document of [
+    null,
+    [],
+    {},
+    { project: null },
+    { project: [] },
+    { project: new Date() },
+    { project: 'hardhat' },
+    { project: { framework: 42n, target: 'evm' } },
+    { project: { framework: 'hardhat', target: false } },
+  ]) {
+    assert.throws(
+      () => validateBinding(document, 'sunhat.toml'),
+      (error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(error.exitCode, 4);
+        assert.doesNotMatch(error.message, /invalid TOML/u);
+        return true;
+      },
+    );
+  }
+});
 
 function fixture(t) {
   const root = mkdtempSync(resolve(tmpdir(), 'sunhat-binding-'));

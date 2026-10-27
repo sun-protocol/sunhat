@@ -54,7 +54,7 @@ framework = "hardhat"
 target = "evm"
 ```
 
-Sunhat parses this file with [smol-toml](https://github.com/squirrelchat/smol-toml). Standard TOML syntax is supported; invalid syntax or project bindings exit with code `4`.
+Write bindings using TOML 1.0.0 syntax. The parser backend is pinned to `smol-toml@1.9.1`; it also accepts newer syntax and has known conformance exceptions. Sunhat does not promise TOML 1.1 support or strict rejection of everything outside 1.0. See [the parser decision and compatibility limits](docs/toml-binding.md). Binding validation independently requires a `project` table with the `framework` and `target` string values shown above; file, syntax, and binding errors exit with code `4`.
 
 Initialization uses exclusive file creation. It fails if a destination file already exists and never overwrites unknown content. Dependency installation remains under the project's control.
 

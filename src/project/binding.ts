@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { parse } from 'smol-toml';
-import type { TomlTable } from 'smol-toml';
 import { CliError } from '../errors.js';
+import { parseToml } from './toml.js';
 export type Framework = 'hardhat' | 'foundry';
 export type Target = 'tron' | 'evm';
 export interface Binding {
@@ -15,21 +14,23 @@ export function readBinding(path: string): Binding {
   } catch (error) {
     throw new CliError(`cannot read ${path}: ${msg(error)}`, 4);
   }
-  let document: TomlTable;
+  let document: unknown;
   try {
-    document = parse(text);
+    document = parseToml(text);
   } catch (error) {
     throw new CliError(`invalid TOML in ${path}: ${msg(error)}`, 4);
   }
-  const project = document.project;
-  if (!project || typeof project !== 'object' || Array.isArray(project)) {
+  return validateBinding(document, path);
+}
+export function validateBinding(document: unknown, path: string): Binding {
+  const project = isTable(document) ? document.project : undefined;
+  if (!isTable(project)) {
     throw new CliError(
       `invalid project binding in ${path}; expected a [project] table`,
       4,
     );
   }
-  const framework = 'framework' in project ? project.framework : undefined;
-  const target = 'target' in project ? project.target : undefined;
+  const { framework, target } = project;
   if (framework !== 'hardhat' && framework !== 'foundry') {
     throw new CliError(
       `invalid framework in ${path}; expected hardhat or foundry`,
@@ -40,6 +41,13 @@ export function readBinding(path: string): Binding {
     throw new CliError(`invalid target in ${path}; expected tron or evm`, 4);
   }
   return { framework, target };
+}
+function isTable(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 function msg(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
