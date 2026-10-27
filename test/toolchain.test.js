@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ const repository = fileURLToPath(new URL('../', import.meta.url));
 const cli = resolve(repository, 'bin/sunhat.js');
 const loader = new URL('./fixtures/toolchain-install-loader.js', import.meta.url).href;
 const download = new URL('./fixtures/toolchain-install-download.js', import.meta.url).href;
+const faults = new URL('./fixtures/toolchain-install-faults.js', import.meta.url).href;
 const tools = ['forge', 'cast', 'anvil', 'chisel'];
 
 function releaseOn(target, platform, arch) {
@@ -27,6 +28,65 @@ function releaseOn(target, platform, arch) {
   }
 }
 
+function writeArchive(fixture, { label = 'fixture', missingTool } = {}) {
+  const { target, source, archive } = fixture;
+  const windows = process.platform === 'win32';
+  rmSync(source, { recursive: true, force: true }); mkdirSync(source);
+  rmSync(archive, { force: true });
+  fixture.contents = Object.fromEntries(tools.filter(tool => tool !== missingTool).map(tool => [`${tool}${target === 'tron' ? '-tron' : ''}${windows ? '.exe' : ''}`, Buffer.from(`${process.platform} ${target} ${tool} ${label}\n`)]));
+  for (const [filename, bytes] of Object.entries(fixture.contents)) writeFileSync(resolve(source, filename), bytes);
+  const literal = value => `'${value.replaceAll("'", "''")}'`;
+  const files = Object.keys(fixture.contents).map(filename => literal(resolve(source, filename))).join(', ');
+  const compressed = windows
+    ? spawnSync('powershell.exe', ['-NoProfile', '-Command', `$ErrorActionPreference = 'Stop'; Compress-Archive -LiteralPath @(${files}) -DestinationPath ${literal(archive)}`], { encoding: 'utf8', timeout: 30_000 })
+    : spawnSync('tar', ['-czf', archive, '-C', source, ...Object.keys(fixture.contents)], { encoding: 'utf8', timeout: 30_000 });
+  assert.equal(compressed.status, 0, compressed.stderr || String(compressed.error ?? ''));
+}
+
+function installFixture(t, target, directory = tmpdir()) {
+  const temporary = realpathSync(mkdtempSync(resolve(directory, `sunhat-install-${target}-`)));
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  const fixture = {
+    temporary, target, root: resolve(temporary, 'project with spaces'),
+    source: resolve(temporary, 'archive source'),
+    archive: resolve(temporary, process.platform === 'win32' ? 'toolchain.zip' : 'toolchain.tar.gz'),
+    log: resolve(temporary, 'download-url.txt'), renameLog: resolve(temporary, 'renames.jsonl'),
+  };
+  writeArchive(fixture);
+  const initialized = spawnSync(process.execPath, [cli, 'init', '--target', target, fixture.root], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(initialized.status, 0, initialized.stderr || String(initialized.error ?? ''));
+  return fixture;
+}
+
+function install(fixture, fault) {
+  return spawnSync(process.execPath, ['--experimental-loader', loader, '--import', download, ...(fault ? ['--import', faults] : []), cli, 'toolchain', 'install'], {
+    cwd: fixture.root, encoding: 'utf8', timeout: 30_000,
+    env: {
+      ...process.env, SUNHAT_TEST_ARCHIVE: fixture.archive, SUNHAT_TEST_DOWNLOAD_LOG: fixture.log,
+      SUNHAT_TEST_PROJECT_ROOT: fixture.root, SUNHAT_TEST_TARGET: fixture.target,
+      SUNHAT_TEST_INSTALL_FAULT: fault ?? '', SUNHAT_TEST_RENAME_LOG: fixture.renameLog,
+    },
+  });
+}
+
+function assertInstalled(result) { assert.equal(result.status, 0, result.stderr || String(result.error ?? '')); }
+
+function snapshot(root) {
+  const lock = readFileSync(resolve(root, '.sunhat/toolchain.json'));
+  return { lock, binaries: Object.fromEntries(Object.values(JSON.parse(lock).binaries).map(item => [item.path, readFileSync(resolve(root, item.path))])) };
+}
+
+function assertPreserved(root, previous) {
+  assert.deepEqual(readFileSync(resolve(root, '.sunhat/toolchain.json')), previous.lock);
+  for (const [path, bytes] of Object.entries(previous.binaries)) assert.deepEqual(readFileSync(resolve(root, path)), bytes);
+  assertInstalled(spawnSync(process.execPath, [cli, 'toolchain', 'check'], { cwd: root, encoding: 'utf8', timeout: 10_000 }));
+}
+
+function assertClean(root, target) {
+  assert.deepEqual(readdirSync(resolve(root, '.sunhat')).sort(), ['toolchain.json', 'toolchains']);
+  assert.deepEqual(readdirSync(resolve(root, '.sunhat/toolchains')), [target]);
+}
+
 for (const target of ['evm', 'tron']) {
   for (const [platform, arch] of [['win32', 'x64'], ['darwin', 'arm64'], ['darwin', 'x64'], ['linux', 'arm64'], ['linux', 'x64']]) {
     test(`${target} release filenames on ${platform}/${arch}`, () => {
@@ -40,30 +100,9 @@ for (const target of ['evm', 'tron']) {
 
   test(`${process.platform} ${target} archive installs all executables and verifies the lock`, (t) => {
     const windows = process.platform === 'win32';
-    const temporary = mkdtempSync(resolve(tmpdir(), `sunhat-install-${target}-`));
-    t.after(() => rmSync(temporary, { recursive: true, force: true }));
-    const root = resolve(temporary, 'project with spaces');
-    const source = resolve(temporary, 'archive source');
-    const archive = resolve(temporary, windows ? 'toolchain.zip' : 'toolchain.tar.gz');
-    const log = resolve(temporary, 'download-url.txt');
-    mkdirSync(source);
-    const contents = Object.fromEntries(tools.map(tool => [`${tool}${target === 'tron' ? '-tron' : ''}${windows ? '.exe' : ''}`, Buffer.from(`${process.platform} ${target} ${tool} fixture\n`)]));
-    for (const [filename, bytes] of Object.entries(contents)) writeFileSync(resolve(source, filename), bytes);
-
-    const literal = value => `'${value.replaceAll("'", "''")}'`;
-    const files = Object.keys(contents).map(filename => literal(resolve(source, filename))).join(', ');
-    const compressed = windows
-      ? spawnSync('powershell.exe', ['-NoProfile', '-Command', `$ErrorActionPreference = 'Stop'; Compress-Archive -LiteralPath @(${files}) -DestinationPath ${literal(archive)}`], { encoding: 'utf8', timeout: 30_000 })
-      : spawnSync('tar', ['-czf', archive, '-C', source, ...Object.keys(contents)], { encoding: 'utf8', timeout: 30_000 });
-    assert.equal(compressed.status, 0, compressed.stderr || String(compressed.error ?? ''));
-    const initialized = spawnSync(process.execPath, [cli, 'init', '--target', target, root], { encoding: 'utf8', timeout: 10_000 });
-    assert.equal(initialized.status, 0, initialized.stderr || String(initialized.error ?? ''));
-
-    const installed = spawnSync(process.execPath, ['--experimental-loader', loader, '--import', download, cli, 'toolchain', 'install'], {
-      cwd: root, encoding: 'utf8', timeout: 30_000,
-      env: { ...process.env, SUNHAT_TEST_ARCHIVE: archive, SUNHAT_TEST_DOWNLOAD_LOG: log },
-    });
-    assert.equal(installed.status, 0, installed.stderr || String(installed.error ?? ''));
+    const fixture = installFixture(t, target);
+    const { root, log, contents } = fixture;
+    assertInstalled(install(fixture));
     const release = releaseFor(target);
     assert.equal(readFileSync(log, 'utf8'), `https://github.com/${release.source}/releases/download/${release.release}/${release.archive}`);
     const lock = JSON.parse(readFileSync(resolve(root, '.sunhat/toolchain.json'), 'utf8'));
@@ -84,9 +123,84 @@ for (const target of ['evm', 'tron']) {
     }
     const checked = spawnSync(process.execPath, [cli, 'toolchain', 'check'], { cwd: root, encoding: 'utf8', timeout: 10_000 });
     assert.equal(checked.status, 0, checked.stderr || String(checked.error ?? ''));
+    assertClean(root, target);
     writeFileSync(resolve(root, lock.binaries.forge.path), 'tampered');
     const rejected = spawnSync(process.execPath, [cli, 'toolchain', 'check'], { cwd: root, encoding: 'utf8', timeout: 10_000 });
     assert.equal(rejected.status, 3, rejected.stderr || String(rejected.error ?? ''));
     assert.match(rejected.stderr, /forge digest mismatch/u);
+  });
+
+  test(`${target} reinstall works across simulated filesystem boundaries`, (t) => {
+    const fixture = installFixture(t, target);
+    assertInstalled(install(fixture));
+    const previous = snapshot(fixture.root);
+    writeArchive(fixture, { label: 'replacement' });
+    assertInstalled(install(fixture, 'cross-device'));
+    const installed = snapshot(fixture.root);
+    assert.notDeepEqual(installed.lock, previous.lock);
+    for (const [path, bytes] of Object.entries(installed.binaries)) {
+      assert.notDeepEqual(bytes, previous.binaries[path]);
+      assert.deepEqual(bytes, fixture.contents[path.split('/').at(-1)]);
+    }
+    assert.ok(readFileSync(fixture.renameLog, 'utf8').trim().split('\n').length > 0);
+    assertPreserved(fixture.root, installed);
+    assertClean(fixture.root, target);
+  });
+
+  test(`${target} incomplete archive leaves the previous installation intact`, (t) => {
+    const fixture = installFixture(t, target);
+    assertInstalled(install(fixture));
+    const previous = snapshot(fixture.root);
+    writeArchive(fixture, { label: 'incomplete replacement', missingTool: 'chisel' });
+    const rejected = install(fixture);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stderr, /ENOENT/u);
+    assertPreserved(fixture.root, previous);
+    assertClean(fixture.root, target);
+  });
+
+  for (const fault of ['activate', 'lock']) {
+    test(`${target} ${fault} failure restores the previous binaries and lock`, (t) => {
+      const fixture = installFixture(t, target);
+      assertInstalled(install(fixture));
+      const previous = snapshot(fixture.root);
+      writeArchive(fixture, { label: 'replacement' });
+      const rejected = install(fixture, fault);
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, new RegExp(`injected ${fault} failure`, 'u'));
+      assertPreserved(fixture.root, previous);
+      assertClean(fixture.root, target);
+    });
+  }
+
+  test(`${target} failed rollback retains a recoverable backup`, (t) => {
+    const fixture = installFixture(t, target);
+    assertInstalled(install(fixture));
+    const previous = snapshot(fixture.root);
+    writeArchive(fixture, { label: 'replacement' });
+    const rejected = install(fixture, 'rollback');
+    assert.notEqual(rejected.status, 0);
+    const toolchains = resolve(fixture.root, '.sunhat/toolchains');
+    const stages = readdirSync(toolchains).filter(name => name.startsWith(`.install-${target}-`));
+    assert.equal(stages.length, 1);
+    const backup = resolve(toolchains, stages[0], 'previous');
+    assert.ok(rejected.stderr.includes(`previous toolchain preserved at ${backup}`), rejected.stderr);
+    assert.deepEqual(readFileSync(resolve(fixture.root, '.sunhat/toolchain.json')), previous.lock);
+    for (const [path, bytes] of Object.entries(previous.binaries)) assert.deepEqual(readFileSync(resolve(backup, path.split('/').at(-1))), bytes);
+    renameSync(backup, resolve(toolchains, target));
+    assertPreserved(fixture.root, previous);
+  });
+
+  test(`${target} installs on a different Linux filesystem from OS temp`, { skip: process.platform !== 'linux' }, (t) => {
+    let fixture;
+    try { fixture = installFixture(t, target, '/dev/shm'); }
+    catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'EACCES') throw error;
+      t.skip('/dev/shm is unavailable'); return;
+    }
+    if (statSync(fixture.temporary).dev === statSync(tmpdir()).dev) { t.skip('/dev/shm and OS temp share a filesystem'); return; }
+    assertInstalled(install(fixture));
+    assertPreserved(fixture.root, snapshot(fixture.root));
+    assertClean(fixture.root, target);
   });
 }
