@@ -1,15 +1,17 @@
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
 import { existsSync, realpathSync } from 'node:fs';
-import { toolchainError } from '../errors.js';
+import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import { spawnNative } from '../process/spawn.js';
 import { isRecord, readJson } from '../project/json.js';
+
 interface PackageJson {
   version?: string;
   bin?: string | Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 }
+
 export async function runHardhat(
   root: string,
   args: readonly string[],
@@ -33,17 +35,15 @@ export async function runHardhat(
         readPackageJson(path);
       }
     }
-    if (
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ERR_INVALID_PACKAGE_CONFIG'
-    ) {
+    if (hasErrorCode(error, 'ERR_INVALID_PACKAGE_CONFIG')) {
       return toolchainError(
-        `cannot resolve Hardhat in ${root}: ${error.message}`,
+        `cannot resolve Hardhat in ${root}: ${errorMessage(error)}`,
+        { cause: error },
       );
     }
     return toolchainError(
       'local Hardhat dependency is missing; install the project lockfile dependencies',
+      { cause: error },
     );
   }
   const manifest = readPackageJson(manifestPath);

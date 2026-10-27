@@ -14,11 +14,13 @@ export interface Release {
   sha256: string;
   tools: Record<FoundryTool, string>;
 }
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 export function platformKey(): string {
   return `${process.platform}-${process.arch === 'x64' ? 'amd64' : process.arch}`;
 }
+
 export function releaseFor(target: Target, root?: string): Release {
   const local = root ? resolve(root, 'foundry-toolchain.json') : undefined;
   const path =
@@ -73,6 +75,7 @@ export function releaseFor(target: Target, root?: string): Release {
     tools: artifact.tools,
   };
 }
+
 function isToolMap(value: unknown): value is Release['tools'] {
   return (
     isRecord(value) &&
@@ -82,6 +85,7 @@ function isToolMap(value: unknown): value is Release['tools'] {
     )
   );
 }
+
 function isFilename(value: unknown): value is string {
   return (
     typeof value === 'string' &&
@@ -92,6 +96,7 @@ function isFilename(value: unknown): value is string {
     !value.includes('\\')
   );
 }
+
 export function releaseUrl(release: Release): string {
   return `https://github.com/${release.source}/releases/download/${release.release}/${release.archive}`;
 }

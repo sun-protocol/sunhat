@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { toolchainError } from '../errors.js';
+import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
 import { platformKey, releaseFor, releaseUrl } from './releases.js';
 
@@ -90,7 +90,7 @@ export async function installFoundry(
       renameSync(destination, backup);
       backedUp = true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if (!hasErrorCode(error, 'ENOENT')) {
         throw error;
       }
     }
@@ -111,6 +111,7 @@ export async function installFoundry(
         preserveBackup = backedUp;
         return toolchainError(
           `installation failed: ${errorMessage(error)}; rollback failed: ${errorMessage(rollbackError)}${backedUp ? `; previous toolchain preserved at ${backup}` : ''}`,
+          { cause: error },
         );
       }
       throw error;
@@ -127,8 +128,4 @@ export async function installFoundry(
       rmSync(lockTemporary, { recursive: true, force: true });
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

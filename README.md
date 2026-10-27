@@ -44,4 +44,6 @@ npm test
 
 `npm run test:templates` installs fresh Hardhat EVM/TRON projects and runs `tsc --noEmit`. `npm run pack:check` checks package contents. Runtime tests use framework and download fixtures.
 
+Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.
+
 Initialization files and Foundry release data live under `templates/<framework>/common/` and `templates/<framework>/<target>/`. Target files override matching common files. The [TOML compatibility note](docs/toml-binding.md) documents the binding syntax baseline and parser limits.

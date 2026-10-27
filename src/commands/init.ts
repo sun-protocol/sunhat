@@ -10,7 +10,7 @@ import {
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { CliError, usage } from '../errors.js';
+import { CliError, errorMessage, hasErrorCode, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
 import { installFoundry } from '../toolchain/install.js';
@@ -21,7 +21,9 @@ interface InitOptions {
   path: string;
   adopt: boolean;
 }
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
 export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
   if (!options) {
@@ -54,10 +56,10 @@ export async function initProject(argv: readonly string[]): Promise<number> {
     try {
       await installFoundry(root, target);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       throw new CliError(
-        `${message}; project files are in ${root}; retry with \`sunhat toolchain install\``,
+        `${errorMessage(error)}; project files are in ${root}; retry with \`sunhat toolchain install\``,
         error instanceof CliError ? error.exitCode : 6,
+        { cause: error },
       );
     }
   }
@@ -66,6 +68,7 @@ export async function initProject(argv: readonly string[]): Promise<number> {
   );
   return 0;
 }
+
 function parseOptions(argv: readonly string[]): InitOptions | undefined {
   try {
     const { values, positionals } = parseArgs({
@@ -99,9 +102,10 @@ function parseOptions(argv: readonly string[]): InitOptions | undefined {
     if (error instanceof CliError) {
       throw error;
     }
-    return usage(error instanceof Error ? error.message : String(error));
+    return usage(errorMessage(error), { cause: error });
   }
 }
+
 function validateNativeProject(root: string, framework: Framework): void {
   const found =
     framework === 'foundry'
@@ -116,6 +120,7 @@ function validateNativeProject(root: string, framework: Framework): void {
     );
   }
 }
+
 function scaffold(root: string, framework: Framework, target: Target): void {
   const source = resolve(packageRoot, 'templates', framework);
   const files = new Map<string, string>();
@@ -142,6 +147,7 @@ function scaffold(root: string, framework: Framework, target: Target): void {
     writeExclusive(file.path, file.data);
   }
 }
+
 function validateParentDirectories(
   directory: string,
   root: string,
@@ -169,6 +175,7 @@ function validateParentDirectories(
     checked.add(path);
   }
 }
+
 function collectTemplates(
   directory: string,
   relativePath: string,
@@ -186,6 +193,7 @@ function collectTemplates(
     }
   }
 }
+
 function renderTemplate(path: string, root: string): string | Buffer {
   const contents = readFileSync(path);
   if (!path.endsWith('.json')) {
@@ -203,21 +211,22 @@ function renderTemplate(path: string, root: string): string | Buffer {
       (_match, key: keyof typeof values) => JSON.stringify(values[key]),
     );
 }
+
 function copyExclusive(from: string, to: string): void {
   writeExclusive(to, readFileSync(from));
 }
+
 function writeExclusive(path: string, data: string | Buffer): void {
   mkdirSync(dirname(path), { recursive: true });
   try {
     writeFileSync(path, data, { flag: 'wx' });
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+    if (hasErrorCode(error, 'EEXIST')) {
       throw new CliError(`refusing to overwrite existing file ${path}`, 2, {
         cause: error,
       });
     }
-    const message = error instanceof Error ? error.message : String(error);
-    throw new CliError(`cannot write file ${path}: ${message}`, 6, {
+    throw new CliError(`cannot write file ${path}: ${errorMessage(error)}`, 6, {
       cause: error,
     });
   }

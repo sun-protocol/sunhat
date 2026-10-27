@@ -1,20 +1,17 @@
 import { readFileSync } from 'node:fs';
-import { toolchainError } from '../errors.js';
+import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 
 export function readJson(path: string, missingMessage?: string): unknown {
   try {
     return JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    if (
-      missingMessage &&
-      error instanceof Error &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return toolchainError(missingMessage);
+    if (missingMessage && hasErrorCode(error, 'ENOENT')) {
+      return toolchainError(missingMessage, { cause: error });
     }
-    const message = error instanceof Error ? error.message : String(error);
-    return toolchainError(`cannot read JSON file ${path}: ${message}`);
+    return toolchainError(
+      `cannot read JSON file ${path}: ${errorMessage(error)}`,
+      { cause: error },
+    );
   }
 }
 
