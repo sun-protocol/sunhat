@@ -1,145 +1,276 @@
 # Sunhat
+[![CI Status](https://github.com/sun-protocol/sunhat/actions/workflows/linux-test.yml/badge.svg)](https://github.com/sun-protocol/sunhat/actions)
+![NPM Version](https://img.shields.io/npm/v/%40sun-protocol%2Fsunhat)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Sunhat's npm package is `sunhat`; these instructions use version `2.0.0`. It binds a project to Hardhat 2 or Foundry and to an EVM or TRON target through `sunhat.toml`. It handles project initialization, binding, command routing, and child-process management without replacing the framework's compiler, test runner, or argument parser.
+**An All-in-One Toolkit for the Complete TRON Smart Contract Lifecycle**
 
-## Global command prerequisites
+Sunhat is a comprehensive [Hardhat](https://hardhat.org) plugin designed to provide a seamless, end-to-end development experience on [TRON](https://tron.network/). It manages every stage of your project—from writing code in multiple languages to deploying with confidence—all within a single, unified workflow.
 
-To run `sunhat ...` directly in a terminal, install `sunhat@2.0.0` from npm globally and ensure npm's global executable directory is on `PATH`. The CLI requires Node.js `>=20.11`.
+## What is it for?
 
-```bash
-npm install --global sunhat@2.0.0
-sunhat --version
-sunhat --help
-```
+This [hardhat](https://hardhat.org) plugin adds a mechanism to deploy contracts to any network, Especially to [Tron](https://tron.network/) , keeping track of them and replicating the same environment for testing.
 
-`sunhat --version` should report `sunhat 2.0.0`. Global installation is a separate step; `sunhat init` does not perform it.
+### A Closed-Loop Lifecycle: Develop, Test, Deploy
 
-These commands are available without a project binding:
+Sunhat creates a complete, closed-loop process, ensuring consistency and reliability from the first line of code to the final on-chain transaction.
 
-| Command | Purpose |
-| --- | --- |
-| `sunhat`, `sunhat --help`, `sunhat -h` | Print CLI usage and initialization defaults. |
-| `sunhat --version`, `sunhat -V` | Print the version of the invoked Sunhat executable. |
-| `sunhat init [options] [path]` | Create a project, or bind an existing project with `--adopt`. |
+*  **DEVELOP: Flexible & Powerful Compilation**
+   *   Write your smart contracts in the language you prefer with multi-language support for **Solidity** and **Vyper**.
+   *   Compile your code for maximum compatibility and performance using multiple compiler versions, including standard **solc** and the TRON-specific **tron-solc**.
 
-All other commands require a valid `sunhat.toml` in the current directory or an ancestor. Run them from the project root or one of its subdirectories. Global Sunhat still resolves Hardhat from the project's dependencies and Foundry from the project's `.sunhat/` toolchain; global installation does not install either framework for the project.
+*  **TEST: Robust & Automated Validation**
+   *   Leverage automated, cross-framework testing. Sunhat integrates seamlessly with both **Hardhat**'s built-in testing environment and the high-speed **Foundry** toolkit.
+   *   Write clearer, more maintainable tests using named accounts instead of hardcoded addresses.
 
-Install `sunhat@2.0.0` as an exact local development dependency using the project setup steps below. Then use `npx --no-install sunhat ...` to run that local copy without a global installation. The examples below use the global `sunhat` command; replace it with `npx --no-install sunhat` for local use. `npm run build` and `npm test` resolve the local executable automatically.
+*  **DEPLOY: Confident & Trackable**
+   *   Deploy your contracts reliably to any TRON network (Mainnet, Shasta, etc.). The plugin tracks all deployments, allowing you to manage and upgrade your contracts with ease.
 
-The global CLI does not automatically delegate to the project's local Sunhat copy. Use `sunhat --version` and `npx --no-install sunhat --version` to check which CLI version each invocation uses.
 
-## Initialize or adopt a project
+### Core Features at a Glance
 
-New projects use Foundry and the TRON target by default. Pass `--framework hardhat` to select Hardhat, or `--target evm` to select an EVM target:
+*   **Unified Development Environment**: Supports multiple compilers (**solc**, **tron-solc**) and languages (**Solidity**, **Vyper**), giving your team the flexibility to use the best tools for the job.
 
-```bash
-sunhat init contracts
-sunhat init --target evm contracts-evm
-sunhat init --framework hardhat hardhat-tron
-sunhat init --framework hardhat --target evm hardhat-evm
-```
+*   **Cross-Framework Automated Testing**: Natively supports test suites written for both **Hardhat** and **Foundry**, eliminating the need to choose between frameworks.
 
-Adopting an existing project does not modify its native configuration. Adoption also defaults to the TRON target; pass `--target evm` explicitly for an EVM project:
+*   **Deterministic Deployments**: Reliably deploy contracts and track their history. This allows you to replicate the exact same on-chain state for testing, staging, or disaster recovery.
 
-```bash
-sunhat init --adopt .
-sunhat init --framework hardhat --adopt --target evm .
-```
+*   **Named Accounts**: Replace ambiguous addresses (`accounts[0]`) with human-readable names (`deployer`, `tokenOwner`). This makes scripts and tests cleaner and simplifies multi-network configuration.
 
-The binding file is the sole source of truth for command routing:
+*   **TRON-Specific Network Data**: Gain access to crucial network-specific parameters directly within your testing and deployment scripts, enabling more accurate pre-deployment simulations.
 
-```toml
-[project]
-framework = "hardhat"
-target = "evm"
-```
+---
 
-Initialization uses exclusive file creation. It fails if a destination file already exists and never overwrites unknown content. Dependency installation remains under the project's control.
+## QuickStart
 
-After initialization, enter the project directory and install its dependencies:
+This guide walks you through setting up sunhat in a new project from scratch.
+> You can get a complete demo [here](https://github.com/sun-protocol/sunhat-demo)
 
-```bash
-cd contracts
-npm install --save-dev --save-exact sunhat@2.0.0
-```
+---
 
-This command installs the project's declared dependencies and pins its local Sunhat to `2.0.0` from npm. The current scaffold initially writes a `file:` reference to the Sunhat installation that created it; the command replaces that reference so the project no longer depends on that installation path. Run the same installation command in an adopted project's root.
+### Installation
 
-## Project commands
+This guide walks you through installing sunhat from scratch.
 
-The following lists use a globally installed Sunhat and require the project binding described above. Native command availability and options are determined by the project's installed framework and plugins.
+#### Prerequisites
 
-### Hardhat projects: EVM and TRON
+*   **Node.js**: Version `22.14.0` or higher.
+    > [Download Node.js](https://nodejs.org/en/download)
 
-Complete the project dependency installation above first. Hardhat must be declared with an exact version matching the installed Hardhat 2 package.
+#### Install Sunhat
 
-| Command | Purpose |
-| --- | --- |
-| `sunhat compile [--force]` | Compile contracts, optionally forcing recompilation. |
-| `sunhat test [--grep Counter]` | Run all tests or matching tests. |
-| `sunhat run scripts/deploy.ts` | Run the deployment script on the configured network. |
-| `sunhat node` | Run the configured Hardhat node task. |
-| `sunhat console [--no-compile]` | Open the Hardhat console. |
-| `sunhat flatten contracts/Counter.sol` | Print flattened contract source. |
-| `sunhat clean` | Remove Hardhat artifacts and cache. |
-| `sunhat help [task]` | List native tasks or show help for one task. |
-| `sunhat <plugin-task> [args...]` | Forward a task registered by an installed plugin. |
-
-### Foundry projects: EVM and TRON
-
-Install the project toolchain with `sunhat toolchain install` before running native commands. The installer requires access to the pinned GitHub release and `tar` on macOS/Linux or PowerShell on Windows. It supports macOS/Linux arm64 and x64, and Windows x64.
-
-| Command | Purpose | Target |
-| --- | --- | --- |
-| `sunhat toolchain install` | Download and verify the pinned project toolchain. | EVM, TRON |
-| `sunhat toolchain check` | Verify the installed binary digests. | EVM, TRON |
-| `sunhat toolchain info` | Print the installed toolchain metadata. | EVM, TRON |
-| `sunhat build [--sizes]` | Compile contracts and optionally report sizes. | EVM, TRON |
-| `sunhat test [-vvv]` | Run tests, optionally with verbose traces. | EVM, TRON |
-| `sunhat test --match-contract CounterTest` | Run one test contract. | EVM, TRON |
-| `sunhat test --gas-report` | Request the selected toolchain's resource report. | EVM, TRON |
-| `sunhat snapshot` | Record resource usage snapshots. | EVM, TRON |
-| `sunhat coverage` | Generate a coverage report. | EVM, TRON |
-| `sunhat script <path>` | Run a Foundry script. | EVM, TRON |
-| `sunhat create <contract>` | Deploy a contract with the selected toolchain. | EVM, TRON |
-| `sunhat clean` | Remove build artifacts and cache. | EVM, TRON |
-| `sunhat fmt --check` | Check Solidity formatting. | EVM, TRON |
-| `sunhat inspect <contract> abi` | Print a contract's ABI. | EVM, TRON |
-| `sunhat cast <command> [args...]` | Run Cast from the project toolchain. | EVM, TRON |
-| `sunhat anvil [args...]` | Start the project-pinned local EVM node. | EVM only |
-| `sunhat chisel [args...]` | Open the project-pinned Solidity REPL. | EVM only |
-| `sunhat help [command]` | Show native Forge help. | EVM, TRON |
-
-Other native Forge commands are forwarded as `sunhat <command> [args...]`. The `toolchain` commands above are managed by Sunhat only for Foundry bindings; in a Hardhat project, the same arguments are forwarded to Hardhat as a native task.
-
-Sunhat does not rewrite core commands across frameworks. Compile Hardhat projects with `sunhat compile` and Foundry projects with `sunhat build`. Based on the `sunhat.toml` binding, Sunhat forwards each command and its arguments directly to the selected framework. The former `sunhat hardhat ...` and `sunhat foundry ...` three-part command forms are no longer supported. Anvil and Chisel are unavailable for TRON Foundry projects.
-
-The target project must install Hardhat major version 2. The current template pins `hardhat@2.29.1`, which supports Node.js 24. Sunhat resolves the absolute Hardhat entry point from the project's dependencies and does not invoke `npx`.
-
-Hardhat TRON projects require a running Docker daemon. Their generated configuration selects the `tre` network, compiles with `tron-solc`, and starts `tronbox/tre:dev` automatically for `sunhat test`. Set `TRE_URL` and `TRE_PRIVATE_KEY` to use an existing TRE instance instead of the generated local defaults.
-
-Hardhat dependencies use exact versions published on the npm registry. Sunhat's project dependency is pinned to `sunhat@2.0.0` by the installation step above. Foundry binaries are installed separately from pinned GitHub releases. In a Foundry project, install and check the toolchain with:
+You can install Sunhat by executing the following command:
 
 ```bash
-sunhat toolchain install
-sunhat toolchain check
+npm install -g @sun-protocol/sunhat
 ```
 
-EVM projects download `foundry-rs/foundry@v1.8.6`. TRON projects download the public release for `elsvv/foundry-tron@9ea07db4b342fd606f6f7c3f99be1757e90d5e90`. Sunhat verifies the archive against a pinned SHA-256 digest before extracting it to `.sunhat/toolchains/`, then verifies the selected binary's digest on every invocation.
+#### Install Optional Extensions
 
-Installation stages all binaries on the project's toolchain filesystem before replacing an existing installation. The previous directory is kept until the new lock file is committed. If activation or lock replacement fails, Sunhat restores the previous directory; if restoration also fails, it retains the backup and reports its location.
+For Vyper compiler support:
+> [Vyper Installation Guide](https://docs.vyperlang.org/en/stable/installing-vyper.html)
+```bash
+pip install vyper==0.2.8
+```
 
-Child processes receive a structured argv array and run with `shell: false`. They inherit stdout and stderr, and Sunhat forwards SIGINT, SIGTERM, and the native exit status.
+For Foundry test support:
+> [Foundry Installation Guide](https://book.getfoundry.sh/getting-started/installation)
+
+```bash
+# Install Foundry
+curl -L https://foundry.paradigm.xyz | bash
+# Set Foundry to the nightly channel
+foundryup --install nightly
+```
+
+---
+
+### Step 1: Configure Hardhat
+
+Add sunhat to your hardhat.config.ts:
+
+```ts
+import { HardhatUserConfig } from '@sun-protocol/sunhat';
+
+const config: HardhatUserConfig = {
+  solidity: {
+    compilers: [
+      {
+        version: '0.8.23',
+        optimizer: {
+          enabled: true, // enabled for optimizer
+          runs: 999999, // runs time for optimizer run
+        },
+      },
+    ],
+  },
+  // settings for different networks
+  networks: {
+    tron: {
+      url: 'https://nile.trongrid.io/jsonrpc', // tron mainnet rpc url
+      tron: true, // enable tron network
+      deploy: ['deployTron/'], // folder for tron deploy scripts
+      accounts: [`${process.env.PRIVATE_KEY}`], // account private key for deploy
+    },
+  },
+};
+
+export default config;
+```
+
+---
+
+### Step 2: Create Your First Contract
+
+Create a simple contract in `contracts/Lock.sol`:
+
+```solidity
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.0;
+
+contract Lock {
+    uint public unlockTime;
+    address payable public owner;
+
+    event Withdrawal(uint amount, uint when);
+
+    constructor(uint _unlockTime) payable {
+        require(_unlockTime > block.timestamp, "Unlock time should be in the future");
+        unlockTime = _unlockTime;
+        owner = payable(msg.sender);
+    }
+
+    function withdraw() public {
+        require(block.timestamp >= unlockTime, "You can't withdraw yet");
+        require(msg.sender == owner, "You aren't the owner");
+        emit Withdrawal(address(this).balance, block.timestamp);
+        owner.transfer(address(this).balance);
+    }
+}
+```
+
+---
+
+### Step 3: Create Deploy Directory
+
+Create a `deployTron/` directory in your project root.
+
+---
+
+### Step 4: Write Your First Deploy Script
+
+Create `deployTron/1.ts`:
+
+```ts
+module.exports = async ({
+  getNamedAccounts,
+  deployments,
+  getChainId,
+  getUnnamedAccounts,
+}) => {
+  const {deploy} = deployments;
+  const {deployer} = await getNamedAccounts();
+
+  // the following will only deploy "GenericMetaTxProcessor" if the contract was never deployed or if the code changed since last deployment
+  const res = await deploy('Lock', {
+    from: deployer,
+    gasLimit: 4000000,
+    args: [1893456000],
+    tags: 'lumi',
+  });
+  console.log(res)
+};
+
+module.exports.tags = ['lumi'];
+```
+
+---
+
+### Step 5: Compile and Deploy
+
+Compile your contracts:
+
+```bash
+npx hardhat compile
+```
+
+Deploy to tron network:
+
+```bash
+npx hardhat --network tron deploy --tags lumi
+```
+
+---
+
+### Step 6: Verify Deployment
+
+Check the `deployments/` directory for your deployment files. You should see:
+```
+├── deployments
+│   └── tron
+│       └── Lock.json
+```
+
+---
+
+## IDE Skills Integration
+
+Sunhat exposes a specialized **Skills** interface that acts as a "driver" for AI agents. By pointing your AI assistant to the skill definition in `skills/sunhat/`, you unlock expert-level capabilities for testing, deploying, and auditing TRON contracts autonomously.
+
+```
+skills/
+└── sunhat/
+    ├── SKILL.md            # Main entry point
+    └── workflows/
+        ├── sunhat-init.md
+        ├── sunhat-compile.md
+        ├── sunhat-test.md
+        ├── sunhat-deploy.md
+        └── sunhat-audit.md
+```
+
+### Supported IDEs
+
+| IDE | Setup |
+|-----|-------|
+| **Codex CLI / IDE** | Use `.agents/skills/sunhat`; this repository includes the discovery link. Invoke with `$sunhat` or let Codex select it automatically. |
+| **Claude Code** | Place `skills/sunhat` in project root. Claude auto-discovers `SKILL.md`. |
+| **Google Antigravity** | Place `skills/sunhat` in `.agent/skills/sunhat`. Antigravity auto-discovers `SKILL.md`. |
+| **OpenCode** | Place `skills/sunhat` in `.opencode/skills/sunhat`. OpenCode auto-discovers `SKILL.md`. |
+| **Cursor** | Copy `SKILL.md` content into `.cursorrules` or reference workflow paths. |
+
+### Codex Setup
+
+Codex discovers repository-scoped skills from `.agents/skills`. This repository maps `.agents/skills/sunhat` to the canonical `skills/sunhat` directory, so Codex CLI and the Codex IDE extension load the skill automatically when opened from this repository.
+
+For a project with a local `@sun-protocol/sunhat` dependency, copy `node_modules/@sun-protocol/sunhat/skills/sunhat` to `.agents/skills/sunhat`. You can also ask Codex to install the skill from this repository with `$skill-installer`.
+
+Run `/skills` to confirm discovery, then invoke the skill explicitly with `$sunhat` or describe a matching Sunhat task. See the [official Codex Skills documentation](https://developers.openai.com/codex/skills/) for discovery and installation details.
+
+### Example Usage
+
+```
+# Claude Code
+> "Run the tests for the Lock contract using Sunhat."
+
+# Antigravity
+> "Deploy the Token contract to Nile testnet."
+
+# Codex
+> "$sunhat compile and test this TRON project."
+```
+
+The AI agent will discover the skill, read the appropriate workflow, and execute the task deterministically.
+
+---
 
 ## Development
+To dive deeper into advanced topics of the sunhat project lifecycle, please see the [Documentation](https://hat-docs.sunagent.ai/) for guides and reference.
 
-Run these commands from a Sunhat source checkout:
+---
 
-```bash
-npm install
-npm test
-```
+## How to Contribute
 
-`npm test` builds Sunhat, initializes all four framework/target combinations, and exercises the commands listed in the generated READMEs, npm scripts, argument forwarding, subdirectory resolution, exit codes, and toolchain rejection paths. Framework executables and download responses are fixtures; the suite does not run Solidity compilers, Docker/TRE, or real deployments.
+We welcome contributions from everyone! Contributions to `sunhat` are released under the terms of the [MIT License](https://github.com/sun-protocol/sunhat/blob/main/LICENSE). By submitting a pull request, you agree to license your contribution under this license.
 
-Run `npm run test:templates` to generate fresh Hardhat EVM and TRON projects, install their declared dependencies, and check both with `tsc --noEmit`. This integration suite requires access to the npm registry and checks dependency declarations without enabling `skipLibCheck`. It does not require Docker or a blockchain connection.
+To contribute, see [CONTRIBUTE.md](https://github.com/sun-protocol/sunhat/blob/main/CONTRIBUTE.md)
