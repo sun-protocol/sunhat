@@ -408,36 +408,87 @@ for (const target of ['evm', 'tron']) {
     });
   }
 
-  test(`${target} failed rollback retains a recoverable backup`, (t) => {
+  test(`${target} cleanup failure preserves a successful installation and cleans the remaining stage`, (t) => {
     const fixture = installFixture(t, target);
-    assertInstalled(install(fixture));
     const previous = snapshot(fixture.root);
     writeArchive(fixture, { label: 'replacement' });
-    const rejected = install(fixture, 'rollback');
-    assert.notEqual(rejected.status, 0);
-    const toolchains = resolve(fixture.root, '.sunhat/toolchains');
-    const stages = readdirSync(toolchains).filter((name) =>
-      name.startsWith(`.install-${target}-`),
-    );
-    assert.equal(stages.length, 1);
-    const backup = resolve(toolchains, stages[0], 'previous');
-    assert.ok(
-      rejected.stderr.includes(`previous toolchain preserved at ${backup}`),
-      rejected.stderr,
-    );
-    assert.deepEqual(
-      readFileSync(resolve(fixture.root, '.sunhat/toolchain.json')),
-      previous.lock,
-    );
-    for (const [path, bytes] of Object.entries(previous.binaries)) {
-      assert.deepEqual(
-        readFileSync(resolve(backup, path.split('/').at(-1))),
-        bytes,
-      );
+    const result = install(fixture, 'cleanup');
+    assertInstalled(result);
+    assert.match(result.stderr, /warning: cannot remove temporary directory/u);
+    assert.match(result.stderr, /injected cleanup failure/u);
+    const installed = snapshot(fixture.root);
+    for (const [path, bytes] of Object.entries(installed.binaries)) {
+      assert.notDeepEqual(bytes, previous.binaries[path]);
+      assert.deepEqual(bytes, fixture.contents[path.split('/').at(-1)]);
     }
-    renameSync(backup, resolve(toolchains, target));
-    assertPreserved(fixture.root, previous);
+    assertPreserved(fixture.root, installed);
+    assert.deepEqual(readdirSync(resolve(fixture.root, '.sunhat')).sort(), [
+      'toolchain.json',
+      'toolchains',
+    ]);
+    const stage = readdirSync(resolve(fixture.root, '.sunhat/toolchains')).find(
+      (name) => name.startsWith('.install-'),
+    );
+    assert.ok(stage);
+    assert.ok(result.stderr.includes(stage));
   });
+
+  test(`${target} cleanup failure does not mask the installation error`, (t) => {
+    const fixture = installFixture(t, target);
+    const previous = snapshot(fixture.root);
+    writeArchive(fixture, { label: 'replacement' });
+    const result = install(fixture, 'activate-cleanup');
+    assert.equal(result.status, 6, result.stderr);
+    assert.match(result.stderr, /sunhat: injected activate-cleanup failure/u);
+    assert.match(result.stderr, /warning: cannot remove temporary directory/u);
+    assert.match(result.stderr, /injected cleanup failure/u);
+    assertPreserved(fixture.root, previous);
+    assert.deepEqual(readdirSync(resolve(fixture.root, '.sunhat')).sort(), [
+      'toolchain.json',
+      'toolchains',
+    ]);
+  });
+
+  for (const fault of ['rollback', 'rollback-cleanup']) {
+    test(`${target} ${fault} failure retains a recoverable backup`, (t) => {
+      const fixture = installFixture(t, target);
+      assertInstalled(install(fixture));
+      const previous = snapshot(fixture.root);
+      writeArchive(fixture, { label: 'replacement' });
+      const rejected = install(fixture, fault);
+      assert.equal(rejected.status, 3, rejected.stderr);
+      assert.match(rejected.stderr, /rollback failed/u);
+      if (fault === 'rollback-cleanup') {
+        assert.match(
+          rejected.stderr,
+          /warning: cannot remove temporary directory/u,
+        );
+        assert.match(rejected.stderr, /injected cleanup failure/u);
+      }
+      const toolchains = resolve(fixture.root, '.sunhat/toolchains');
+      const stages = readdirSync(toolchains).filter((name) =>
+        name.startsWith(`.install-${target}-`),
+      );
+      assert.equal(stages.length, 1);
+      const backup = resolve(toolchains, stages[0], 'previous');
+      assert.ok(
+        rejected.stderr.includes(`previous toolchain preserved at ${backup}`),
+        rejected.stderr,
+      );
+      assert.deepEqual(
+        readFileSync(resolve(fixture.root, '.sunhat/toolchain.json')),
+        previous.lock,
+      );
+      for (const [path, bytes] of Object.entries(previous.binaries)) {
+        assert.deepEqual(
+          readFileSync(resolve(backup, path.split('/').at(-1))),
+          bytes,
+        );
+      }
+      renameSync(backup, resolve(toolchains, target));
+      assertPreserved(fixture.root, previous);
+    });
+  }
 
   test(
     `${target} installs on a different Linux filesystem from OS temp`,

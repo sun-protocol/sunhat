@@ -35,6 +35,20 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-unsafe-type-assertion': 'error',
+    },
+  },
+  {
     files: ['templates/hardhat/**/test/**/*.ts'],
     languageOptions: { globals: globals.mocha },
   },

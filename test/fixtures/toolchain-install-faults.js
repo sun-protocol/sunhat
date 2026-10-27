@@ -1,6 +1,13 @@
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from 'node:path';
 
 const root = process.env.SUNHAT_TEST_PROJECT_ROOT;
 const toolchains = resolve(root, '.sunhat/toolchains');
@@ -9,6 +16,7 @@ const lock = resolve(root, '.sunhat/toolchain.json');
 const mode = process.env.SUNHAT_TEST_INSTALL_FAULT;
 const rename = fs.renameSync;
 const write = fs.writeFileSync;
+const remove = fs.rmSync;
 
 function inside(parent, path) {
   const child = relative(parent, path);
@@ -23,8 +31,8 @@ function device(path) {
       ? 'project'
       : 'os-temp';
 }
-function failure(code) {
-  return Object.assign(new Error(`injected ${mode} failure (${code})`), {
+function failure(code, stage = mode) {
+  return Object.assign(new Error(`injected ${stage} failure (${code})`), {
     code,
   });
 }
@@ -39,14 +47,16 @@ fs.renameSync = (from, to) => {
   }
   const restoring = basename(from) === 'previous';
   if (
-    (mode === 'activate' || mode === 'rollback') &&
+    ['activate', 'rollback', 'activate-cleanup', 'rollback-cleanup'].includes(
+      mode,
+    ) &&
     inside(destination, to) &&
     !inside(destination, from) &&
     !restoring
   ) {
     throw failure('EIO');
   }
-  if (mode === 'rollback' && restoring) {
+  if (['rollback', 'rollback-cleanup'].includes(mode) && restoring) {
     throw failure('EACCES');
   }
   if (mode === 'lock' && to === lock) {
@@ -61,6 +71,19 @@ fs.writeFileSync = (path, ...args) => {
     throw failure('EIO');
   }
   return write(path, ...args);
+};
+
+fs.rmSync = (path, ...args) => {
+  if (
+    (['cleanup', 'activate-cleanup'].includes(mode) &&
+      dirname(path) === toolchains &&
+      basename(path).startsWith('.install-')) ||
+    (mode === 'rollback-cleanup' &&
+      basename(path).startsWith('.toolchain-lock-'))
+  ) {
+    throw failure('EACCES', 'cleanup');
+  }
+  return remove(path, ...args);
 };
 
 syncBuiltinESMExports();

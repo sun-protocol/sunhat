@@ -7,6 +7,7 @@ import { usage } from '../errors.js';
 import { readBinding } from '../project/binding.js';
 import { findProjectRoot } from '../project/root.js';
 import type { Invocation } from './parser.js';
+
 export const HELP = `Sunhat project-bound framework CLI
 
 Usage:
@@ -15,6 +16,7 @@ Usage:
 
 Init defaults: framework=foundry, target=tron
 `;
+
 export async function route(invocation: Invocation): Promise<number> {
   if (invocation.kind === 'help') {
     process.stdout.write(HELP);

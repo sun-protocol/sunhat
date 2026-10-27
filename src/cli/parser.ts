@@ -1,10 +1,12 @@
 import { usage } from '../errors.js';
 import type { Target } from '../project/binding.js';
+
 export type Invocation =
   | { kind: 'help' }
   | { kind: 'version' }
   | { kind: 'init'; args: string[] }
   | { kind: 'run'; command: string; args: string[] };
+
 export function parse(argv: readonly string[]): Invocation {
   if (
     argv.length === 0 ||
@@ -29,6 +31,7 @@ export function parse(argv: readonly string[]): Invocation {
   }
   return { kind: 'run', command, args: argv.slice(1) };
 }
+
 export function parseTarget(value: string): Target {
   if (value !== 'tron' && value !== 'evm') {
     return usage(`invalid target ${value}; expected tron or evm`);

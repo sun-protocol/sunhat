@@ -1,27 +1,35 @@
 import { readFileSync } from 'node:fs';
-import { CliError } from '../errors.js';
+import { CliError, errorMessage } from '../errors.js';
 import { parseToml } from './toml.js';
+
 export type Framework = 'hardhat' | 'foundry';
 export type Target = 'tron' | 'evm';
+
 export interface Binding {
   framework: Framework;
   target: Target;
 }
+
 export function readBinding(path: string): Binding {
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
   } catch (error) {
-    throw new CliError(`cannot read ${path}: ${msg(error)}`, 4);
+    throw new CliError(`cannot read ${path}: ${errorMessage(error)}`, 4, {
+      cause: error,
+    });
   }
   let document: unknown;
   try {
     document = parseToml(text);
   } catch (error) {
-    throw new CliError(`invalid TOML in ${path}: ${msg(error)}`, 4);
+    throw new CliError(`invalid TOML in ${path}: ${errorMessage(error)}`, 4, {
+      cause: error,
+    });
   }
   return validateBinding(document, path);
 }
+
 export function validateBinding(document: unknown, path: string): Binding {
   const project = isTable(document) ? document.project : undefined;
   if (!isTable(project)) {
@@ -42,13 +50,11 @@ export function validateBinding(document: unknown, path: string): Binding {
   }
   return { framework, target };
 }
+
 function isTable(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
   const prototype: unknown = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
-}
-function msg(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

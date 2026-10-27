@@ -1,17 +1,19 @@
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { CliError, usage } from '../errors.js';
+import { CliError, errorMessage, hasErrorCode, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
-import { installFoundry } from './toolchain.js';
+import { installFoundry } from '../toolchain/install.js';
 
 interface InitOptions {
   framework: Framework;
@@ -19,18 +21,29 @@ interface InitOptions {
   path: string;
   adopt: boolean;
 }
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
 export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
+  if (!options) {
+    process.stdout.write(
+      'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
+    );
+    return 0;
+  }
   const { framework, target } = options;
   const root = resolve(options.path);
-  mkdirSync(root, { recursive: true });
-  if (existsSync(resolve(root, 'sunhat.toml'))) {
+  if (options.adopt) {
+    validateNativeProject(root, framework);
+  } else {
+    mkdirSync(root, { recursive: true });
+  }
+  if (lstatSync(resolve(root, 'sunhat.toml'), { throwIfNoEntry: false })) {
     return usage(`${root} is already bound by sunhat.toml`);
   }
   const template = resolve(packageRoot, 'templates', framework, target);
   if (options.adopt) {
-    validateNativeProject(root, framework);
     const configuration = resolve(root, 'foundry-toolchain.json');
     if (framework === 'foundry' && !existsSync(configuration)) {
       copyExclusive(resolve(template, 'foundry-toolchain.json'), configuration);
@@ -46,10 +59,10 @@ export async function initProject(argv: readonly string[]): Promise<number> {
     try {
       await installFoundry(root, target);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
       throw new CliError(
-        `${message}; project files are in ${root}; retry with \`sunhat toolchain install\``,
+        `${errorMessage(error)}; project files are in ${root}; retry with \`sunhat toolchain install\``,
         error instanceof CliError ? error.exitCode : 6,
+        { cause: error },
       );
     }
   }
@@ -58,7 +71,8 @@ export async function initProject(argv: readonly string[]): Promise<number> {
   );
   return 0;
 }
-function parseOptions(argv: readonly string[]): InitOptions {
+
+function parseOptions(argv: readonly string[]): InitOptions | undefined {
   try {
     const { values, positionals } = parseArgs({
       args: [...argv],
@@ -72,10 +86,7 @@ function parseOptions(argv: readonly string[]): InitOptions {
       strict: true,
     });
     if (values.help) {
-      process.stdout.write(
-        'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
-      );
-      return process.exit(0) as never;
+      return undefined;
     }
     if (positionals.length > 1) {
       return usage('init accepts at most one path');
@@ -94,15 +105,25 @@ function parseOptions(argv: readonly string[]): InitOptions {
     if (error instanceof CliError) {
       throw error;
     }
-    return usage(error instanceof Error ? error.message : String(error));
+    return usage(errorMessage(error), { cause: error });
   }
 }
+
 function validateNativeProject(root: string, framework: Framework): void {
+  if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+    return usage(
+      `cannot adopt ${framework}: project directory not found at ${root}`,
+    );
+  }
   const found =
     framework === 'foundry'
-      ? existsSync(resolve(root, 'foundry.toml'))
+      ? statSync(resolve(root, 'foundry.toml'), {
+          throwIfNoEntry: false,
+        })?.isFile()
       : ['js', 'cjs', 'ts'].some((ext) =>
-          existsSync(resolve(root, `hardhat.config.${ext}`)),
+          statSync(resolve(root, `hardhat.config.${ext}`), {
+            throwIfNoEntry: false,
+          })?.isFile(),
         );
   if (!found) {
     throw new CliError(
@@ -111,6 +132,7 @@ function validateNativeProject(root: string, framework: Framework): void {
     );
   }
 }
+
 function scaffold(root: string, framework: Framework, target: Target): void {
   const source = resolve(packageRoot, 'templates', framework);
   const files = new Map<string, string>();
@@ -120,7 +142,13 @@ function scaffold(root: string, framework: Framework, target: Target): void {
     path: resolve(root, name),
     data: renderTemplate(from, root),
   }));
-  const conflict = outputs.find((file) => existsSync(file.path));
+  const checked = new Set<string>();
+  for (const file of outputs) {
+    validateParentDirectories(dirname(file.path), root, checked);
+  }
+  const conflict = outputs.find((file) =>
+    lstatSync(file.path, { throwIfNoEntry: false }),
+  );
   if (conflict) {
     throw new CliError(
       `refusing to overwrite existing file ${conflict.path}`,
@@ -131,6 +159,35 @@ function scaffold(root: string, framework: Framework, target: Target): void {
     writeExclusive(file.path, file.data);
   }
 }
+
+function validateParentDirectories(
+  directory: string,
+  root: string,
+  checked: Set<string>,
+): void {
+  const parents: string[] = [];
+  for (let path = directory; path !== root; path = dirname(path)) {
+    parents.push(path);
+  }
+  for (const path of parents.reverse()) {
+    if (checked.has(path)) {
+      continue;
+    }
+    const entry = lstatSync(path, { throwIfNoEntry: false });
+    if (
+      entry &&
+      !entry.isDirectory() &&
+      !(
+        entry.isSymbolicLink() &&
+        statSync(path, { throwIfNoEntry: false })?.isDirectory()
+      )
+    ) {
+      throw new CliError(`parent path is not a directory: ${path}`, 2);
+    }
+    checked.add(path);
+  }
+}
+
 function collectTemplates(
   directory: string,
   relativePath: string,
@@ -148,6 +205,7 @@ function collectTemplates(
     }
   }
 }
+
 function renderTemplate(path: string, root: string): string | Buffer {
   const contents = readFileSync(path);
   if (!path.endsWith('.json')) {
@@ -165,14 +223,23 @@ function renderTemplate(path: string, root: string): string | Buffer {
       (_match, key: keyof typeof values) => JSON.stringify(values[key]),
     );
 }
+
 function copyExclusive(from: string, to: string): void {
   writeExclusive(to, readFileSync(from));
 }
+
 function writeExclusive(path: string, data: string | Buffer): void {
   mkdirSync(dirname(path), { recursive: true });
   try {
     writeFileSync(path, data, { flag: 'wx' });
-  } catch {
-    throw new CliError(`refusing to overwrite existing file ${path}`, 2);
+  } catch (error) {
+    if (hasErrorCode(error, 'EEXIST')) {
+      throw new CliError(`refusing to overwrite existing file ${path}`, 2, {
+        cause: error,
+      });
+    }
+    throw new CliError(`cannot write file ${path}: ${errorMessage(error)}`, 6, {
+      cause: error,
+    });
   }
 }

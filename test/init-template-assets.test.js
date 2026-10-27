@@ -1,21 +1,25 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import {
+import fs, {
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import { initProject } from '../dist/commands/init.js';
+import { CliError } from '../dist/errors.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
@@ -191,6 +195,157 @@ test('new template files participate in conflict checks before any project file 
   }
 });
 
+for (const framework of ['hardhat', 'foundry']) {
+  for (const target of ['evm', 'tron']) {
+    test(`${framework}/${target} rejects parent-file conflicts before writing and remains retryable`, (t) => {
+      const fixture = runtime(t);
+      json(
+        resolve(
+          fixture.packageRoot,
+          'templates',
+          framework,
+          'common/config/nested/custom.json',
+        ),
+        { enabled: true },
+      );
+      for (const blocked of ['test', 'config']) {
+        const project = resolve(fixture.temporary, `conflict-${blocked}`);
+        mkdirSync(project);
+        const owned = resolve(project, blocked);
+        writeFileSync(owned, 'user-owned content');
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const result = run(fixture, [
+            '--framework',
+            framework,
+            '--target',
+            target,
+            project,
+          ]);
+          assert.equal(result.status, 2, result.stderr);
+          assert.match(result.stderr, /parent path is not a directory/u);
+          assert.ok(result.stderr.includes(owned));
+          assert.deepEqual(readdirSync(project), [blocked]);
+          assert.equal(readFileSync(owned, 'utf8'), 'user-owned content');
+        }
+      }
+    });
+  }
+}
+
+test('initialization preserves existing directory symlinks and rejects dangling parents', (t) => {
+  const fixture = runtime(t);
+  const project = resolve(fixture.temporary, 'linked-project');
+  const storage = resolve(fixture.temporary, 'contract-storage');
+  mkdirSync(project);
+  mkdirSync(storage);
+  symlinkSync(
+    storage,
+    resolve(project, 'contracts'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const initialized = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--target',
+    'evm',
+    project,
+  ]);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.ok(existsSync(resolve(storage, 'Counter.sol')));
+
+  const blocked = resolve(fixture.temporary, 'dangling-project');
+  mkdirSync(blocked);
+  symlinkSync(
+    resolve(fixture.temporary, 'missing'),
+    resolve(blocked, 'test'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const rejected = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--target',
+    'evm',
+    blocked,
+  ]);
+  assert.equal(rejected.status, 2, rejected.stderr);
+  assert.match(rejected.stderr, /parent path is not a directory/u);
+  assert.deepEqual(readdirSync(blocked), ['test']);
+});
+
+for (const code of ['EACCES', 'ENOSPC', 'EIO']) {
+  test(`initialization preserves ${code} write failures instead of reporting a conflict`, async (t) => {
+    const root = realpathSync(
+      mkdtempSync(resolve(tmpdir(), 'sunhat-write-error-')),
+    );
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const path = resolve(root, 'package.json');
+    const original = fs.writeFileSync;
+    const failure = Object.assign(
+      new Error(`${code}: injected write failure`),
+      { code },
+    );
+    fs.writeFileSync = function (file, ...args) {
+      if (file === path) {
+        throw failure;
+      }
+      return original(file, ...args);
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(
+        initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+        (error) => {
+          assert.ok(error instanceof CliError);
+          assert.equal(error.exitCode, 6);
+          assert.equal(error.cause, failure);
+          assert.ok(error.message.includes(path));
+          assert.ok(error.message.includes(code));
+          assert.match(error.message, /cannot write file/u);
+          assert.doesNotMatch(error.message, /refusing to overwrite/u);
+          return true;
+        },
+      );
+    } finally {
+      fs.writeFileSync = original;
+      syncBuiltinESMExports();
+    }
+    assert.equal(existsSync(path), false);
+  });
+}
+
+test('a file created after preflight remains protected by exclusive creation', async (t) => {
+  const root = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-write-race-')),
+  );
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = resolve(root, 'package.json');
+  const original = fs.writeFileSync;
+  fs.writeFileSync = function (file, ...args) {
+    if (file === path) {
+      original(path, 'user-owned content', { flag: 'wx' });
+    }
+    return original(file, ...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+      (error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(error.exitCode, 2);
+        assert.equal(error.cause.code, 'EEXIST');
+        assert.ok(error.message.includes(path));
+        assert.match(error.message, /refusing to overwrite/u);
+        return true;
+      },
+    );
+  } finally {
+    fs.writeFileSync = original;
+    syncBuiltinESMExports();
+  }
+  assert.equal(readFileSync(path, 'utf8'), 'user-owned content');
+});
+
 test('adoption reads the template binding without copying the remaining scaffold', (t) => {
   const fixture = runtime(t);
   const project = resolve(fixture.temporary, 'adopted project');
@@ -229,3 +384,101 @@ test('adoption reads the template binding without copying the remaining scaffold
     assert.equal(existsSync(resolve(project, name)), false);
   }
 });
+
+for (const framework of ['hardhat', 'foundry']) {
+  const native = framework === 'hardhat' ? 'hardhat.config.ts' : 'foundry.toml';
+
+  test(`${framework} adoption rejects invalid native configuration paths without writing`, (t) => {
+    const fixture = runtime(t);
+    for (const kind of ['directory', 'dangling-link', 'missing']) {
+      const project = resolve(fixture.temporary, kind);
+      mkdirSync(project);
+      const path = resolve(project, native);
+      if (kind === 'directory') {
+        mkdirSync(path);
+      } else if (kind === 'dangling-link') {
+        symlinkSync(resolve(fixture.temporary, 'absent-config'), path, 'file');
+      }
+      const before = readdirSync(project);
+      const result = run(fixture, [
+        '--framework',
+        framework,
+        '--target',
+        'evm',
+        '--adopt',
+        project,
+      ]);
+      assert.equal(result.status, 2, result.stderr);
+      assert.match(result.stderr, /native configuration not found/u);
+      assert.deepEqual(readdirSync(project), before);
+    }
+  });
+
+  test(`${framework} adoption requires an existing project directory`, (t) => {
+    const fixture = runtime(t);
+    const missingParent = resolve(fixture.temporary, 'missing-parent');
+    const result = run(fixture, [
+      '--framework',
+      framework,
+      '--adopt',
+      resolve(missingParent, 'project'),
+    ]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(existsSync(missingParent), false);
+
+    const file = resolve(fixture.temporary, 'owned-file');
+    writeFileSync(file, 'user-owned content');
+    const rejected = run(fixture, ['--framework', framework, '--adopt', file]);
+    assert.equal(rejected.status, 2, rejected.stderr);
+    assert.equal(readFileSync(file, 'utf8'), 'user-owned content');
+  });
+
+  test(`${framework} adoption rejects an existing dangling binding before copying configuration`, (t) => {
+    const fixture = runtime(t);
+    const project = resolve(fixture.temporary, 'bound-project');
+    mkdirSync(project);
+    writeFileSync(resolve(project, native), 'user-owned configuration');
+    symlinkSync(
+      resolve(fixture.temporary, 'absent-binding'),
+      resolve(project, 'sunhat.toml'),
+      'file',
+    );
+    const before = readdirSync(project);
+    const result = run(fixture, ['--framework', framework, '--adopt', project]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /already bound by sunhat.toml/u);
+    assert.deepEqual(readdirSync(project), before);
+    assert.equal(
+      readFileSync(resolve(project, native), 'utf8'),
+      'user-owned configuration',
+    );
+  });
+
+  test(`${framework} adoption accepts a native configuration file symlink`, (t) => {
+    const fixture = runtime(t);
+    const project = resolve(fixture.temporary, 'linked-project');
+    mkdirSync(project);
+    const original = resolve(fixture.temporary, 'native-config');
+    writeFileSync(original, 'user-owned configuration');
+    symlinkSync(original, resolve(project, native), 'file');
+    if (framework === 'hardhat') {
+      // Invalid earlier candidates must not hide a valid TypeScript config.
+      mkdirSync(resolve(project, 'hardhat.config.js'));
+    }
+    const result = run(fixture, [
+      '--framework',
+      framework,
+      '--target',
+      'evm',
+      '--adopt',
+      project,
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(original, 'utf8'), 'user-owned configuration');
+    assert.match(
+      readFileSync(resolve(project, 'sunhat.toml'), 'utf8'),
+      /target = "evm"/u,
+    );
+    assert.equal(existsSync(resolve(project, 'package.json')), false);
+  });
+}

@@ -23,13 +23,19 @@ for (const tool of ['forge', 'cast', 'anvil', 'chisel']) {
 }
 if (windows) {
   const literal = (value) => `'${value.replaceAll("'", "''")}'`;
-  execFileSync('powershell.exe', [
-    '-NoProfile',
-    '-Command',
-    `$ErrorActionPreference = 'Stop'; Compress-Archive -LiteralPath @(${files.map((name) => literal(resolve(source, name))).join(', ')}) -DestinationPath ${literal(archive)}`,
-  ]);
+  execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-Command',
+      `$ErrorActionPreference = 'Stop'; Compress-Archive -LiteralPath @(${files.map((name) => literal(resolve(source, name))).join(', ')}) -DestinationPath ${literal(archive)}`,
+    ],
+    { timeout: 30_000 },
+  );
 } else {
-  execFileSync('tar', ['-czf', archive, '-C', source, ...files]);
+  execFileSync('tar', ['-czf', archive, '-C', source, ...files], {
+    timeout: 30_000,
+  });
 }
 
 export const foundryInitArgs = [
