@@ -1,8 +1,10 @@
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -120,7 +122,13 @@ function scaffold(root: string, framework: Framework, target: Target): void {
     path: resolve(root, name),
     data: renderTemplate(from, root),
   }));
-  const conflict = outputs.find((file) => existsSync(file.path));
+  const checked = new Set<string>();
+  for (const file of outputs) {
+    validateParentDirectories(dirname(file.path), root, checked);
+  }
+  const conflict = outputs.find((file) =>
+    lstatSync(file.path, { throwIfNoEntry: false }),
+  );
   if (conflict) {
     throw new CliError(
       `refusing to overwrite existing file ${conflict.path}`,
@@ -129,6 +137,33 @@ function scaffold(root: string, framework: Framework, target: Target): void {
   }
   for (const file of outputs) {
     writeExclusive(file.path, file.data);
+  }
+}
+function validateParentDirectories(
+  directory: string,
+  root: string,
+  checked: Set<string>,
+): void {
+  const parents: string[] = [];
+  for (let path = directory; path !== root; path = dirname(path)) {
+    parents.push(path);
+  }
+  for (const path of parents.reverse()) {
+    if (checked.has(path)) {
+      continue;
+    }
+    const entry = lstatSync(path, { throwIfNoEntry: false });
+    if (
+      entry &&
+      !entry.isDirectory() &&
+      !(
+        entry.isSymbolicLink() &&
+        statSync(path, { throwIfNoEntry: false })?.isDirectory()
+      )
+    ) {
+      throw new CliError(`parent path is not a directory: ${path}`, 2);
+    }
+    checked.add(path);
   }
 }
 function collectTemplates(

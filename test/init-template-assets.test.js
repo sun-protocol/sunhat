@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -189,6 +190,83 @@ test('new template files participate in conflict checks before any project file 
   for (const name of ['package.json', 'sunhat.toml', 'src/Counter.sol']) {
     assert.equal(existsSync(resolve(project, name)), false);
   }
+});
+
+for (const framework of ['hardhat', 'foundry']) {
+  for (const target of ['evm', 'tron']) {
+    test(`${framework}/${target} rejects parent-file conflicts before writing and remains retryable`, (t) => {
+      const fixture = runtime(t);
+      json(
+        resolve(
+          fixture.packageRoot,
+          'templates',
+          framework,
+          'common/config/nested/custom.json',
+        ),
+        { enabled: true },
+      );
+      for (const blocked of ['test', 'config']) {
+        const project = resolve(fixture.temporary, `conflict-${blocked}`);
+        mkdirSync(project);
+        const owned = resolve(project, blocked);
+        writeFileSync(owned, 'user-owned content');
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const result = run(fixture, [
+            '--framework',
+            framework,
+            '--target',
+            target,
+            project,
+          ]);
+          assert.equal(result.status, 2, result.stderr);
+          assert.match(result.stderr, /parent path is not a directory/u);
+          assert.ok(result.stderr.includes(owned));
+          assert.deepEqual(readdirSync(project), [blocked]);
+          assert.equal(readFileSync(owned, 'utf8'), 'user-owned content');
+        }
+      }
+    });
+  }
+}
+
+test('initialization preserves existing directory symlinks and rejects dangling parents', (t) => {
+  const fixture = runtime(t);
+  const project = resolve(fixture.temporary, 'linked-project');
+  const storage = resolve(fixture.temporary, 'contract-storage');
+  mkdirSync(project);
+  mkdirSync(storage);
+  symlinkSync(
+    storage,
+    resolve(project, 'contracts'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const initialized = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--target',
+    'evm',
+    project,
+  ]);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  assert.ok(existsSync(resolve(storage, 'Counter.sol')));
+
+  const blocked = resolve(fixture.temporary, 'dangling-project');
+  mkdirSync(blocked);
+  symlinkSync(
+    resolve(fixture.temporary, 'missing'),
+    resolve(blocked, 'test'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+  const rejected = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--target',
+    'evm',
+    blocked,
+  ]);
+  assert.equal(rejected.status, 2, rejected.stderr);
+  assert.match(rejected.stderr, /parent path is not a directory/u);
+  assert.deepEqual(readdirSync(blocked), ['test']);
 });
 
 test('adoption reads the template binding without copying the remaining scaffold', (t) => {
