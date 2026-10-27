@@ -122,10 +122,21 @@ export async function installFoundry(
     return 0;
   } finally {
     if (!preserveBackup) {
-      rmSync(temporary, { recursive: true, force: true });
+      removeTemporaryDirectory(temporary);
     }
     if (lockTemporary) {
-      rmSync(lockTemporary, { recursive: true, force: true });
+      removeTemporaryDirectory(lockTemporary);
     }
+  }
+}
+
+function removeTemporaryDirectory(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (error) {
+    // Cleanup must not replace the installation result or prevent further cleanup.
+    process.stderr.write(
+      `warning: cannot remove temporary directory ${path}: ${errorMessage(error)}\n`,
+    );
   }
 }
