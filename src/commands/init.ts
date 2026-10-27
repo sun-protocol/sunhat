@@ -60,7 +60,7 @@ function scaffold(root: string, framework: Framework, target: Target): void {
   }
 }
 function hardhatPackage(root: string, target: Target): object {
-  const dependencies: Record<string, string> = { '@nomicfoundation/hardhat-chai-matchers': '2.0.0', '@nomicfoundation/hardhat-ethers': '3.0.0', '@types/chai': '4.3.0', '@types/mocha': '10.0.0', chai: '4.5.0', ethers: '6.13.0', hardhat: '2.29.1', 'ts-node': '10.9.2', typescript: '5.6.3' };
+  const dependencies: Record<string, string> = { '@nomicfoundation/hardhat-chai-matchers': '2.0.0', '@nomicfoundation/hardhat-ethers': '3.0.8', '@types/chai': '4.3.0', '@types/mocha': '10.0.0', chai: '4.5.0', ethers: '6.13.0', hardhat: '2.29.1', 'ts-node': '10.9.2', typescript: '5.6.3' };
   if (target === 'tron') dependencies['@openzeppelin/hardhat-tron'] = '0.1.0';
   dependencies.sunhat = sunhatDependency();
   return { name: basename(root), version: '0.1.0', private: true, scripts: { build: 'sunhat compile', test: 'sunhat test' }, devDependencies: dependencies };

@@ -18,4 +18,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run test:templates
       - run: npm run pack:check
+
+  windows-toolchain:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --test test/toolchain.test.js

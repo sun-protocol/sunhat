@@ -127,6 +127,8 @@ sunhat toolchain check
 
 EVM projects download `foundry-rs/foundry@v1.8.6`. TRON projects download the public release for `elsvv/foundry-tron@9ea07db4b342fd606f6f7c3f99be1757e90d5e90`. Sunhat verifies the archive against a pinned SHA-256 digest before extracting it to `.sunhat/toolchains/`, then verifies the selected binary's digest on every invocation.
 
+Installation stages all binaries on the project's toolchain filesystem before replacing an existing installation. The previous directory is kept until the new lock file is committed. If activation or lock replacement fails, Sunhat restores the previous directory; if restoration also fails, it retains the backup and reports its location.
+
 Child processes receive a structured argv array and run with `shell: false`. They inherit stdout and stderr, and Sunhat forwards SIGINT, SIGTERM, and the native exit status.
 
 ## Development
@@ -139,3 +141,5 @@ npm test
 ```
 
 `npm test` builds Sunhat, initializes all four framework/target combinations, and exercises the commands listed in the generated READMEs, npm scripts, argument forwarding, subdirectory resolution, exit codes, and toolchain rejection paths. Framework executables and download responses are fixtures; the suite does not run Solidity compilers, Docker/TRE, or real deployments.
+
+Run `npm run test:templates` to generate fresh Hardhat EVM and TRON projects, install their declared dependencies, and check both with `tsc --noEmit`. This integration suite requires access to the npm registry and checks dependency declarations without enabling `skipLibCheck`. It does not require Docker or a blockchain connection.
