@@ -4,23 +4,23 @@ This project uses Sunhat to run Hardhat 2 with the Hardhat-TRON plugin and a TRE
 
 ## Global command prerequisites
 
-The `sunhat ...` examples use the `sunhat@2.0.0` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
+The `sunhat ...` examples use the `@sun-protocol/sunhat@2.0.0` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
 
 ```bash
-npm install --global sunhat@2.0.0
+npm install --global @sun-protocol/sunhat@2.0.0
 sunhat --version
 ```
 
 Run project commands from this directory or a subdirectory after the dependency installation below. Global Sunhat uses the project's local Hardhat 2 and Hardhat-TRON dependencies and configuration.
 
-The quick start also installs `sunhat@2.0.0` as an exact local development dependency. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
+The quick start also installs `@sun-protocol/sunhat@2.0.0` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
 
 Docker must be installed and running. The generated configuration starts `tronbox/tre:dev` automatically when required.
 
 ## Quick start
 
 ```bash
-npm install --save-dev --save-exact sunhat@2.0.0
+npm install --save-dev --save-exact sunhat@npm:@sun-protocol/sunhat@2.0.0
 npm run build
 npm test
 ```
@@ -46,7 +46,7 @@ Arguments after the Sunhat command are passed to Hardhat unchanged.
 
 ## External TRE instance
 
-Set both variables to use an existing TRE instance instead of the generated local defaults:
+Set `tre.autoStart` to `false` in `hardhat.config.ts`, then configure both variables to use an existing TRE instance:
 
 ```bash
 export TRE_URL="http://127.0.0.1:9090/jsonrpc"

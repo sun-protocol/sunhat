@@ -12,6 +12,7 @@
     "dist/",
     "templates/",
     "docs/toml-binding.md",
+    "docs/QuickStart.md",
     "README.md"
   ],
   "engines": {

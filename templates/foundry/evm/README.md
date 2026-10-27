@@ -4,21 +4,21 @@ This project uses Sunhat to select and run a project-local Foundry toolchain for
 
 ## Global command prerequisites
 
-The `sunhat ...` examples use the `sunhat@2.0.0` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
+The `sunhat ...` examples use the `@sun-protocol/sunhat@2.0.0` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
 
 ```bash
-npm install --global sunhat@2.0.0
+npm install --global @sun-protocol/sunhat@2.0.0
 sunhat --version
 ```
 
 Run project commands from this directory or a subdirectory. `sunhat init` has already installed the Foundry toolchain. Global Sunhat uses the binaries in this project's `.sunhat/` directory.
 
-The quick start also installs `sunhat@2.0.0` as an exact local development dependency. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
+The quick start also installs `@sun-protocol/sunhat@2.0.0` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
 
 ## Quick start
 
 ```bash
-npm install --save-dev --save-exact sunhat@2.0.0
+npm install --save-dev --save-exact sunhat@npm:@sun-protocol/sunhat@2.0.0
 npm run build
 npm test
 ```
