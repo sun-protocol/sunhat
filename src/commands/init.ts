@@ -207,7 +207,15 @@ function writeExclusive(path: string, data: string | Buffer): void {
   mkdirSync(dirname(path), { recursive: true });
   try {
     writeFileSync(path, data, { flag: 'wx' });
-  } catch {
-    throw new CliError(`refusing to overwrite existing file ${path}`, 2);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+      throw new CliError(`refusing to overwrite existing file ${path}`, 2, {
+        cause: error,
+      });
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new CliError(`cannot write file ${path}: ${message}`, 6, {
+      cause: error,
+    });
   }
 }

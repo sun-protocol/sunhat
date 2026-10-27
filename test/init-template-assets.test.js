@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import {
+import fs, {
   cpSync,
   existsSync,
   mkdirSync,
@@ -12,11 +12,14 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import { initProject } from '../dist/commands/init.js';
+import { CliError } from '../dist/errors.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 
@@ -267,6 +270,80 @@ test('initialization preserves existing directory symlinks and rejects dangling 
   assert.equal(rejected.status, 2, rejected.stderr);
   assert.match(rejected.stderr, /parent path is not a directory/u);
   assert.deepEqual(readdirSync(blocked), ['test']);
+});
+
+for (const code of ['EACCES', 'ENOSPC', 'EIO']) {
+  test(`initialization preserves ${code} write failures instead of reporting a conflict`, async (t) => {
+    const root = realpathSync(
+      mkdtempSync(resolve(tmpdir(), 'sunhat-write-error-')),
+    );
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const path = resolve(root, 'package.json');
+    const original = fs.writeFileSync;
+    const failure = Object.assign(
+      new Error(`${code}: injected write failure`),
+      { code },
+    );
+    fs.writeFileSync = function (file, ...args) {
+      if (file === path) {
+        throw failure;
+      }
+      return original(file, ...args);
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(
+        initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+        (error) => {
+          assert.ok(error instanceof CliError);
+          assert.equal(error.exitCode, 6);
+          assert.equal(error.cause, failure);
+          assert.ok(error.message.includes(path));
+          assert.ok(error.message.includes(code));
+          assert.match(error.message, /cannot write file/u);
+          assert.doesNotMatch(error.message, /refusing to overwrite/u);
+          return true;
+        },
+      );
+    } finally {
+      fs.writeFileSync = original;
+      syncBuiltinESMExports();
+    }
+    assert.equal(existsSync(path), false);
+  });
+}
+
+test('a file created after preflight remains protected by exclusive creation', async (t) => {
+  const root = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-write-race-')),
+  );
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = resolve(root, 'package.json');
+  const original = fs.writeFileSync;
+  fs.writeFileSync = function (file, ...args) {
+    if (file === path) {
+      original(path, 'user-owned content', { flag: 'wx' });
+    }
+    return original(file, ...args);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(
+      initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+      (error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(error.exitCode, 2);
+        assert.equal(error.cause.code, 'EEXIST');
+        assert.ok(error.message.includes(path));
+        assert.match(error.message, /refusing to overwrite/u);
+        return true;
+      },
+    );
+  } finally {
+    fs.writeFileSync = original;
+    syncBuiltinESMExports();
+  }
+  assert.equal(readFileSync(path, 'utf8'), 'user-owned content');
 });
 
 test('adoption reads the template binding without copying the remaining scaffold', (t) => {
