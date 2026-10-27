@@ -31,16 +31,16 @@ The generated configuration selects the `tre` network and compiles contracts wit
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Compile TRON contracts with `sunhat compile`. |
-| `npm test` | Run the test suite against TRE with `sunhat test`. |
-| `sunhat compile --force` | Recompile all contracts with `tron-solc`. |
-| `sunhat test --grep Counter` | Run matching tests against TRE. |
-| `sunhat node` | Run the configured Hardhat task. |
+| Command                        | Purpose                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `npm run build`                | Compile TRON contracts with `sunhat compile`.        |
+| `npm test`                     | Run the test suite against TRE with `sunhat test`.   |
+| `sunhat compile --force`       | Recompile all contracts with `tron-solc`.            |
+| `sunhat test --grep Counter`   | Run matching tests against TRE.                      |
+| `sunhat node`                  | Run the configured Hardhat task.                     |
 | `sunhat run scripts/deploy.ts` | Run the deployment script on the configured network. |
-| `sunhat clean` | Remove generated Hardhat artifacts and cache files. |
-| `sunhat <plugin-task>` | Run a task registered by a Hardhat plugin. |
+| `sunhat clean`                 | Remove generated Hardhat artifacts and cache files.  |
+| `sunhat <plugin-task>`         | Run a task registered by a Hardhat plugin.           |
 
 Arguments after the Sunhat command are passed to Hardhat unchanged.
 

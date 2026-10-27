@@ -31,22 +31,22 @@ The install command replaces the scaffold's `file:` Sunhat reference with the np
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `npm run build` | Compile contracts with `sunhat build`. |
-| `npm test` | Run tests on the TRON execution path with `sunhat test`. |
-| `sunhat build --sizes` | Compile contracts and report contract sizes. |
-| `sunhat test -vvv` | Run tests with verbose traces. |
-| `sunhat test --match-contract CounterTest` | Run one test contract. |
-| `sunhat test --gas-report` | Report energy and bandwidth usage. |
-| `sunhat snapshot` | Record energy snapshots. |
-| `sunhat coverage` | Generate a coverage report. |
-| `sunhat script <path>` | Run a Foundry script. |
-| `sunhat create <contract>` | Deploy a contract through the TRON transaction path. |
-| `sunhat cast <command>` | Run a Cast command through Foundry-TRON. |
-| `sunhat toolchain install` | Download and verify the pinned project toolchain. |
-| `sunhat toolchain info` | Print the pinned toolchain metadata. |
-| `sunhat toolchain check` | Verify the installed binary digests. |
+| Command                                    | Purpose                                                  |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `npm run build`                            | Compile contracts with `sunhat build`.                   |
+| `npm test`                                 | Run tests on the TRON execution path with `sunhat test`. |
+| `sunhat build --sizes`                     | Compile contracts and report contract sizes.             |
+| `sunhat test -vvv`                         | Run tests with verbose traces.                           |
+| `sunhat test --match-contract CounterTest` | Run one test contract.                                   |
+| `sunhat test --gas-report`                 | Report energy and bandwidth usage.                       |
+| `sunhat snapshot`                          | Record energy snapshots.                                 |
+| `sunhat coverage`                          | Generate a coverage report.                              |
+| `sunhat script <path>`                     | Run a Foundry script.                                    |
+| `sunhat create <contract>`                 | Deploy a contract through the TRON transaction path.     |
+| `sunhat cast <command>`                    | Run a Cast command through Foundry-TRON.                 |
+| `sunhat toolchain install`                 | Download and verify the pinned project toolchain.        |
+| `sunhat toolchain info`                    | Print the pinned toolchain metadata.                     |
+| `sunhat toolchain check`                   | Verify the installed binary digests.                     |
 
 Arguments after the Sunhat command are passed to Foundry-TRON unchanged.
 

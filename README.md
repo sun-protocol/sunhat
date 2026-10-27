@@ -16,11 +16,11 @@ sunhat --help
 
 These commands are available without a project binding:
 
-| Command | Purpose |
-| --- | --- |
-| `sunhat`, `sunhat --help`, `sunhat -h` | Print CLI usage and initialization defaults. |
-| `sunhat --version`, `sunhat -V` | Print the version of the invoked Sunhat executable. |
-| `sunhat init [options] [path]` | Create a project, or bind an existing project with `--adopt`. |
+| Command                                | Purpose                                                       |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `sunhat`, `sunhat --help`, `sunhat -h` | Print CLI usage and initialization defaults.                  |
+| `sunhat --version`, `sunhat -V`        | Print the version of the invoked Sunhat executable.           |
+| `sunhat init [options] [path]`         | Create a project, or bind an existing project with `--adopt`. |
 
 All other commands require a valid `sunhat.toml` in the current directory or an ancestor. Run them from the project root or one of its subdirectories. Global Sunhat still resolves Hardhat from the project's dependencies and Foundry from the project's `.sunhat/` toolchain; global installation does not install either framework for the project.
 
@@ -73,42 +73,42 @@ The following lists use a globally installed Sunhat and require the project bind
 
 Complete the project dependency installation above first. Hardhat must be declared with an exact version matching the installed Hardhat 2 package.
 
-| Command | Purpose |
-| --- | --- |
-| `sunhat compile [--force]` | Compile contracts, optionally forcing recompilation. |
-| `sunhat test [--grep Counter]` | Run all tests or matching tests. |
-| `sunhat run scripts/deploy.ts` | Run the deployment script on the configured network. |
-| `sunhat node` | Run the configured Hardhat node task. |
-| `sunhat console [--no-compile]` | Open the Hardhat console. |
-| `sunhat flatten contracts/Counter.sol` | Print flattened contract source. |
-| `sunhat clean` | Remove Hardhat artifacts and cache. |
-| `sunhat help [task]` | List native tasks or show help for one task. |
-| `sunhat <plugin-task> [args...]` | Forward a task registered by an installed plugin. |
+| Command                                | Purpose                                              |
+| -------------------------------------- | ---------------------------------------------------- |
+| `sunhat compile [--force]`             | Compile contracts, optionally forcing recompilation. |
+| `sunhat test [--grep Counter]`         | Run all tests or matching tests.                     |
+| `sunhat run scripts/deploy.ts`         | Run the deployment script on the configured network. |
+| `sunhat node`                          | Run the configured Hardhat node task.                |
+| `sunhat console [--no-compile]`        | Open the Hardhat console.                            |
+| `sunhat flatten contracts/Counter.sol` | Print flattened contract source.                     |
+| `sunhat clean`                         | Remove Hardhat artifacts and cache.                  |
+| `sunhat help [task]`                   | List native tasks or show help for one task.         |
+| `sunhat <plugin-task> [args...]`       | Forward a task registered by an installed plugin.    |
 
 ### Foundry projects: EVM and TRON
 
 Install the project toolchain with `sunhat toolchain install` before running native commands. The installer requires access to the pinned GitHub release and `tar` on macOS/Linux or PowerShell on Windows. It supports macOS/Linux arm64 and x64, and Windows x64.
 
-| Command | Purpose | Target |
-| --- | --- | --- |
-| `sunhat toolchain install` | Download and verify the pinned project toolchain. | EVM, TRON |
-| `sunhat toolchain check` | Verify the installed binary digests. | EVM, TRON |
-| `sunhat toolchain info` | Print the installed toolchain metadata. | EVM, TRON |
-| `sunhat build [--sizes]` | Compile contracts and optionally report sizes. | EVM, TRON |
-| `sunhat test [-vvv]` | Run tests, optionally with verbose traces. | EVM, TRON |
-| `sunhat test --match-contract CounterTest` | Run one test contract. | EVM, TRON |
-| `sunhat test --gas-report` | Request the selected toolchain's resource report. | EVM, TRON |
-| `sunhat snapshot` | Record resource usage snapshots. | EVM, TRON |
-| `sunhat coverage` | Generate a coverage report. | EVM, TRON |
-| `sunhat script <path>` | Run a Foundry script. | EVM, TRON |
-| `sunhat create <contract>` | Deploy a contract with the selected toolchain. | EVM, TRON |
-| `sunhat clean` | Remove build artifacts and cache. | EVM, TRON |
-| `sunhat fmt --check` | Check Solidity formatting. | EVM, TRON |
-| `sunhat inspect <contract> abi` | Print a contract's ABI. | EVM, TRON |
-| `sunhat cast <command> [args...]` | Run Cast from the project toolchain. | EVM, TRON |
-| `sunhat anvil [args...]` | Start the project-pinned local EVM node. | EVM only |
-| `sunhat chisel [args...]` | Open the project-pinned Solidity REPL. | EVM only |
-| `sunhat help [command]` | Show native Forge help. | EVM, TRON |
+| Command                                    | Purpose                                           | Target    |
+| ------------------------------------------ | ------------------------------------------------- | --------- |
+| `sunhat toolchain install`                 | Download and verify the pinned project toolchain. | EVM, TRON |
+| `sunhat toolchain check`                   | Verify the installed binary digests.              | EVM, TRON |
+| `sunhat toolchain info`                    | Print the installed toolchain metadata.           | EVM, TRON |
+| `sunhat build [--sizes]`                   | Compile contracts and optionally report sizes.    | EVM, TRON |
+| `sunhat test [-vvv]`                       | Run tests, optionally with verbose traces.        | EVM, TRON |
+| `sunhat test --match-contract CounterTest` | Run one test contract.                            | EVM, TRON |
+| `sunhat test --gas-report`                 | Request the selected toolchain's resource report. | EVM, TRON |
+| `sunhat snapshot`                          | Record resource usage snapshots.                  | EVM, TRON |
+| `sunhat coverage`                          | Generate a coverage report.                       | EVM, TRON |
+| `sunhat script <path>`                     | Run a Foundry script.                             | EVM, TRON |
+| `sunhat create <contract>`                 | Deploy a contract with the selected toolchain.    | EVM, TRON |
+| `sunhat clean`                             | Remove build artifacts and cache.                 | EVM, TRON |
+| `sunhat fmt --check`                       | Check Solidity formatting.                        | EVM, TRON |
+| `sunhat inspect <contract> abi`            | Print a contract's ABI.                           | EVM, TRON |
+| `sunhat cast <command> [args...]`          | Run Cast from the project toolchain.              | EVM, TRON |
+| `sunhat anvil [args...]`                   | Start the project-pinned local EVM node.          | EVM only  |
+| `sunhat chisel [args...]`                  | Open the project-pinned Solidity REPL.            | EVM only  |
+| `sunhat help [command]`                    | Show native Forge help.                           | EVM, TRON |
 
 Other native Forge commands are forwarded as `sunhat <command> [args...]`. The `toolchain` commands above are managed by Sunhat only for Foundry bindings; in a Hardhat project, the same arguments are forwarded to Hardhat as a native task.
 
@@ -133,13 +133,17 @@ Child processes receive a structured argv array and run with `shell: false`. The
 
 ## Development
 
-Run these commands from a Sunhat source checkout:
+Use Node.js 24 for repository development, matching CI. Run these commands from a Sunhat source checkout:
 
 ```bash
 npm install
+npm run lint
+npm run format:check
 npm test
 ```
 
 `npm test` builds Sunhat, initializes all four framework/target combinations, and exercises the commands listed in the generated READMEs, npm scripts, argument forwarding, subdirectory resolution, exit codes, and toolchain rejection paths. Framework executables and download responses are fixtures; the suite does not run Solidity compilers, Docker/TRE, or real deployments.
 
 Run `npm run test:templates` to generate fresh Hardhat EVM and TRON projects, install their declared dependencies, and check both with `tsc --noEmit`. This integration suite requires access to the npm registry and checks dependency declarations without enabling `skipLibCheck`. It does not require Docker or a blockchain connection.
+
+Use `npm run lint:fix` to apply ESLint fixes and `npm run format` to format JavaScript, TypeScript, Solidity templates, JSON, YAML, and Markdown. CI runs both lint and formatting checks. Generated files and local toolchains are excluded.
