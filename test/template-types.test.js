@@ -23,13 +23,14 @@ function run(args, cwd, timeout = 10_000) {
       .filter(Boolean)
       .join('\n'),
   );
+  return result;
 }
 
 for (const target of ['evm', 'tron']) {
   test(
     `Hardhat ${target} template passes tsc --noEmit with its declared dependencies`,
     { timeout: 180_000 },
-    (t) => {
+    async (t) => {
       assert.ok(
         process.env.npm_execpath,
         'Run this integration suite with npm run test:templates',
@@ -68,6 +69,34 @@ for (const target of ['evm', 'tron']) {
         project,
         30_000,
       );
+      if (target === 'tron') {
+        await t.test(
+          'the default test task never starts or stops Docker',
+          () => {
+            const program = `
+            const assert = require('node:assert/strict');
+            const { basename } = require('node:path');
+            const childProcess = require('node:child_process');
+            for (const method of ['spawn', 'spawnSync']) {
+              const original = childProcess[method];
+              childProcess[method] = (command, ...args) => {
+                assert.ok(!['docker', 'docker.exe'].includes(basename(String(command))),
+                  'the default template must not invoke Docker');
+                return original(command, ...args);
+              };
+            }
+            require('ts-node/register');
+            const hre = require('hardhat');
+            hre.run('test', { noCompile: true, grep: '^$' }).catch((error) => {
+              process.stderr.write(String(error) + '\\n');
+              process.exitCode = 1;
+            });
+          `;
+            const result = run(['-e', program], project, 30_000);
+            assert.match(result.stdout, /0 passing/u);
+          },
+        );
+      }
     },
   );
 }

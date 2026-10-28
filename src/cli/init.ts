@@ -4,7 +4,6 @@ import { CliError, errorMessage, usage } from '../errors.js';
 import type { Framework, Target } from '../project/binding.js';
 import { applyScaffold } from '../scaffold/apply.js';
 import { planAdoption, planScaffold } from '../scaffold/plan.js';
-import { installFoundry } from '../toolchain/install.js';
 import { parseTarget } from './parser.js';
 
 interface InitOptions {
@@ -18,7 +17,7 @@ export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseInitOptions(argv);
   if (!options) {
     process.stdout.write(
-      'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\n',
+      'Usage: sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron\nCreates project files only; install framework dependencies separately.\n',
     );
     return 0;
   }
@@ -28,20 +27,14 @@ export async function initProject(argv: readonly string[]): Promise<number> {
     ? planAdoption(root, framework, target)
     : planScaffold(root, framework, target);
   applyScaffold(plan);
-  if (framework === 'foundry') {
-    try {
-      await installFoundry(root, target);
-    } catch (error) {
-      throw new CliError(
-        `${errorMessage(error)}; project files are in ${root}; retry with \`sunhat toolchain install\``,
-        error instanceof CliError ? error.exitCode : 6,
-        { cause: error },
-      );
-    }
-  }
   process.stderr.write(
     `${options.adopt ? 'adopted' : 'initialized'} ${framework}/${target} project at ${root}\n`,
   );
+  if (framework === 'foundry') {
+    process.stderr.write(
+      'Next: run `sunhat toolchain install` from the project directory.\n',
+    );
+  }
   return 0;
 }
 

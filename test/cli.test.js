@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -14,9 +15,9 @@ import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
 import {
   configureFoundryTemplates,
-  foundryInitArgs,
-  foundryInitEnv,
-} from './fixtures/foundry-init.js';
+  foundryInstallArgs,
+  foundryInstallEnv,
+} from './fixtures/foundry-install.js';
 import { copyCliRuntime } from './fixtures/runtime.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -35,12 +36,18 @@ function temp(name) {
 function run(cwd, args) {
   return spawnSync(
     process.execPath,
-    [...(args[0] === 'init' ? foundryInitArgs : []), cli, ...args],
+    [
+      ...(args[0] === 'toolchain' && args[1] === 'install'
+        ? foundryInstallArgs
+        : []),
+      cli,
+      ...args,
+    ],
     {
       cwd,
       encoding: 'utf8',
       timeout: 10_000,
-      env: { ...process.env, ...foundryInitEnv },
+      env: { ...process.env, ...foundryInstallEnv },
     },
   );
 }
@@ -128,6 +135,10 @@ test('init defaults to Foundry and TRON', () => {
   );
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry TRON Project with Sunhat/u);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
+  assert.match(result.stderr, /sunhat toolchain install/u);
+  const installed = run(root, ['toolchain', 'install']);
+  assert.equal(installed.status, 0, installed.stderr);
   const build = run(root, ['build']);
   assert.equal(build.status, 0, build.stderr);
   assert.equal(build.stdout, '["build"]');
@@ -154,6 +165,10 @@ test('init accepts an explicit Foundry EVM target', () => {
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry EVM Project with Sunhat/u);
   assert.doesNotMatch(readme, /network = "tron"/u);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
+  assert.match(result.stderr, /sunhat toolchain install/u);
+  const installed = run(root, ['toolchain', 'install']);
+  assert.equal(installed.status, 0, installed.stderr);
   const build = run(root, ['build']);
   assert.equal(build.status, 0, build.stderr);
   assert.equal(build.stdout, '["build"]');

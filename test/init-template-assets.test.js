@@ -16,11 +16,6 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import {
-  configureFoundryTemplates,
-  foundryInitArgs,
-  foundryInitEnv,
-} from './fixtures/foundry-init.js';
 import { copyCliRuntime } from './fixtures/runtime.js';
 import { initProject } from '../dist/cli/init.js';
 import { CliError } from '../dist/errors.js';
@@ -42,7 +37,6 @@ function runtime(t) {
     process.platform === 'win32' ? 'package with spaces' : 'package "quoted"',
   );
   const fixture = copyCliRuntime(packageRoot);
-  configureFoundryTemplates(packageRoot);
   return { temporary, ...fixture };
 }
 
@@ -52,19 +46,11 @@ function json(path, value) {
 }
 
 function run(fixture, args) {
-  return spawnSync(
-    process.execPath,
-    [...foundryInitArgs, fixture.cli, 'init', ...args],
-    {
-      cwd: fixture.temporary,
-      encoding: 'utf8',
-      timeout: 10_000,
-      env: {
-        ...process.env,
-        ...foundryInitEnv,
-      },
-    },
-  );
+  return spawnSync(process.execPath, [fixture.cli, 'init', ...args], {
+    cwd: fixture.temporary,
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
 }
 
 test('scaffold plans accept relative paths and can be inspected before creating project directories', (t) => {
@@ -210,12 +196,8 @@ for (const framework of ['hardhat', 'foundry']) {
           JSON.parse(readFileSync(resolve(project, 'foundry-toolchain.json'))),
           toolchain,
         );
-        const installed = JSON.parse(
-          readFileSync(resolve(project, '.sunhat/toolchain.json')),
-        );
-        assert.equal(installed.release, 'template-release');
-        assert.equal(installed.revision, 'template-revision');
       }
+      assert.equal(existsSync(resolve(project, '.sunhat')), false);
       assert.equal(
         readFileSync(resolve(project, native), 'utf8'),
         customizedConfig,

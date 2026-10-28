@@ -15,13 +15,15 @@ Run project commands from this directory or a subdirectory after the dependency 
 
 The generated project declares `{{sunhatPackage}}` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
 
-Docker must be installed and running. The generated configuration starts `tronbox/tre:dev` automatically when required.
+The generated configuration sets `tre.autoStart` to `false`. Tests connect to a TRE instance you manage; the default configuration does not start Docker containers.
 
 ## Quick start
 
 ```bash
 npm install
 npm run build
+export TRE_URL="http://127.0.0.1:9090/jsonrpc"
+export TRE_PRIVATE_KEY="<development-private-key>"
 npm test
 ```
 
@@ -44,9 +46,9 @@ The generated configuration selects the `tre` network and compiles contracts wit
 
 Arguments after the Sunhat command are passed to Hardhat unchanged.
 
-## External TRE instance
+## TRE connection
 
-Set `tre.autoStart` to `false` in `hardhat.config.ts`, then configure both variables to use an existing TRE instance:
+Configure both variables to connect to an existing TRE instance:
 
 ```bash
 export TRE_URL="http://127.0.0.1:9090/jsonrpc"
@@ -55,3 +57,5 @@ sunhat test
 ```
 
 Never use the generated TRE development key on a public network.
+
+To opt into automatic container startup, install and start Docker, then set `tre.autoStart` to `true` in `hardhat.config.ts`. The plugin can then start the configured `tronbox/tre:dev` image when a task needs it.

@@ -16,6 +16,7 @@ Usage:
   sunhat <command> [args...]
 
 Init defaults: framework=foundry, target=tron
+Init creates project files only. For Foundry, run \`sunhat toolchain install\` in the project directory.
 `;
 
 export async function route(invocation: Invocation): Promise<number> {

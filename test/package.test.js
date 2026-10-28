@@ -18,11 +18,15 @@ import test from 'node:test';
 import { parse } from 'smol-toml';
 import {
   configureFoundryTemplates,
-  foundryInitArgs,
-  foundryInitEnv,
-} from './fixtures/foundry-init.js';
+  foundryInstallArgs,
+  foundryInstallEnv,
+} from './fixtures/foundry-install.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
+const offlineDownload = new URL(
+  './fixtures/toolchain-download.js',
+  import.meta.url,
+).href;
 const metadata = JSON.parse(
   readFileSync(resolve(repository, 'package.json'), 'utf8'),
 );
@@ -147,13 +151,18 @@ test(
     configureFoundryTemplates(installed);
     for (const framework of ['foundry', 'hardhat']) {
       for (const target of ['evm', 'tron']) {
+        const project = resolve(consumer, `${framework}-${target}`);
         await t.test(
-          `${framework}/${target} initializes from the installed templates`,
+          `${framework}/${target} initializes offline from the installed templates`,
           () => {
-            const project = resolve(consumer, `${framework}-${target}`);
-            run(
+            const downloadLog = resolve(
+              temporary,
+              `${framework}-${target}-init-download.txt`,
+            );
+            const initialized = run(
               [
-                ...(framework === 'foundry' ? foundryInitArgs : []),
+                '--import',
+                offlineDownload,
                 cli,
                 'init',
                 '--framework',
@@ -164,9 +173,17 @@ test(
               ],
               consumer,
               {
-                env: foundryInitEnv,
+                env: {
+                  SUNHAT_TEST_DOWNLOAD: 'http-error',
+                  SUNHAT_TEST_DOWNLOAD_LOG: downloadLog,
+                },
               },
             );
+            assert.equal(existsSync(downloadLog), false);
+            assert.equal(existsSync(resolve(project, '.sunhat')), false);
+            if (framework === 'foundry') {
+              assert.match(initialized.stderr, /sunhat toolchain install/u);
+            }
             const manifest = JSON.parse(
               readFileSync(resolve(project, 'package.json'), 'utf8'),
             );
@@ -200,7 +217,19 @@ test(
             for (const path of paths) {
               assert.ok(existsSync(resolve(project, path)), `missing ${path}`);
             }
-            if (framework === 'foundry') {
+          },
+        );
+        if (framework === 'foundry') {
+          await t.test(
+            `${framework}/${target} installs its toolchain explicitly`,
+            () => {
+              run(
+                [...foundryInstallArgs, cli, 'toolchain', 'install'],
+                project,
+                {
+                  env: foundryInstallEnv,
+                },
+              );
               const lock = JSON.parse(
                 readFileSync(
                   resolve(project, '.sunhat/toolchain.json'),
@@ -217,9 +246,9 @@ test(
               for (const binary of Object.values(lock.binaries)) {
                 assert.ok(existsSync(resolve(project, binary.path)));
               }
-            }
-          },
-        );
+            },
+          );
+        }
       }
     }
   },
