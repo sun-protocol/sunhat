@@ -96,7 +96,7 @@ test(
       'the artifact contains runtime files, templates and documentation',
       () => {
         for (const path of [
-          'dist/bin/sunhat.js',
+          'dist/cli/main.js',
           'dist/package.js',
           'templates',
           'README.md',

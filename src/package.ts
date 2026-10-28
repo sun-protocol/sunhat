@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CliError, errorMessage } from './errors.js';
-import { isRecord } from './project/json.js';
+import { isRecord } from './json.js';
 
 export const packageRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),

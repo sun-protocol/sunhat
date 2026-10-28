@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
-import { isRecord, readJson } from '../project/json.js';
+import { isRecord, readJson } from '../json.js';
 
 export type FoundryTool = 'forge' | 'cast' | 'anvil' | 'chisel';
 

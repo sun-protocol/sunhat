@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 import { runHardhat } from '../adapters/hardhat.js';
 import { runFoundry } from '../adapters/foundry.js';
-import { initProject } from '../commands/init.js';
-import { toolchain } from '../commands/toolchain.js';
+import { initProject } from './init.js';
+import { toolchain } from './toolchain.js';
 import { usage } from '../errors.js';
 import { readPackageMetadata } from '../package.js';
 import { readBinding } from '../project/binding.js';

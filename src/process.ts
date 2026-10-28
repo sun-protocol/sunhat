@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { constants } from 'node:os';
-import { CliError } from '../errors.js';
+import { CliError } from './errors.js';
 
 export async function spawnNative(
   executable: string,

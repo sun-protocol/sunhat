@@ -3,7 +3,7 @@ import { basename, resolve } from 'node:path';
 import type { Target } from '../project/binding.js';
 import { toolchainError } from '../errors.js';
 import { packageRoot } from '../package.js';
-import { isRecord, readJson } from '../project/json.js';
+import { isRecord, readJson } from '../json.js';
 import type { FoundryTool } from './lock.js';
 
 export interface Release {

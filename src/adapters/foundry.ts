@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
-import { spawnNative } from '../process/spawn.js';
+import { spawnNative } from '../process.js';
 import { loadToolchain } from '../toolchain/lock.js';
 import type { FoundryTool } from '../toolchain/lock.js';
 

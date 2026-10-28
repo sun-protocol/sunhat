@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve, sep } from 'node:path';
 import { existsSync, realpathSync } from 'node:fs';
 import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
-import { spawnNative } from '../process/spawn.js';
-import { isRecord, readJson } from '../project/json.js';
+import { spawnNative } from '../process.js';
+import { isRecord, readJson } from '../json.js';
 
 interface PackageJson {
   version?: string;

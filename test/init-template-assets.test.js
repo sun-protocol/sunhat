@@ -22,7 +22,7 @@ import {
   foundryInitEnv,
 } from './fixtures/foundry-init.js';
 import { copyCliRuntime } from './fixtures/runtime.js';
-import { initProject } from '../dist/commands/init.js';
+import { initProject } from '../dist/cli/init.js';
 import { CliError } from '../dist/errors.js';
 import { applyScaffold } from '../dist/scaffold/apply.js';
 import { planAdoption, planScaffold } from '../dist/scaffold/plan.js';

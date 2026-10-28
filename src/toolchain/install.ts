@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import {
   chmodSync,
   mkdirSync,
@@ -8,11 +9,12 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
-import { extractArchive } from './archive.js';
-import { downloadArchive } from './download.js';
 import { platformKey, releaseFor, releaseUrl } from './releases.js';
+
+const execFileAsync = promisify(execFile);
 
 interface InstallDependencies {
   download: (url: string) => Promise<Buffer>;
@@ -120,6 +122,29 @@ export async function installFoundry(
     if (lockTemporary) {
       removeTemporaryDirectory(lockTemporary);
     }
+  }
+}
+
+async function downloadArchive(url: string): Promise<Buffer> {
+  const response = await fetch(url, { redirect: 'follow' });
+  if (!response.ok) {
+    return toolchainError(`download failed (${response.status}): ${url}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function extractArchive(
+  archive: string,
+  destination: string,
+): Promise<void> {
+  if (archive.endsWith('.zip')) {
+    await execFileAsync('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      `Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${destination.replaceAll("'", "''")}'`,
+    ]);
+  } else {
+    await execFileAsync('tar', ['-xzf', archive, '-C', destination]);
   }
 }
 

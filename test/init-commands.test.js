@@ -47,7 +47,7 @@ for (const flag of ['--help', '-h']) {
     const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-help-'));
     t.after(() => rmSync(temporary, { recursive: true, force: true }));
     const destination = resolve(temporary, 'unused-project');
-    const moduleUrl = new URL('../dist/commands/init.js', import.meta.url).href;
+    const moduleUrl = new URL('../dist/cli/init.js', import.meta.url).href;
     const program = `
       import { initProject } from ${JSON.stringify(moduleUrl)};
       const status = await initProject(${JSON.stringify([flag, destination])});
