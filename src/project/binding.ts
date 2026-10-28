@@ -6,8 +6,8 @@ export type Framework = 'hardhat' | 'foundry';
 export type Target = 'tron' | 'evm';
 
 export interface Binding {
-  framework: Framework;
-  target: Target;
+  readonly framework: Framework;
+  readonly target: Target;
 }
 
 export function readBinding(path: string): Binding {

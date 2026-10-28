@@ -2,10 +2,14 @@ import { usage } from '../errors.js';
 import type { Target } from '../project/binding.js';
 
 export type Invocation =
-  | { kind: 'help' }
-  | { kind: 'version' }
-  | { kind: 'init'; args: string[] }
-  | { kind: 'run'; command: string; args: string[] };
+  | { readonly kind: 'help' }
+  | { readonly kind: 'version' }
+  | { readonly kind: 'init'; readonly args: readonly string[] }
+  | {
+      readonly kind: 'run';
+      readonly command: string;
+      readonly args: readonly string[];
+    };
 
 export function parse(argv: readonly string[]): Invocation {
   if (
