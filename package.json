@@ -25,10 +25,11 @@
     "format:check": "prettier . --check",
     "build": "npm run clean && tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run build",
     "test": "npm run build && npm run test:runtime",
     "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
     "test:templates": "npm run build && node --test test/template-types.test.js",
-    "pack:check": "npm run build && npm pack --dry-run"
+    "pack:check": "npm run clean && node --test test/package.test.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

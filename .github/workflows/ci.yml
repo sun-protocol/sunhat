@@ -50,3 +50,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node --test test/toolchain.test.js test/process.test.js
+      - run: npm run pack:check

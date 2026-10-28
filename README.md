@@ -42,7 +42,11 @@ npm run format:check
 npm test
 ```
 
-`npm run test:templates` installs fresh Hardhat EVM/TRON projects and runs `tsc --noEmit`. `npm run pack:check` checks package contents. Runtime tests use framework and download fixtures.
+`npm run test:templates` generates Hardhat EVM/TRON projects, installs their dependencies, and runs `tsc --noEmit`.
+
+`npm run pack:check` starts without build artifacts, installs the actual tarball in an isolated project, and exercises the installed CLI and all four templates. This check requires npm registry access; Foundry release downloads use local fixtures.
+
+`prepack` builds the CLI for both `npm pack` and `npm publish`.
 
 Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.
 
