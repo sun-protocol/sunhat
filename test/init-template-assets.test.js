@@ -14,12 +14,14 @@ import fs, {
 } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 import { initProject } from '../dist/commands/init.js';
 import { CliError } from '../dist/errors.js';
+import { applyScaffold } from '../dist/scaffold/apply.js';
+import { planAdoption, planScaffold } from '../dist/scaffold/plan.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const packageMetadata = JSON.parse(
@@ -70,6 +72,71 @@ function run(fixture, args) {
     },
   );
 }
+
+test('scaffold plans accept relative paths and can be inspected before creating project directories', (t) => {
+  const temporary = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-plan-')),
+  );
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const framework of ['hardhat', 'foundry']) {
+    for (const target of ['evm', 'tron']) {
+      const root = resolve(temporary, `${framework}-${target}`);
+      const plan = planScaffold(
+        relative(process.cwd(), root),
+        framework,
+        target,
+      );
+      assert.equal(plan.root, root);
+      assert.equal(existsSync(root), false);
+      assert.ok(
+        plan.files.some((file) => file.path === resolve(root, 'package.json')),
+      );
+      applyScaffold(plan);
+      assert.ok(existsSync(resolve(root, 'sunhat.toml')));
+      assert.ok(
+        existsSync(
+          resolve(
+            root,
+            framework === 'foundry' ? 'foundry.toml' : 'hardhat.config.ts',
+          ),
+        ),
+      );
+    }
+  }
+});
+
+test('adoption planning preserves the project and checks late conflicts before copying any file', (t) => {
+  const temporary = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-adopt-plan-')),
+  );
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const framework of ['hardhat', 'foundry']) {
+    const root = resolve(temporary, framework);
+    mkdirSync(root);
+    const native = resolve(
+      root,
+      framework === 'foundry' ? 'foundry.toml' : 'hardhat.config.ts',
+    );
+    writeFileSync(native, 'user-owned configuration');
+    const before = readdirSync(root);
+    const plan = planAdoption(root, framework, 'evm');
+    assert.deepEqual(readdirSync(root), before);
+    writeFileSync(resolve(root, 'sunhat.toml'), 'user-owned binding');
+    assert.throws(
+      () => applyScaffold(plan),
+      /refusing to overwrite existing file/u,
+    );
+    assert.deepEqual(
+      readdirSync(root).sort(),
+      [...before, 'sunhat.toml'].sort(),
+    );
+    assert.equal(readFileSync(native, 'utf8'), 'user-owned configuration');
+    assert.equal(
+      readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
+      'user-owned binding',
+    );
+  }
+});
 
 for (const framework of ['hardhat', 'foundry']) {
   for (const target of ['evm', 'tron']) {
