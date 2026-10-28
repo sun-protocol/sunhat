@@ -1,0 +1,12 @@
+{
+  "name": "{{projectName}}",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "sunhat build",
+    "test": "sunhat test"
+  },
+  "devDependencies": {
+    "sunhat": "{{sunhatDependency}}"
+  }
+}

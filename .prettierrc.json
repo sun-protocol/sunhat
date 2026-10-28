@@ -1,0 +1,16 @@
+{
+  "singleQuote": true,
+  "semi": true,
+  "endOfLine": "lf",
+  "plugins": ["prettier-plugin-solidity"],
+  "overrides": [
+    {
+      "files": "**/*.sol",
+      "options": {
+        "tabWidth": 4,
+        "printWidth": 120,
+        "singleQuote": false
+      }
+    }
+  ]
+}
