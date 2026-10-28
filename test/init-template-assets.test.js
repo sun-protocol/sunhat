@@ -359,7 +359,7 @@ test('initialization preserves existing directory symlinks and rejects dangling 
 });
 
 for (const code of ['EACCES', 'ENOSPC', 'EIO']) {
-  test(`initialization preserves ${code} write failures instead of reporting a conflict`, async (t) => {
+  test(`initialization preserves ${code} write failures instead of reporting a conflict`, (t) => {
     const root = realpathSync(
       mkdtempSync(resolve(tmpdir(), 'sunhat-write-error-')),
     );
@@ -378,8 +378,8 @@ for (const code of ['EACCES', 'ENOSPC', 'EIO']) {
     };
     syncBuiltinESMExports();
     try {
-      await assert.rejects(
-        initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+      assert.throws(
+        () => initProject(['--framework', 'hardhat', '--target', 'evm', root]),
         (error) => {
           assert.ok(error instanceof CliError);
           assert.equal(error.exitCode, 6);
@@ -399,7 +399,7 @@ for (const code of ['EACCES', 'ENOSPC', 'EIO']) {
   });
 }
 
-test('a file created after preflight remains protected by exclusive creation', async (t) => {
+test('a file created after preflight remains protected by exclusive creation', (t) => {
   const root = realpathSync(
     mkdtempSync(resolve(tmpdir(), 'sunhat-write-race-')),
   );
@@ -414,8 +414,8 @@ test('a file created after preflight remains protected by exclusive creation', a
   };
   syncBuiltinESMExports();
   try {
-    await assert.rejects(
-      initProject(['--framework', 'hardhat', '--target', 'evm', root]),
+    assert.throws(
+      () => initProject(['--framework', 'hardhat', '--target', 'evm', root]),
       (error) => {
         assert.ok(error instanceof CliError);
         assert.equal(error.exitCode, 2);

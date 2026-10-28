@@ -6,12 +6,15 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { resolveExecutable } from '../dist/adapters/executable.js';
+import { CliError } from '../dist/errors.js';
 import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
 
 const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
@@ -155,6 +158,85 @@ test('Hardhat accepts valid dependency maps and a string bin entry', (t) => {
   const result = run(context.root, ['compile', '--force']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, '["compile","--force"]');
+});
+
+for (const framework of ['hardhat', 'foundry']) {
+  for (const kind of [
+    'missing',
+    'directory',
+    'dangling-link',
+    'outside-link',
+  ]) {
+    test(`${framework} reports an invalid ${kind} executable as a toolchain error`, (t) => {
+      const context =
+        framework === 'hardhat' ? hardhat(t) : { root: fixture(t, 'foundry') };
+      const executable =
+        framework === 'hardhat'
+          ? resolve(context.root, 'node_modules/hardhat/cli.js')
+          : resolve(context.root, '.sunhat/forge');
+      if (framework === 'foundry') {
+        json(resolve(context.root, '.sunhat/toolchain.json'), lock());
+      } else {
+        rmSync(executable);
+      }
+      if (kind === 'directory') {
+        mkdirSync(executable);
+      } else if (kind.endsWith('-link')) {
+        const storage = mkdtempSync(resolve(tmpdir(), 'sunhat-outside-'));
+        t.after(() => rmSync(storage, { recursive: true, force: true }));
+        const destination = resolve(storage, 'cli.js');
+        if (kind === 'outside-link') {
+          writeFileSync(destination, 'throw new Error("must not run");');
+        }
+        symlinkSync(destination, executable, 'file');
+      }
+      const result = run(context.root, [
+        framework === 'hardhat' ? 'compile' : 'build',
+      ]);
+      assertInvalid(result, executable);
+      assert.match(result.stderr, /executable/u);
+    });
+  }
+}
+
+test('a dangling project toolchain configuration is reported instead of using template defaults', (t) => {
+  const root = fixture(t, 'foundry');
+  const path = resolve(root, 'foundry-toolchain.json');
+  symlinkSync(resolve(root, 'missing-toolchain.json'), path, 'file');
+  assert.throws(
+    () => releaseFor('evm', root),
+    (error) => {
+      assert.equal(error.exitCode, 3);
+      assert.equal(error.cause.code, 'ENOENT');
+      assert.ok(error.message.includes(path));
+      return true;
+    },
+  );
+});
+
+test('executable resolution accepts internal links and a filesystem-root scope, and retains read errors', (t) => {
+  const root = fixture(t, 'foundry');
+  const executable = resolve(root, 'cli.js');
+  writeFileSync(executable, 'fixture executable');
+  const link = resolve(root, 'linked-cli.js');
+  symlinkSync(executable, link, 'file');
+  assert.equal(resolveExecutable(root, 'linked-cli.js', 'fixture'), executable);
+  assert.equal(
+    resolveExecutable(parse(root).root, executable, 'fixture'),
+    executable,
+  );
+
+  const missing = resolve(root, 'missing-cli.js');
+  assert.throws(
+    () => resolveExecutable(root, missing, 'fixture'),
+    (error) => {
+      assert.ok(error instanceof CliError);
+      assert.equal(error.exitCode, 3);
+      assert.equal(error.cause.code, 'ENOENT');
+      assert.ok(error.message.includes(missing));
+      return true;
+    },
+  );
 });
 
 for (const [name, modify] of [

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { lstatSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import type { Target } from '../project/binding.js';
 import { toolchainError } from '../errors.js';
@@ -7,12 +7,12 @@ import { isRecord, readJson } from '../json.js';
 import type { FoundryTool } from './lock.js';
 
 export interface Release {
-  source: string;
-  release: string;
-  revision: string;
-  archive: string;
-  sha256: string;
-  tools: Record<FoundryTool, string>;
+  readonly source: string;
+  readonly release: string;
+  readonly revision: string;
+  readonly archive: string;
+  readonly sha256: string;
+  readonly tools: Readonly<Record<FoundryTool, string>>;
 }
 
 export function platformKey(): string {
@@ -22,7 +22,7 @@ export function platformKey(): string {
 export function releaseFor(target: Target, root?: string): Release {
   const local = root ? resolve(root, 'foundry-toolchain.json') : undefined;
   const path =
-    local && existsSync(local)
+    local && lstatSync(local, { throwIfNoEntry: false })
       ? local
       : resolve(
           packageRoot,

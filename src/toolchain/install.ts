@@ -17,14 +17,15 @@ import {
   toolchainError,
 } from '../errors.js';
 import type { Target } from '../project/binding.js';
+import type { ToolchainLock } from './lock.js';
 import { platformKey, releaseFor, releaseUrl } from './releases.js';
 
 const execFileAsync = promisify(execFile);
 
 interface InstallOptions {
-  download?: (url: string) => Promise<Buffer>;
-  extract?: (archive: string, destination: string) => Promise<void>;
-  downloadIdleTimeoutMs?: number;
+  readonly download?: (url: string) => Promise<Buffer>;
+  readonly extract?: (archive: string, destination: string) => Promise<void>;
+  readonly downloadIdleTimeoutMs?: number;
 }
 
 export async function installFoundry(
@@ -78,7 +79,7 @@ export async function installFoundry(
       revision: release.revision,
       platform: platformKey(),
       binaries,
-    };
+    } satisfies ToolchainLock;
     // The lock may live on a different mount from toolchains; stage beside it too.
     lockTemporary = mkdtempSync(resolve(root, '.sunhat/.toolchain-lock-'));
     const preparedLock = resolve(lockTemporary, 'toolchain.json');

@@ -6,13 +6,15 @@ import { isRecord, readJson } from '../json.js';
 export type FoundryTool = 'forge' | 'cast' | 'anvil' | 'chisel';
 
 export interface ToolchainLock {
-  version: number;
-  target: Target;
-  source: string;
-  release: string;
-  revision: string;
-  platform: string;
-  binaries: Partial<Record<FoundryTool, { path: string }>>;
+  readonly version: 1 | 2;
+  readonly target: Target;
+  readonly source: string;
+  readonly release: string;
+  readonly revision: string;
+  readonly platform: string;
+  readonly binaries: Readonly<
+    Partial<Record<FoundryTool, { readonly path: string }>>
+  >;
 }
 
 export function loadToolchain(root: string, target: Target): ToolchainLock {

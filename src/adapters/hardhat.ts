@@ -1,9 +1,10 @@
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
-import { existsSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import { spawnNative } from '../process.js';
 import { isRecord, readJson } from '../json.js';
+import { resolveExecutable } from './executable.js';
 
 interface PackageJson {
   version?: string;
@@ -74,11 +75,7 @@ export async function runHardhat(
   if (isAbsolute(relative)) {
     return toolchainError('Hardhat bin must be package-relative');
   }
-  const packageRoot = realpathSync(dirname(manifestPath));
-  const entry = realpathSync(resolve(packageRoot, relative));
-  if (entry !== packageRoot && !entry.startsWith(`${packageRoot}${sep}`)) {
-    return toolchainError('Hardhat bin escapes package root');
-  }
+  const entry = resolveExecutable(dirname(manifestPath), relative, 'Hardhat');
   return await spawnNative(process.execPath, [entry, ...args], root);
 }
 

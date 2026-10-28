@@ -7,13 +7,13 @@ import { planAdoption, planScaffold } from '../scaffold/plan.js';
 import { parseTarget } from './parser.js';
 
 interface InitOptions {
-  framework: Framework;
-  target: Target;
-  path: string;
-  adopt: boolean;
+  readonly framework: Framework;
+  readonly target: Target;
+  readonly path: string;
+  readonly adopt: boolean;
 }
 
-export async function initProject(argv: readonly string[]): Promise<number> {
+export function initProject(argv: readonly string[]): number {
   const options = parseInitOptions(argv);
   if (!options) {
     process.stdout.write(

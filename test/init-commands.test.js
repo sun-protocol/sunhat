@@ -51,7 +51,7 @@ for (const flag of ['--help', '-h']) {
     const moduleUrl = new URL('../dist/cli/init.js', import.meta.url).href;
     const program = `
       import { initProject } from ${JSON.stringify(moduleUrl)};
-      const status = await initProject(${JSON.stringify([flag, destination])});
+      const status = initProject(${JSON.stringify([flag, destination])});
       process.stdout.write('returned:' + status + '\\n');
     `;
     const result = spawnSync(

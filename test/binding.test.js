@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { CliError } from '../dist/errors.js';
 import { readBinding, validateBinding } from '../dist/project/binding.js';
+import { findProjectRoot } from '../dist/project/root.js';
 
 test('Binding validation accepts plain parsed values without a TOML parser', () => {
   for (const framework of ['hardhat', 'foundry']) {
@@ -163,6 +171,31 @@ test('binding read errors retain their path and exit code', (t) => {
       assert.equal(error.exitCode, 4);
       assert.match(error.message, /cannot read/u);
       assert.ok(error.message.includes(path));
+      return true;
+    },
+  );
+});
+
+test('project discovery stops at a dangling binding instead of using the parent project', (t) => {
+  const parentBinding = fixture(t);
+  const parent = realpathSync(resolve(parentBinding, '..'));
+  writeFileSync(
+    parentBinding,
+    '[project]\nframework = "hardhat"\ntarget = "evm"\n',
+  );
+  const project = resolve(parent, 'nested-project');
+  const child = resolve(project, 'src');
+  mkdirSync(child, { recursive: true });
+  const binding = resolve(project, 'sunhat.toml');
+  symlinkSync(resolve(parent, 'missing-binding'), binding, 'file');
+
+  assert.equal(findProjectRoot(child), project);
+  assert.throws(
+    () => readBinding(binding),
+    (error) => {
+      assert.equal(error.exitCode, 4);
+      assert.equal(error.cause.code, 'ENOENT');
+      assert.ok(error.message.includes(binding));
       return true;
     },
   );

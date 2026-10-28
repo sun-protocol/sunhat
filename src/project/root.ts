@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { lstatSync } from 'node:fs';
 import { dirname, parse, resolve } from 'node:path';
 import { CliError } from '../errors.js';
 
@@ -6,7 +6,7 @@ export function findProjectRoot(start: string): string {
   let current = resolve(start);
   const filesystemRoot = parse(current).root;
   for (;;) {
-    if (existsSync(resolve(current, 'sunhat.toml'))) {
+    if (lstatSync(resolve(current, 'sunhat.toml'), { throwIfNoEntry: false })) {
       return current;
     }
     if (current === filesystemRoot) {
