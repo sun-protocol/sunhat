@@ -5,8 +5,8 @@ Sunhat runs Hardhat or Foundry using the framework and target recorded in the pr
 ## Requirements
 
 - Node.js **20.11+** for Sunhat. Node.js 24 is used for repository development and validation.
-- Foundry initialization needs access to the configured GitHub release and `tar` on macOS/Linux or PowerShell on Windows. Its toolchain installer supports macOS/Linux arm64 and x64, and Windows x64.
-- The default Hardhat TRON test setup needs Docker running locally for TRE. Hardhat projects currently require **Hardhat 2**, declared as an exact version matching the installed package.
+- Foundry toolchain installation needs access to the configured GitHub release and `tar` on macOS/Linux or PowerShell on Windows. Its installer supports macOS/Linux arm64 and x64, and Windows x64.
+- Hardhat projects currently require **Hardhat 2**, declared as an exact version matching the installed package. Hardhat TRON tests need a running TRE JSON-RPC endpoint. Container startup is disabled by default; Docker is required only if you choose to run TRE in a container.
 - First compilation needs network access when the compiler is not already cached.
 
 ## Install Sunhat
@@ -28,18 +28,19 @@ The version command should print `sunhat 2.0.0`. Ensure npm's global executable 
 | Hardhat   | TRON              | `sunhat init --framework hardhat hardhat-tron`             |
 | Hardhat   | EVM               | `sunhat init --framework hardhat --target evm hardhat-evm` |
 
-Initialization refuses to overwrite existing destination files. For an existing framework project, use [adoption](#adopt-an-existing-project).
+`init` writes project files without downloading toolchains or installing npm packages. It refuses to overwrite existing destination files. For an existing framework project, use [adoption](#adopt-an-existing-project).
 
 ### Foundry
 
 ```bash
 sunhat init counter-tron
 cd counter-tron
+sunhat toolchain install
 sunhat build
 sunhat test
 ```
 
-`init` downloads, verifies, and installs Foundry-TRON into the project's `.sunhat/` directory. For an EVM project, use the EVM initialization command from the table; the build and test commands stay the same. A separate toolchain installation step is unnecessary after successful initialization.
+`sunhat toolchain install` selects the archive for the host OS and CPU architecture, verifies it, and installs Foundry-TRON into the project's `.sunhat/` directory. For an EVM project, use the EVM initialization command from the table; the installation, build, and test commands stay the same.
 
 ### Hardhat
 
@@ -48,22 +49,24 @@ sunhat init --framework hardhat hardhat-tron
 cd hardhat-tron
 npm install
 sunhat compile
+export TRE_URL="http://127.0.0.1:9090/jsonrpc"
+export TRE_PRIVATE_KEY="<development-private-key>"
 sunhat test
 ```
 
-`init` writes the project files; `npm install` installs Hardhat and its plugins. The TRON template selects `tre` as its default network. The plugin starts a TRE Docker container for tests. To use an existing TRE instance, set `tre.autoStart` to `false` in `hardhat.config.ts` and configure `TRE_URL` and `TRE_PRIVATE_KEY`.
+`npm install` installs Hardhat and its plugins. The TRON template selects `tre` as its default network and sets `tre.autoStart` to `false`. Before running tests, point `TRE_URL` and `TRE_PRIVATE_KEY` at a TRE instance you manage. To opt into automatic container startup, set `tre.autoStart` to `true` in `hardhat.config.ts` and have Docker running.
 
 For EVM, initialize with `--target evm` and use the same install, compile, and test sequence. The EVM template does not load the TRON plugin.
 
 ## Use the local CLI and npm scripts
 
-Generated projects initially reference the Sunhat installation that created them through a `file:` dependency named `sunhat`. For a portable registry dependency, replace that reference from the generated project's root:
+Generated projects declare the creating CLI's npm package and exact version under the `sunhat` alias. Install the generated project's dependencies from its root:
 
 ```bash
-npm install --save-dev --save-exact sunhat@npm:@sun-protocol/sunhat@2.0.0
+npm install
 ```
 
-This npm alias keeps the generated dependency name `sunhat` while installing the scoped package. Commit `package.json` and the package-manager lockfile for reproducible npm dependency installation.
+For Sunhat 2.0.0, the alias is `npm:@sun-protocol/sunhat@2.0.0`. It is independent of the initializing machine's installation path. Commit `package.json` and the package-manager lockfile for reproducible npm dependency installation.
 
 ```bash
 npx --no-install sunhat --version
@@ -74,6 +77,17 @@ npm test
 The generated `build` script runs `sunhat build` for Foundry or `sunhat compile` for Hardhat. Both templates map `npm test` to `sunhat test`. Forward additional arguments with `npm run build -- <args>` or `npm test -- <args>`.
 
 Global Sunhat resolves the project's framework tools, but it does not switch to the project's Sunhat version. Use `npx --no-install sunhat ...` or the generated npm scripts when you want the local CLI.
+
+### Develop against a local checkout
+
+Run `npm run build` in the Sunhat checkout. In a generated project's root, explicitly point its Sunhat dependency at that checkout:
+
+```bash
+npm pkg set "devDependencies.sunhat=file:/absolute/path/to/sunhat2"
+npm install
+```
+
+Rebuild the checkout after source changes. Restore the registry dependency before sharing the project or committing its dependency configuration.
 
 ## Adopt an existing project
 
@@ -86,7 +100,7 @@ Run the appropriate command from a directory containing `foundry.toml` or `hardh
 | Hardhat TRON     | `sunhat init --adopt --framework hardhat .`              |
 | Hardhat EVM      | `sunhat init --adopt --framework hardhat --target evm .` |
 
-Adoption preserves native framework configuration, source files, tests, and `package.json`. It adds the Sunhat binding. Foundry adoption also adds `foundry-toolchain.json` if missing and installs the toolchain. For Hardhat, install the project's declared dependencies separately.
+Adoption preserves native framework configuration, source files, tests, and `package.json`. It adds the Sunhat binding. Foundry adoption also adds `foundry-toolchain.json` if missing; run `sunhat toolchain install` separately. For Hardhat, install the project's declared dependencies separately.
 
 To add a local Sunhat CLI to an adopted project:
 
@@ -120,7 +134,7 @@ Run commands from the project root or a subdirectory. Sunhat locates the nearest
 
 ## Compiler installation
 
-Compilers are resolved by the framework on first compilation; Foundry initialization installs the tools without predownloading Solidity compilers.
+Compilers are resolved by the framework on first compilation. Foundry toolchain installation does not predownload Solidity compilers.
 
 | Project          | First compilation                                                    | Compiler selection                                                             |
 | ---------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -173,16 +187,18 @@ TRON Foundry commands use the project's Foundry-TRON binaries. Anvil and Chisel 
 
 Plugin tasks are forwarded in the same form: `sunhat <task> [args...]`. Sunhat forwards arguments and the framework's exit status; it does not translate Foundry commands into Hardhat tasks or the reverse. Use `sunhat compile` with Hardhat and `sunhat build` with Foundry.
 
-## Toolchain recovery
+## Foundry toolchain installation
 
-If Foundry initialization fails during download or installation, its generated project files remain available. Enter that project directory and retry:
+After creating or adopting a Foundry project, enter its directory and install the toolchain:
 
 ```bash
 sunhat toolchain install
 sunhat toolchain info
 ```
 
-`install` retries or reinstalls the release declared in `foundry-toolchain.json`. `info` prints installed metadata. Archive verification belongs to installation; ordinary execution does not rehash binaries or probe their versions. In a Hardhat project, `toolchain` is forwarded as a native task instead.
+`install` installs or reinstalls the release declared in `foundry-toolchain.json`. Normal output is limited to `verify` and `Toolchain installed successfully.` Downloads time out after 60 seconds without receiving data; active transfers can take longer. If installation fails, correct the reported issue and rerun the same command.
+
+`info` prints installed metadata. Archive verification belongs to installation; ordinary execution does not rehash binaries or probe their versions. In a Hardhat project, `toolchain` is forwarded as a native task instead.
 
 ## Moving from Sunhat 1.x
 

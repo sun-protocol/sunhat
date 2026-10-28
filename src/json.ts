@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
+import { errorMessage, hasErrorCode, toolchainError } from './errors.js';
 
 export function readJson(path: string, missingMessage?: string): unknown {
   try {

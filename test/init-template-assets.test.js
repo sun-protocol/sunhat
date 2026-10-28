@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs, {
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -14,14 +13,19 @@ import fs, {
 } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
-import { initProject } from '../dist/commands/init.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
+import { initProject } from '../dist/cli/init.js';
 import { CliError } from '../dist/errors.js';
+import { applyScaffold } from '../dist/scaffold/apply.js';
+import { planAdoption, planScaffold } from '../dist/scaffold/plan.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
+const packageMetadata = JSON.parse(
+  readFileSync(resolve(repository, 'package.json'), 'utf8'),
+);
 
 function runtime(t) {
   const temporary = realpathSync(
@@ -32,18 +36,8 @@ function runtime(t) {
     temporary,
     process.platform === 'win32' ? 'package with spaces' : 'package "quoted"',
   );
-  mkdirSync(packageRoot);
-  for (const name of ['bin', 'dist', 'templates', 'package.json']) {
-    cpSync(resolve(repository, name), resolve(packageRoot, name), {
-      recursive: true,
-    });
-  }
-  symlinkSync(
-    resolve(repository, 'node_modules'),
-    resolve(packageRoot, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
-  );
-  return { temporary, packageRoot, cli: resolve(packageRoot, 'bin/sunhat.js') };
+  const fixture = copyCliRuntime(packageRoot);
+  return { temporary, ...fixture };
 }
 
 function json(path, value) {
@@ -52,21 +46,77 @@ function json(path, value) {
 }
 
 function run(fixture, args) {
-  return spawnSync(
-    process.execPath,
-    [...foundryInitArgs, fixture.cli, 'init', ...args],
-    {
-      cwd: fixture.temporary,
-      encoding: 'utf8',
-      timeout: 10_000,
-      env: {
-        ...process.env,
-        ...foundryInitEnv,
-        SUNHAT_TEST_PACKAGE_ROOT: fixture.packageRoot,
-      },
-    },
-  );
+  return spawnSync(process.execPath, [fixture.cli, 'init', ...args], {
+    cwd: fixture.temporary,
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
 }
+
+test('scaffold plans accept relative paths and can be inspected before creating project directories', (t) => {
+  const temporary = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-plan-')),
+  );
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const framework of ['hardhat', 'foundry']) {
+    for (const target of ['evm', 'tron']) {
+      const root = resolve(temporary, `${framework}-${target}`);
+      const plan = planScaffold(
+        relative(process.cwd(), root),
+        framework,
+        target,
+      );
+      assert.equal(plan.root, root);
+      assert.equal(existsSync(root), false);
+      assert.ok(
+        plan.files.some((file) => file.path === resolve(root, 'package.json')),
+      );
+      applyScaffold(plan);
+      assert.ok(existsSync(resolve(root, 'sunhat.toml')));
+      assert.ok(
+        existsSync(
+          resolve(
+            root,
+            framework === 'foundry' ? 'foundry.toml' : 'hardhat.config.ts',
+          ),
+        ),
+      );
+    }
+  }
+});
+
+test('adoption planning preserves the project and checks late conflicts before copying any file', (t) => {
+  const temporary = realpathSync(
+    mkdtempSync(resolve(tmpdir(), 'sunhat-adopt-plan-')),
+  );
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const framework of ['hardhat', 'foundry']) {
+    const root = resolve(temporary, framework);
+    mkdirSync(root);
+    const native = resolve(
+      root,
+      framework === 'foundry' ? 'foundry.toml' : 'hardhat.config.ts',
+    );
+    writeFileSync(native, 'user-owned configuration');
+    const before = readdirSync(root);
+    const plan = planAdoption(root, framework, 'evm');
+    assert.deepEqual(readdirSync(root), before);
+    writeFileSync(resolve(root, 'sunhat.toml'), 'user-owned binding');
+    assert.throws(
+      () => applyScaffold(plan),
+      /refusing to overwrite existing file/u,
+    );
+    assert.deepEqual(
+      readdirSync(root).sort(),
+      [...before, 'sunhat.toml'].sort(),
+    );
+    assert.equal(readFileSync(native, 'utf8'), 'user-owned configuration');
+    assert.equal(
+      readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
+      'user-owned binding',
+    );
+  }
+});
 
 for (const framework of ['hardhat', 'foundry']) {
   for (const target of ['evm', 'tron']) {
@@ -137,7 +187,7 @@ for (const framework of ['hardhat', 'foundry']) {
       assert.equal(generated.name, basename(project));
       assert.equal(
         generated.devDependencies.sunhat,
-        `file:${fixture.packageRoot}`,
+        `npm:${packageMetadata.name}@${packageMetadata.version}`,
       );
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
@@ -146,12 +196,8 @@ for (const framework of ['hardhat', 'foundry']) {
           JSON.parse(readFileSync(resolve(project, 'foundry-toolchain.json'))),
           toolchain,
         );
-        const installed = JSON.parse(
-          readFileSync(resolve(project, '.sunhat/toolchain.json')),
-        );
-        assert.equal(installed.release, 'template-release');
-        assert.equal(installed.revision, 'template-revision');
       }
+      assert.equal(existsSync(resolve(project, '.sunhat')), false);
       assert.equal(
         readFileSync(resolve(project, native), 'utf8'),
         customizedConfig,
@@ -175,6 +221,46 @@ for (const framework of ['hardhat', 'foundry']) {
     });
   }
 }
+
+test('package metadata drives the version command and every generated Sunhat dependency', (t) => {
+  const fixture = runtime(t);
+  const path = resolve(fixture.packageRoot, 'package.json');
+  const metadata = JSON.parse(readFileSync(path, 'utf8'));
+  metadata.name = '@sun-protocol/sunhat-preview';
+  metadata.version = '2.1.0-rc.1';
+  json(path, metadata);
+  const version = spawnSync(process.execPath, [fixture.cli, '--version'], {
+    cwd: fixture.temporary,
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(version.stdout, `sunhat ${metadata.version}\n`);
+
+  for (const framework of ['hardhat', 'foundry']) {
+    for (const target of ['evm', 'tron']) {
+      const project = resolve(fixture.temporary, `${framework}-${target}`);
+      const result = run(fixture, [
+        '--framework',
+        framework,
+        '--target',
+        target,
+        project,
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      const generated = JSON.parse(
+        readFileSync(resolve(project, 'package.json'), 'utf8'),
+      );
+      assert.equal(
+        generated.devDependencies.sunhat,
+        `npm:${metadata.name}@${metadata.version}`,
+      );
+      const readme = readFileSync(resolve(project, 'README.md'), 'utf8');
+      assert.ok(readme.includes(`${metadata.name}@${metadata.version}`));
+      assert.doesNotMatch(readme, /\{\{sunhatPackage\}\}/u);
+    }
+  }
+});
 
 test('new template files participate in conflict checks before any project file is written', (t) => {
   const fixture = runtime(t);

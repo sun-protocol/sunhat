@@ -8,12 +8,12 @@ Sunhat 2 is a project CLI for Hardhat 2 and Foundry on EVM and TRON. It selects 
 
 ## What changed from v1
 
-| Area           | Sunhat 1.x                                                | Sunhat 2                                                                                          |
-| -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Architecture   | Hardhat plugin with a CLI proxy                           | Project CLI with separate Hardhat and Foundry adapters                                            |
-| Configuration  | Sunhat's Hardhat plugin API                               | `sunhat.toml` binds the framework and target; native framework configuration stays in the project |
-| Initialization | Hardhat-oriented scaffold with automatic npm installation | Four framework/target templates, explicit npm installation, and `--adopt` for existing projects   |
-| Foundry        | Used alongside the Hardhat workflow                       | Project-local EVM or TRON toolchain installed and verified during `init`                          |
+| Area           | Sunhat 1.x                                                | Sunhat 2                                                                                               |
+| -------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Architecture   | Hardhat plugin with a CLI proxy                           | Project CLI with separate Hardhat and Foundry adapters                                                 |
+| Configuration  | Sunhat's Hardhat plugin API                               | `sunhat.toml` binds the framework and target; native framework configuration stays in the project      |
+| Initialization | Hardhat-oriented scaffold with automatic npm installation | Four framework/target templates, separate dependency installation, and `--adopt` for existing projects |
+| Foundry        | Used alongside the Hardhat workflow                       | Project-local EVM or TRON toolchain installed with `sunhat toolchain install`                          |
 
 Commands use the selected framework's syntax: `sunhat compile` for Hardhat, `sunhat build` for Foundry, and `sunhat test` for either. V1 plugin APIs such as deployment tracking and named accounts are not provided by the v2 CLI; migration requires reviewing the project's plugins and scripts.
 
@@ -25,6 +25,7 @@ Use Node.js 20.11 or newer. The default project is Foundry + TRON:
 npm install --global @sun-protocol/sunhat@2.0.0
 sunhat init counter
 cd counter
+sunhat toolchain install
 sunhat build
 sunhat test
 ```
@@ -42,7 +43,13 @@ npm run format:check
 npm test
 ```
 
-`npm run test:templates` installs fresh Hardhat EVM/TRON projects and runs `tsc --noEmit`. `npm run pack:check` checks package contents. Runtime tests use framework and download fixtures.
+`npm run test:templates` generates Hardhat EVM/TRON projects, installs their dependencies, and runs `tsc --noEmit`.
+
+`npm run pack:check` starts without build artifacts, installs the actual tarball in an isolated project, and exercises the installed CLI and all four templates. This check requires npm registry access; Foundry release downloads use local fixtures.
+
+`prepack` builds the CLI for both `npm pack` and `npm publish`.
+
+Runtime tests use temporary CLI copies and release configuration for local archives. Installer tests replace download and extraction dependencies where needed; filesystem replacement and rollback tests use real files and directories.
 
 Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.
 

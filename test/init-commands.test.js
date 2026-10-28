@@ -14,11 +14,20 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import test, { after } from 'node:test';
+import { parse } from 'smol-toml';
+import {
+  configureFoundryTemplates,
+  foundryInstallArgs,
+  foundryInstallEnv,
+} from './fixtures/foundry-install.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
-const cli = resolve(repository, 'bin/sunhat.js');
+const runtime = mkdtempSync(resolve(tmpdir(), 'sunhat-command-runtime-'));
+after(() => rmSync(runtime, { recursive: true, force: true }));
+const { packageRoot, cli } = copyCliRuntime(resolve(runtime, 'package'));
+configureFoundryTemplates(packageRoot);
 const downloadFixture = fileURLToPath(
   new URL('./fixtures/toolchain-download.js', import.meta.url),
 );
@@ -39,7 +48,7 @@ for (const flag of ['--help', '-h']) {
     const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-help-'));
     t.after(() => rmSync(temporary, { recursive: true, force: true }));
     const destination = resolve(temporary, 'unused-project');
-    const moduleUrl = new URL('../dist/commands/init.js', import.meta.url).href;
+    const moduleUrl = new URL('../dist/cli/init.js', import.meta.url).href;
     const program = `
       import { initProject } from ${JSON.stringify(moduleUrl)};
       const status = await initProject(${JSON.stringify([flag, destination])});
@@ -118,8 +127,8 @@ const forgeCommands = [
 
 function run(cwd, args, { env = {}, preload = false } = {}) {
   const nodeArgs = [
-    ...(args[0] === 'init' || (args[0] === 'toolchain' && args[1] === 'install')
-      ? foundryInitArgs
+    ...(args[0] === 'toolchain' && args[1] === 'install'
+      ? foundryInstallArgs
       : []),
     ...(preload ? ['--import', downloadFixture] : []),
   ];
@@ -127,7 +136,7 @@ function run(cwd, args, { env = {}, preload = false } = {}) {
     cwd,
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...process.env, ...foundryInitEnv, ...env },
+    env: { ...process.env, ...foundryInstallEnv, ...env },
   });
 }
 
@@ -152,10 +161,9 @@ function project(t, framework, target) {
   ]);
   assert.equal(initialized.status, 0, initialized.stderr);
   const root = realpathSync(destination);
-  assert.equal(
-    readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
-    `[project]\nframework = "${framework}"\ntarget = "${target}"\n`,
-  );
+  const binding = parse(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'));
+  assert.equal(binding.project.framework, framework);
+  assert.equal(binding.project.target, target);
   const nested = resolve(root, 'nested directory', 'contracts');
   mkdirSync(nested, { recursive: true });
   const log = resolve(temporary, 'invocations.jsonl');
@@ -465,34 +473,55 @@ for (const framework of ['foundry', 'hardhat']) {
 }
 
 for (const target of ['evm', 'tron']) {
-  test(`init foundry/${target}: failed initialization reports a recoverable install error`, (t) => {
-    const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-failure-'));
-    t.after(() => rmSync(temporary, { recursive: true, force: true }));
-    const root = resolve(temporary, 'project');
-    const initialized = run(temporary, ['init', '--target', target, root], {
-      preload: true,
-      env: {
-        SUNHAT_TEST_DOWNLOAD: 'digest-mismatch',
-        SUNHAT_TEST_DOWNLOAD_LOG: resolve(temporary, 'download.txt'),
-      },
+  for (const adopt of [false, true]) {
+    test(`init${adopt ? ' --adopt' : ''} foundry/${target}: stays offline and leaves installation to an explicit command`, (t) => {
+      const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-install-'));
+      t.after(() => rmSync(temporary, { recursive: true, force: true }));
+      const root = resolve(temporary, 'project');
+      if (adopt) {
+        mkdirSync(root);
+        writeFileSync(resolve(root, 'foundry.toml'), '[profile.default]\n');
+      }
+      const initialized = run(
+        temporary,
+        ['init', ...(adopt ? ['--adopt'] : []), '--target', target, root],
+        {
+          preload: true,
+          env: {
+            SUNHAT_TEST_DOWNLOAD: 'http-error',
+            SUNHAT_TEST_DOWNLOAD_LOG: resolve(temporary, 'download.txt'),
+          },
+        },
+      );
+      assert.equal(initialized.status, 0, initialized.stderr);
+      assert.match(initialized.stderr, /sunhat toolchain install/u);
+      assert.equal(existsSync(resolve(temporary, 'download.txt')), false);
+      assert.ok(existsSync(resolve(root, 'sunhat.toml')));
+      assert.equal(existsSync(resolve(root, '.sunhat/toolchain.json')), false);
+      const failed = run(root, ['toolchain', 'install'], {
+        preload: true,
+        env: {
+          SUNHAT_TEST_DOWNLOAD: 'http-error',
+          SUNHAT_TEST_DOWNLOAD_LOG: resolve(temporary, 'download.txt'),
+        },
+      });
+      assert.equal(failed.status, 3, failed.stderr);
+      assert.match(failed.stderr, /download failed \(503\)/u);
+      assert.ok(existsSync(resolve(temporary, 'download.txt')));
+      assert.equal(existsSync(resolve(root, '.sunhat/toolchain.json')), false);
+      const retried = run(root, ['toolchain', 'install']);
+      assert.equal(retried.status, 0, retried.stderr);
+      assert.equal(
+        retried.stderr,
+        'verify\nToolchain installed successfully.\n',
+      );
+      const build = run(root, ['build']);
+      assert.equal(build.status, 0, build.stderr);
+      assert.equal(build.stdout, '["build"]');
     });
-    assert.equal(initialized.status, 3, initialized.stderr);
-    assert.match(initialized.stderr, /archive digest mismatch/u);
-    assert.match(initialized.stderr, /retry with `sunhat toolchain install`/u);
-    assert.ok(existsSync(resolve(root, 'sunhat.toml')));
-    assert.equal(existsSync(resolve(root, '.sunhat/toolchain.json')), false);
-    const retried = run(root, ['toolchain', 'install']);
-    assert.equal(retried.status, 0, retried.stderr);
-    const build = run(root, ['build']);
-    assert.equal(build.status, 0, build.stderr);
-    assert.equal(build.stdout, '["build"]');
-  });
+  }
   test(`init foundry/${target}: toolchain install download failures`, async (t) => {
     const initialized = project(t, 'foundry', target);
-    rmSync(resolve(initialized.root, '.sunhat'), {
-      recursive: true,
-      force: true,
-    });
     await t.test('info/build report a missing toolchain', () => {
       for (const args of [['toolchain', 'info'], ['build']]) {
         const result = run(initialized.nested, args);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -12,12 +13,21 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import {
+  configureFoundryTemplates,
+  foundryInstallArgs,
+  foundryInstallEnv,
+} from './fixtures/foundry-install.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
 
-const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
-const repository = resolve(dirname(cli), '..');
+const repository = fileURLToPath(new URL('../', import.meta.url));
+const packageMetadata = JSON.parse(
+  readFileSync(resolve(repository, 'package.json'), 'utf8'),
+);
 const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-cli-'));
 after(() => rmSync(temporary, { recursive: true, force: true }));
+const { packageRoot, cli } = copyCliRuntime(resolve(temporary, 'runtime'));
+configureFoundryTemplates(packageRoot);
 
 function temp(name) {
   return mkdtempSync(resolve(temporary, `${name}-`));
@@ -26,12 +36,18 @@ function temp(name) {
 function run(cwd, args) {
   return spawnSync(
     process.execPath,
-    [...(args[0] === 'init' ? foundryInitArgs : []), cli, ...args],
+    [
+      ...(args[0] === 'toolchain' && args[1] === 'install'
+        ? foundryInstallArgs
+        : []),
+      cli,
+      ...args,
+    ],
     {
       cwd,
       encoding: 'utf8',
       timeout: 10_000,
-      env: { ...process.env, ...foundryInitEnv },
+      env: { ...process.env, ...foundryInstallEnv },
     },
   );
 }
@@ -119,6 +135,10 @@ test('init defaults to Foundry and TRON', () => {
   );
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry TRON Project with Sunhat/u);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
+  assert.match(result.stderr, /sunhat toolchain install/u);
+  const installed = run(root, ['toolchain', 'install']);
+  assert.equal(installed.status, 0, installed.stderr);
   const build = run(root, ['build']);
   assert.equal(build.status, 0, build.stderr);
   assert.equal(build.stdout, '["build"]');
@@ -145,6 +165,10 @@ test('init accepts an explicit Foundry EVM target', () => {
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Foundry EVM Project with Sunhat/u);
   assert.doesNotMatch(readme, /network = "tron"/u);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
+  assert.match(result.stderr, /sunhat toolchain install/u);
+  const installed = run(root, ['toolchain', 'install']);
+  assert.equal(installed.status, 0, installed.stderr);
   const build = run(root, ['build']);
   assert.equal(build.status, 0, build.stderr);
   assert.equal(build.stdout, '["build"]');
@@ -166,7 +190,10 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   );
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
-  assert.equal(pkg.devDependencies.sunhat, `file:${repository}`);
+  assert.equal(
+    pkg.devDependencies.sunhat,
+    `npm:${packageMetadata.name}@${packageMetadata.version}`,
+  );
   assert.equal(pkg.scripts.build, 'sunhat compile');
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat EVM Project with Sunhat/u);

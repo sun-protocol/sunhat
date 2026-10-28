@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { CliError } from '../dist/errors.js';
-import { spawnNative } from '../dist/process/spawn.js';
+import { spawnNative } from '../dist/process.js';
 
 function temporary(t) {
   const root = realpathSync(mkdtempSync(resolve(tmpdir(), 'sunhat-process-')));

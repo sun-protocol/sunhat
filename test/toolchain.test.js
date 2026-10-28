@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import {
   existsSync,
   mkdirSync,
@@ -13,17 +14,16 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { createServer } from 'node:http';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
+import { installFoundry } from '../dist/toolchain/install.js';
+import { setArchiveDigest } from './fixtures/toolchain-config.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const cli = resolve(repository, 'bin/sunhat.js');
-const loader = new URL(
-  './fixtures/toolchain-install-loader.js',
-  import.meta.url,
-).href;
 const download = new URL(
   './fixtures/toolchain-install-download.js',
   import.meta.url,
@@ -141,6 +141,7 @@ function writeArchive(fixture, { label = 'fixture', missingTool } = {}) {
     0,
     compressed.stderr || String(compressed.error ?? ''),
   );
+  setArchiveDigest(resolve(fixture.root, 'foundry-toolchain.json'), archive);
 }
 
 function installFixture(t, target, directory = tmpdir()) {
@@ -160,28 +161,26 @@ function installFixture(t, target, directory = tmpdir()) {
     log: resolve(temporary, 'download-url.txt'),
     renameLog: resolve(temporary, 'renames.jsonl'),
   };
+  mkdirSync(fixture.root);
+  writeFileSync(resolve(fixture.root, 'foundry.toml'), '[profile.default]\n');
+  writeFileSync(
+    resolve(fixture.root, 'foundry-toolchain.json'),
+    readFileSync(
+      resolve(
+        repository,
+        'templates/foundry',
+        target,
+        'foundry-toolchain.json',
+      ),
+    ),
+  );
   writeArchive(fixture);
   const initialized = spawnSync(
     process.execPath,
-    [
-      '--experimental-loader',
-      loader,
-      '--import',
-      download,
-      cli,
-      'init',
-      '--target',
-      target,
-      fixture.root,
-    ],
+    [cli, 'init', '--adopt', '--target', target, fixture.root],
     {
       encoding: 'utf8',
       timeout: 30_000,
-      env: {
-        ...process.env,
-        SUNHAT_TEST_ARCHIVE: fixture.archive,
-        SUNHAT_TEST_DOWNLOAD_LOG: fixture.log,
-      },
     },
   );
   assert.equal(
@@ -189,6 +188,9 @@ function installFixture(t, target, directory = tmpdir()) {
     0,
     initialized.stderr || String(initialized.error ?? ''),
   );
+  assert.equal(existsSync(fixture.log), false);
+  assert.equal(existsSync(resolve(fixture.root, '.sunhat')), false);
+  assertInstalled(install(fixture));
   return fixture;
 }
 
@@ -196,8 +198,6 @@ function install(fixture, fault) {
   return spawnSync(
     process.execPath,
     [
-      '--experimental-loader',
-      loader,
       '--import',
       download,
       ...(fault ? ['--import', faults] : []),
@@ -263,6 +263,206 @@ function assertClean(root, target) {
   ]);
   assert.deepEqual(readdirSync(resolve(root, '.sunhat/toolchains')), [target]);
 }
+
+test('network downloads allow active transfers and exit on failure', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  const archive = readFileSync(fixture.archive);
+  const moduleUrl = new URL('../dist/toolchain/install.js', import.meta.url)
+    .href;
+  const scenarios = [
+    {
+      name: 'active download can exceed the idle timeout with concise output',
+      timeoutMs: 1_500,
+      respond: (_request, response) => {
+        response.writeHead(200, { 'Content-Length': archive.length });
+        const chunkSize = Math.ceil(archive.length / 5);
+        let offset = chunkSize;
+        response.write(archive.subarray(0, offset));
+        const timer = setInterval(() => {
+          response.write(archive.subarray(offset, offset + chunkSize));
+          offset += chunkSize;
+          if (offset >= archive.length) {
+            clearInterval(timer);
+            response.end();
+          }
+        }, 500);
+        response.once('close', () => clearInterval(timer));
+      },
+    },
+    {
+      name: 'stalled response headers time out',
+      timeoutMs: 1_000,
+      respond: () => {},
+      error: /download timed out/u,
+    },
+    {
+      name: 'stalled response body times out',
+      timeoutMs: 1_000,
+      respond: (_request, response) => {
+        response.writeHead(200, { 'Content-Length': archive.length });
+        response.write(archive.subarray(0, 1));
+      },
+      error: /download timed out/u,
+    },
+    {
+      name: 'HTTP failure cancels an unfinished response body',
+      timeoutMs: 5_000,
+      respond: (_request, response) => {
+        response.writeHead(503);
+        response.write('unavailable');
+      },
+      error: /download failed \(503\)/u,
+    },
+    {
+      name: 'connection failure reports its cause',
+      timeoutMs: 5_000,
+      respond: (request) => request.socket.destroy(),
+      error: /download failed: fetch failed/su,
+    },
+  ];
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async (t) => {
+      const server = createServer(scenario.respond);
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      t.after(() => {
+        server.closeAllConnections();
+        return new Promise((resolve) => server.close(resolve));
+      });
+      const program = `
+        import { installFoundry } from ${JSON.stringify(moduleUrl)};
+        try {
+          await installFoundry(${JSON.stringify(fixture.root)}, 'evm', {
+            downloadIdleTimeoutMs: ${scenario.timeoutMs},
+          });
+        } catch (error) {
+          process.stderr.write(error.message + '\\n');
+          process.exitCode = error.exitCode ?? 6;
+        }
+      `;
+      const result = await new Promise((resolve) => {
+        execFile(
+          process.execPath,
+          ['--import', download, '--input-type=module', '-e', program],
+          {
+            cwd: fixture.root,
+            encoding: 'utf8',
+            timeout: 10_000,
+            env: {
+              ...process.env,
+              SUNHAT_TEST_DOWNLOAD_URL: `http://127.0.0.1:${server.address().port}`,
+            },
+          },
+          (error, stdout, stderr) => resolve({ error, stdout, stderr }),
+        );
+      });
+      assert.match(result.stderr, /^verify\n/u);
+      assert.doesNotMatch(result.stderr, /https?:\/\/|v1\.8\.6|foundry-rs/u);
+      if (scenario.error) {
+        assert.equal(result.error?.code, 3, result.stderr);
+        assert.equal(result.error.killed, false);
+        assert.match(result.stderr, scenario.error);
+      } else {
+        assert.ifError(result.error);
+        assert.equal(result.stdout, '');
+        assert.equal(
+          result.stderr,
+          'verify\nToolchain installed successfully.\n',
+        );
+      }
+      assertPreserved(fixture.root, previous);
+      assertClean(fixture.root, 'evm');
+    });
+  }
+});
+
+test('the installer downloads only the selected host archive and uses native extraction', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  writeArchive(fixture, { label: 'service replacement' });
+  const requested = [];
+  assert.equal(
+    await installFoundry(fixture.root, 'evm', {
+      download: async (url) => {
+        requested.push(url);
+        return readFileSync(fixture.archive);
+      },
+    }),
+    0,
+  );
+  assert.deepEqual(requested, [readFileSync(fixture.log, 'utf8')]);
+  const installed = snapshot(fixture.root);
+  for (const [path, bytes] of Object.entries(installed.binaries)) {
+    assert.notDeepEqual(bytes, previous.binaries[path]);
+    assert.deepEqual(bytes, fixture.contents[path.split('/').at(-1)]);
+  }
+  assertPreserved(fixture.root, installed);
+  assertClean(fixture.root, 'evm');
+});
+
+test('a download dependency failure leaves the installed toolchain intact', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  const failure = new Error('injected download boundary failure');
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => {
+        throw failure;
+      },
+      extract: async () => {
+        assert.fail('extraction must not run after a download failure');
+      },
+    }),
+    (error) => error === failure,
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
+
+test('downloaded bytes are verified before the extraction dependency is called', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => Buffer.from('invalid archive'),
+      extract: async () => {
+        assert.fail('extraction must not run before checksum verification');
+      },
+    }),
+    (error) => {
+      assert.equal(error.exitCode, 3);
+      assert.match(error.message, /archive digest mismatch/u);
+      return true;
+    },
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
+
+test('an extraction dependency failure cleans staging and preserves the installed toolchain', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  writeArchive(fixture, { label: 'service replacement' });
+  const failure = new Error('injected extraction boundary failure');
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => readFileSync(fixture.archive),
+      extract: async (archive, destination) => {
+        assert.deepEqual(readFileSync(archive), readFileSync(fixture.archive));
+        assert.ok(statSync(destination).isDirectory());
+        assert.equal(
+          statSync(dirname(destination)).dev,
+          statSync(fixture.root).dev,
+        );
+        throw failure;
+      },
+    }),
+    (error) => error === failure,
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
 
 for (const target of ['evm', 'tron']) {
   for (const [platform, arch] of [

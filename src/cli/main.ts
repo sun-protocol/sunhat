@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { parse } from '../cli/parser.js';
-import { route } from '../cli/router.js';
+import { parse } from './parser.js';
+import { route } from './router.js';
 import { CliError, errorMessage } from '../errors.js';
 
 try {

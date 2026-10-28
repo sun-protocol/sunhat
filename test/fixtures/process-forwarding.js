@@ -1,4 +1,4 @@
-import { spawnNative } from '../../dist/process/spawn.js';
+import { spawnNative } from '../../dist/process.js';
 
 const status = await spawnNative(
   process.execPath,

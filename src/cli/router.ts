@@ -1,9 +1,10 @@
 import { resolve } from 'node:path';
 import { runHardhat } from '../adapters/hardhat.js';
 import { runFoundry } from '../adapters/foundry.js';
-import { initProject } from '../commands/init.js';
-import { toolchain } from '../commands/toolchain.js';
+import { initProject } from './init.js';
+import { toolchain } from './toolchain.js';
 import { usage } from '../errors.js';
+import { readPackageMetadata } from '../package.js';
 import { readBinding } from '../project/binding.js';
 import { findProjectRoot } from '../project/root.js';
 import type { Invocation } from './parser.js';
@@ -15,6 +16,7 @@ Usage:
   sunhat <command> [args...]
 
 Init defaults: framework=foundry, target=tron
+Init creates project files only. For Foundry, run \`sunhat toolchain install\` in the project directory.
 `;
 
 export async function route(invocation: Invocation): Promise<number> {
@@ -23,7 +25,7 @@ export async function route(invocation: Invocation): Promise<number> {
     return 0;
   }
   if (invocation.kind === 'version') {
-    process.stdout.write('sunhat 2.0.0\n');
+    process.stdout.write(`sunhat ${readPackageMetadata().version}\n`);
     return 0;
   }
   if (invocation.kind === 'init') {

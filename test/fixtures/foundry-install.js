@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { after } from 'node:test';
+import { setArchiveDigest } from './toolchain-config.js';
 
-const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-init-archive-'));
+const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-install-archive-'));
 after(() => rmSync(temporary, { recursive: true, force: true }));
 const source = resolve(temporary, 'source');
 mkdirSync(source);
@@ -38,11 +39,22 @@ if (windows) {
   });
 }
 
-export const foundryInitArgs = [
-  '--no-warnings',
-  '--experimental-loader',
-  new URL('./toolchain-install-loader.js', import.meta.url).href,
+export const foundryInstallArgs = [
   '--import',
   new URL('./toolchain-install-download.js', import.meta.url).href,
 ];
-export const foundryInitEnv = { SUNHAT_TEST_ARCHIVE: archive };
+export const foundryInstallEnv = { SUNHAT_TEST_ARCHIVE: archive };
+
+export function configureFoundryTemplates(packageRoot) {
+  for (const target of ['evm', 'tron']) {
+    setArchiveDigest(
+      resolve(
+        packageRoot,
+        'templates/foundry',
+        target,
+        'foundry-toolchain.json',
+      ),
+      archive,
+    );
+  }
+}

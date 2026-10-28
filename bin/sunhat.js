@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-import '../dist/bin/sunhat.js';
+import '../dist/cli/main.js';

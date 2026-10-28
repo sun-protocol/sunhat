@@ -14,7 +14,7 @@ const config: HardhatUserConfig = {
     },
   },
   tre: {
-    autoStart: true,
+    autoStart: false,
     image: 'tronbox/tre:dev',
     compiler: { target: 'tron' },
   },
