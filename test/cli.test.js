@@ -16,6 +16,9 @@ import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
 
 const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
 const repository = resolve(dirname(cli), '..');
+const packageMetadata = JSON.parse(
+  readFileSync(resolve(repository, 'package.json'), 'utf8'),
+);
 const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-cli-'));
 after(() => rmSync(temporary, { recursive: true, force: true }));
 
@@ -166,7 +169,10 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   );
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
-  assert.equal(pkg.devDependencies.sunhat, `file:${repository}`);
+  assert.equal(
+    pkg.devDependencies.sunhat,
+    `npm:${packageMetadata.name}@${packageMetadata.version}`,
+  );
   assert.equal(pkg.scripts.build, 'sunhat compile');
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat EVM Project with Sunhat/u);

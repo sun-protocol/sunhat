@@ -4,6 +4,7 @@ import { runFoundry } from '../adapters/foundry.js';
 import { initProject } from '../commands/init.js';
 import { toolchain } from '../commands/toolchain.js';
 import { usage } from '../errors.js';
+import { readPackageMetadata } from '../package.js';
 import { readBinding } from '../project/binding.js';
 import { findProjectRoot } from '../project/root.js';
 import type { Invocation } from './parser.js';
@@ -23,7 +24,7 @@ export async function route(invocation: Invocation): Promise<number> {
     return 0;
   }
   if (invocation.kind === 'version') {
-    process.stdout.write('sunhat 2.0.0\n');
+    process.stdout.write(`sunhat ${readPackageMetadata().version}\n`);
     return 0;
   }
   if (invocation.kind === 'init') {

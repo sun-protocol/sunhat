@@ -22,6 +22,9 @@ import { initProject } from '../dist/commands/init.js';
 import { CliError } from '../dist/errors.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
+const packageMetadata = JSON.parse(
+  readFileSync(resolve(repository, 'package.json'), 'utf8'),
+);
 
 function runtime(t) {
   const temporary = realpathSync(
@@ -137,7 +140,7 @@ for (const framework of ['hardhat', 'foundry']) {
       assert.equal(generated.name, basename(project));
       assert.equal(
         generated.devDependencies.sunhat,
-        `file:${fixture.packageRoot}`,
+        `npm:${packageMetadata.name}@${packageMetadata.version}`,
       );
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
@@ -175,6 +178,46 @@ for (const framework of ['hardhat', 'foundry']) {
     });
   }
 }
+
+test('package metadata drives the version command and every generated Sunhat dependency', (t) => {
+  const fixture = runtime(t);
+  const path = resolve(fixture.packageRoot, 'package.json');
+  const metadata = JSON.parse(readFileSync(path, 'utf8'));
+  metadata.name = '@sun-protocol/sunhat-preview';
+  metadata.version = '2.1.0-rc.1';
+  json(path, metadata);
+  const version = spawnSync(process.execPath, [fixture.cli, '--version'], {
+    cwd: fixture.temporary,
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(version.stdout, `sunhat ${metadata.version}\n`);
+
+  for (const framework of ['hardhat', 'foundry']) {
+    for (const target of ['evm', 'tron']) {
+      const project = resolve(fixture.temporary, `${framework}-${target}`);
+      const result = run(fixture, [
+        '--framework',
+        framework,
+        '--target',
+        target,
+        project,
+      ]);
+      assert.equal(result.status, 0, result.stderr);
+      const generated = JSON.parse(
+        readFileSync(resolve(project, 'package.json'), 'utf8'),
+      );
+      assert.equal(
+        generated.devDependencies.sunhat,
+        `npm:${metadata.name}@${metadata.version}`,
+      );
+      const readme = readFileSync(resolve(project, 'README.md'), 'utf8');
+      assert.ok(readme.includes(`${metadata.name}@${metadata.version}`));
+      assert.doesNotMatch(readme, /\{\{sunhatPackage\}\}/u);
+    }
+  }
+});
 
 test('new template files participate in conflict checks before any project file is written', (t) => {
   const fixture = runtime(t);

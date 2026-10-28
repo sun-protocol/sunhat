@@ -57,13 +57,13 @@ For EVM, initialize with `--target evm` and use the same install, compile, and t
 
 ## Use the local CLI and npm scripts
 
-Generated projects initially reference the Sunhat installation that created them through a `file:` dependency named `sunhat`. For a portable registry dependency, replace that reference from the generated project's root:
+Generated projects declare the creating CLI's npm package and exact version under the `sunhat` alias. Install the generated project's dependencies from its root:
 
 ```bash
-npm install --save-dev --save-exact sunhat@npm:@sun-protocol/sunhat@2.0.0
+npm install
 ```
 
-This npm alias keeps the generated dependency name `sunhat` while installing the scoped package. Commit `package.json` and the package-manager lockfile for reproducible npm dependency installation.
+For Sunhat 2.0.0, the alias is `npm:@sun-protocol/sunhat@2.0.0`. It is independent of the initializing machine's installation path. Commit `package.json` and the package-manager lockfile for reproducible npm dependency installation.
 
 ```bash
 npx --no-install sunhat --version
@@ -74,6 +74,17 @@ npm test
 The generated `build` script runs `sunhat build` for Foundry or `sunhat compile` for Hardhat. Both templates map `npm test` to `sunhat test`. Forward additional arguments with `npm run build -- <args>` or `npm test -- <args>`.
 
 Global Sunhat resolves the project's framework tools, but it does not switch to the project's Sunhat version. Use `npx --no-install sunhat ...` or the generated npm scripts when you want the local CLI.
+
+### Develop against a local checkout
+
+Run `npm run build` in the Sunhat checkout. In a generated project's root, explicitly point its Sunhat dependency at that checkout:
+
+```bash
+npm pkg set "devDependencies.sunhat=file:/absolute/path/to/sunhat2"
+npm install
+```
+
+Rebuild the checkout after source changes. Restore the registry dependency before sharing the project or committing its dependency configuration.
 
 ## Adopt an existing project
 

@@ -8,9 +8,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { CliError, errorMessage, hasErrorCode, usage } from '../errors.js';
+import { packageRoot, readPackageMetadata } from '../package.js';
 import type { Framework, Target } from '../project/binding.js';
 import { parseTarget } from '../cli/parser.js';
 import { installFoundry } from '../toolchain/install.js';
@@ -22,7 +22,11 @@ interface InitOptions {
   adopt: boolean;
 }
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+interface TemplateValues {
+  projectName: string;
+  sunhatPackage: string;
+  sunhatDependency: string;
+}
 
 export async function initProject(argv: readonly string[]): Promise<number> {
   const options = parseOptions(argv);
@@ -134,13 +138,20 @@ function validateNativeProject(root: string, framework: Framework): void {
 }
 
 function scaffold(root: string, framework: Framework, target: Target): void {
+  const metadata = readPackageMetadata();
+  const sunhatPackage = `${metadata.name}@${metadata.version}`;
+  const values: TemplateValues = {
+    projectName: basename(root),
+    sunhatPackage,
+    sunhatDependency: `npm:${sunhatPackage}`,
+  };
   const source = resolve(packageRoot, 'templates', framework);
   const files = new Map<string, string>();
   collectTemplates(resolve(source, 'common'), '', files);
   collectTemplates(resolve(source, target), '', files);
   const outputs = Array.from(files, ([name, from]) => ({
     path: resolve(root, name),
-    data: renderTemplate(from, root),
+    data: renderTemplate(from, values),
   }));
   const checked = new Set<string>();
   for (const file of outputs) {
@@ -206,15 +217,16 @@ function collectTemplates(
   }
 }
 
-function renderTemplate(path: string, root: string): string | Buffer {
+function renderTemplate(path: string, values: TemplateValues): string | Buffer {
   const contents = readFileSync(path);
+  if (path.endsWith('.md')) {
+    return contents
+      .toString('utf8')
+      .replaceAll('{{sunhatPackage}}', values.sunhatPackage);
+  }
   if (!path.endsWith('.json')) {
     return contents;
   }
-  const values = {
-    projectName: basename(root),
-    sunhatDependency: `file:${packageRoot}`,
-  };
   // Replace complete JSON string values so Windows paths and quotes remain escaped.
   return contents
     .toString('utf8')

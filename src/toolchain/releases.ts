@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, resolve } from 'node:path';
 import type { Target } from '../project/binding.js';
 import { toolchainError } from '../errors.js';
+import { packageRoot } from '../package.js';
 import { isRecord, readJson } from '../project/json.js';
 import type { FoundryTool } from './lock.js';
 
@@ -14,8 +14,6 @@ export interface Release {
   sha256: string;
   tools: Record<FoundryTool, string>;
 }
-
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 export function platformKey(): string {
   return `${process.platform}-${process.arch === 'x64' ? 'amd64' : process.arch}`;

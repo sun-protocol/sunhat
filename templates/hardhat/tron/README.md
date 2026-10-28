@@ -4,28 +4,28 @@ This project uses Sunhat to run Hardhat 2 with the Hardhat-TRON plugin and a TRE
 
 ## Global command prerequisites
 
-The `sunhat ...` examples use the `@sun-protocol/sunhat@2.0.0` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
+The `sunhat ...` examples use the `{{sunhatPackage}}` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
 
 ```bash
-npm install --global @sun-protocol/sunhat@2.0.0
+npm install --global {{sunhatPackage}}
 sunhat --version
 ```
 
 Run project commands from this directory or a subdirectory after the dependency installation below. Global Sunhat uses the project's local Hardhat 2 and Hardhat-TRON dependencies and configuration.
 
-The quick start also installs `@sun-protocol/sunhat@2.0.0` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
+The generated project declares `{{sunhatPackage}}` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
 
 Docker must be installed and running. The generated configuration starts `tronbox/tre:dev` automatically when required.
 
 ## Quick start
 
 ```bash
-npm install --save-dev --save-exact sunhat@npm:@sun-protocol/sunhat@2.0.0
+npm install
 npm run build
 npm test
 ```
 
-The install command replaces the scaffold's `file:` Sunhat reference with the npm version and installs the project's other declared dependencies.
+The install command installs all declared dependencies. The Sunhat dependency uses an npm alias that is independent of the machine that initialized this project.
 
 The generated configuration selects the `tre` network and compiles contracts with `tron-solc`.
 
