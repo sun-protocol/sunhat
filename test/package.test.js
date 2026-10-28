@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { parse } from 'smol-toml';
 import {
   configureFoundryTemplates,
   foundryInitArgs,
@@ -173,14 +174,11 @@ test(
               manifest.devDependencies.sunhat,
               `npm:${metadata.name}@${metadata.version}`,
             );
-            const binding = readFileSync(
-              resolve(project, 'sunhat.toml'),
-              'utf8',
+            const binding = parse(
+              readFileSync(resolve(project, 'sunhat.toml'), 'utf8'),
             );
-            assert.equal(
-              binding,
-              `[project]\nframework = "${framework}"\ntarget = "${target}"\n`,
-            );
+            assert.equal(binding.project.framework, framework);
+            assert.equal(binding.project.target, target);
             const readme = readFileSync(resolve(project, 'README.md'), 'utf8');
             assert.ok(readme.includes(`${metadata.name}@${metadata.version}`));
             assert.doesNotMatch(readme, /\{\{sunhatPackage\}\}/u);

@@ -15,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
+import { parse } from 'smol-toml';
 import {
   configureFoundryTemplates,
   foundryInitArgs,
@@ -160,10 +161,9 @@ function project(t, framework, target) {
   ]);
   assert.equal(initialized.status, 0, initialized.stderr);
   const root = realpathSync(destination);
-  assert.equal(
-    readFileSync(resolve(root, 'sunhat.toml'), 'utf8'),
-    `[project]\nframework = "${framework}"\ntarget = "${target}"\n`,
-  );
+  const binding = parse(readFileSync(resolve(root, 'sunhat.toml'), 'utf8'));
+  assert.equal(binding.project.framework, framework);
+  assert.equal(binding.project.target, target);
   const nested = resolve(root, 'nested directory', 'contracts');
   mkdirSync(nested, { recursive: true });
   const log = resolve(temporary, 'invocations.jsonl');
