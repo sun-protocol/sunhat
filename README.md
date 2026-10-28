@@ -48,6 +48,8 @@ npm test
 
 `prepack` builds the CLI for both `npm pack` and `npm publish`.
 
+Runtime tests use temporary CLI copies and release configuration for local archives. Installer tests replace download and extraction dependencies where needed; filesystem replacement and rollback tests use real files and directories.
+
 Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.
 
 Initialization files and Foundry release data live under `templates/<framework>/common/` and `templates/<framework>/<target>/`. Target files override matching common files. The [TOML compatibility note](docs/toml-binding.md) documents the binding syntax baseline and parser limits.

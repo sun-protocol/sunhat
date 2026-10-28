@@ -12,15 +12,21 @@ import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import {
+  configureFoundryTemplates,
+  foundryInitArgs,
+  foundryInitEnv,
+} from './fixtures/foundry-init.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
 
-const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
-const repository = resolve(dirname(cli), '..');
+const repository = fileURLToPath(new URL('../', import.meta.url));
 const packageMetadata = JSON.parse(
   readFileSync(resolve(repository, 'package.json'), 'utf8'),
 );
 const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-cli-'));
 after(() => rmSync(temporary, { recursive: true, force: true }));
+const { packageRoot, cli } = copyCliRuntime(resolve(temporary, 'runtime'));
+configureFoundryTemplates(packageRoot);
 
 function temp(name) {
   return mkdtempSync(resolve(temporary, `${name}-`));

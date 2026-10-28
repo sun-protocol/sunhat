@@ -15,7 +15,11 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import {
+  configureFoundryTemplates,
+  foundryInitArgs,
+  foundryInitEnv,
+} from './fixtures/foundry-init.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const metadata = JSON.parse(
@@ -139,6 +143,7 @@ test(
       },
     );
 
+    configureFoundryTemplates(installed);
     for (const framework of ['foundry', 'hardhat']) {
       for (const target of ['evm', 'tron']) {
         await t.test(
@@ -158,7 +163,7 @@ test(
               ],
               consumer,
               {
-                env: { ...foundryInitEnv, SUNHAT_TEST_PACKAGE_ROOT: installed },
+                env: foundryInitEnv,
               },
             );
             const manifest = JSON.parse(

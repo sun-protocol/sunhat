@@ -13,17 +13,15 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
+import { installFoundry } from '../dist/toolchain/install.js';
+import { setArchiveDigest } from './fixtures/toolchain-config.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const cli = resolve(repository, 'bin/sunhat.js');
-const loader = new URL(
-  './fixtures/toolchain-install-loader.js',
-  import.meta.url,
-).href;
 const download = new URL(
   './fixtures/toolchain-install-download.js',
   import.meta.url,
@@ -141,6 +139,7 @@ function writeArchive(fixture, { label = 'fixture', missingTool } = {}) {
     0,
     compressed.stderr || String(compressed.error ?? ''),
   );
+  setArchiveDigest(resolve(fixture.root, 'foundry-toolchain.json'), archive);
 }
 
 function installFixture(t, target, directory = tmpdir()) {
@@ -160,16 +159,28 @@ function installFixture(t, target, directory = tmpdir()) {
     log: resolve(temporary, 'download-url.txt'),
     renameLog: resolve(temporary, 'renames.jsonl'),
   };
+  mkdirSync(fixture.root);
+  writeFileSync(resolve(fixture.root, 'foundry.toml'), '[profile.default]\n');
+  writeFileSync(
+    resolve(fixture.root, 'foundry-toolchain.json'),
+    readFileSync(
+      resolve(
+        repository,
+        'templates/foundry',
+        target,
+        'foundry-toolchain.json',
+      ),
+    ),
+  );
   writeArchive(fixture);
   const initialized = spawnSync(
     process.execPath,
     [
-      '--experimental-loader',
-      loader,
       '--import',
       download,
       cli,
       'init',
+      '--adopt',
       '--target',
       target,
       fixture.root,
@@ -196,8 +207,6 @@ function install(fixture, fault) {
   return spawnSync(
     process.execPath,
     [
-      '--experimental-loader',
-      loader,
       '--import',
       download,
       ...(fault ? ['--import', faults] : []),
@@ -263,6 +272,93 @@ function assertClean(root, target) {
   ]);
   assert.deepEqual(readdirSync(resolve(root, '.sunhat/toolchains')), [target]);
 }
+
+test('the installer accepts a download dependency while using native archive extraction', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  writeArchive(fixture, { label: 'service replacement' });
+  let requested;
+  assert.equal(
+    await installFoundry(fixture.root, 'evm', {
+      download: async (url) => {
+        requested = url;
+        return readFileSync(fixture.archive);
+      },
+    }),
+    0,
+  );
+  assert.equal(requested, readFileSync(fixture.log, 'utf8'));
+  const installed = snapshot(fixture.root);
+  for (const [path, bytes] of Object.entries(installed.binaries)) {
+    assert.notDeepEqual(bytes, previous.binaries[path]);
+    assert.deepEqual(bytes, fixture.contents[path.split('/').at(-1)]);
+  }
+  assertPreserved(fixture.root, installed);
+  assertClean(fixture.root, 'evm');
+});
+
+test('a download dependency failure leaves the installed toolchain intact', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  const failure = new Error('injected download boundary failure');
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => {
+        throw failure;
+      },
+      extract: async () => {
+        assert.fail('extraction must not run after a download failure');
+      },
+    }),
+    (error) => error === failure,
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
+
+test('downloaded bytes are verified before the extraction dependency is called', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => Buffer.from('invalid archive'),
+      extract: async () => {
+        assert.fail('extraction must not run before checksum verification');
+      },
+    }),
+    (error) => {
+      assert.equal(error.exitCode, 3);
+      assert.match(error.message, /archive digest mismatch/u);
+      return true;
+    },
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
+
+test('an extraction dependency failure cleans staging and preserves the installed toolchain', async (t) => {
+  const fixture = installFixture(t, 'evm');
+  const previous = snapshot(fixture.root);
+  writeArchive(fixture, { label: 'service replacement' });
+  const failure = new Error('injected extraction boundary failure');
+  await assert.rejects(
+    installFoundry(fixture.root, 'evm', {
+      download: async () => readFileSync(fixture.archive),
+      extract: async (archive, destination) => {
+        assert.deepEqual(readFileSync(archive), readFileSync(fixture.archive));
+        assert.ok(statSync(destination).isDirectory());
+        assert.equal(
+          statSync(dirname(destination)).dev,
+          statSync(fixture.root).dev,
+        );
+        throw failure;
+      },
+    }),
+    (error) => error === failure,
+  );
+  assertPreserved(fixture.root, previous);
+  assertClean(fixture.root, 'evm');
+});
 
 for (const target of ['evm', 'tron']) {
   for (const [platform, arch] of [

@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
 import {
   chmodSync,
   mkdirSync,
@@ -9,24 +8,26 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import type { Target } from '../project/binding.js';
+import { extractArchive } from './archive.js';
+import { downloadArchive } from './download.js';
 import { platformKey, releaseFor, releaseUrl } from './releases.js';
 
-const execFileAsync = promisify(execFile);
+interface InstallDependencies {
+  download: (url: string) => Promise<Buffer>;
+  extract: (archive: string, destination: string) => Promise<void>;
+}
 
 export async function installFoundry(
   root: string,
   target: Target,
+  dependencies: Partial<InstallDependencies> = {},
 ): Promise<number> {
+  const { download = downloadArchive, extract = extractArchive } = dependencies;
   const release = releaseFor(target, root);
   const url = releaseUrl(release);
-  const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) {
-    return toolchainError(`download failed (${response.status}): ${url}`);
-  }
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await download(url);
   const digest = createHash('sha256').update(bytes).digest('hex');
   if (digest !== release.sha256) {
     return toolchainError(
@@ -45,15 +46,7 @@ export async function installFoundry(
     const extracted = resolve(temporary, 'extracted');
     mkdirSync(extracted);
     writeFileSync(archive, bytes);
-    if (release.archive.endsWith('.zip')) {
-      await execFileAsync('powershell.exe', [
-        '-NoProfile',
-        '-Command',
-        `Expand-Archive -LiteralPath '${archive.replaceAll("'", "''")}' -DestinationPath '${extracted.replaceAll("'", "''")}'`,
-      ]);
-    } else {
-      await execFileAsync('tar', ['-xzf', archive, '-C', extracted]);
-    }
+    await extract(archive, extracted);
     const prepared = resolve(temporary, 'binaries');
     mkdirSync(prepared);
     const binaries: Record<string, { path: string }> = {};

@@ -14,11 +14,19 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import test from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import test, { after } from 'node:test';
+import {
+  configureFoundryTemplates,
+  foundryInitArgs,
+  foundryInitEnv,
+} from './fixtures/foundry-init.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
-const cli = resolve(repository, 'bin/sunhat.js');
+const runtime = mkdtempSync(resolve(tmpdir(), 'sunhat-command-runtime-'));
+after(() => rmSync(runtime, { recursive: true, force: true }));
+const { packageRoot, cli } = copyCliRuntime(resolve(runtime, 'package'));
+configureFoundryTemplates(packageRoot);
 const downloadFixture = fileURLToPath(
   new URL('./fixtures/toolchain-download.js', import.meta.url),
 );

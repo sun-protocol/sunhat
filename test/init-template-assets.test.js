@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs, {
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -17,7 +16,12 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { foundryInitArgs, foundryInitEnv } from './fixtures/foundry-init.js';
+import {
+  configureFoundryTemplates,
+  foundryInitArgs,
+  foundryInitEnv,
+} from './fixtures/foundry-init.js';
+import { copyCliRuntime } from './fixtures/runtime.js';
 import { initProject } from '../dist/commands/init.js';
 import { CliError } from '../dist/errors.js';
 import { applyScaffold } from '../dist/scaffold/apply.js';
@@ -37,18 +41,9 @@ function runtime(t) {
     temporary,
     process.platform === 'win32' ? 'package with spaces' : 'package "quoted"',
   );
-  mkdirSync(packageRoot);
-  for (const name of ['bin', 'dist', 'templates', 'package.json']) {
-    cpSync(resolve(repository, name), resolve(packageRoot, name), {
-      recursive: true,
-    });
-  }
-  symlinkSync(
-    resolve(repository, 'node_modules'),
-    resolve(packageRoot, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
-  );
-  return { temporary, packageRoot, cli: resolve(packageRoot, 'bin/sunhat.js') };
+  const fixture = copyCliRuntime(packageRoot);
+  configureFoundryTemplates(packageRoot);
+  return { temporary, ...fixture };
 }
 
 function json(path, value) {
@@ -67,7 +62,6 @@ function run(fixture, args) {
       env: {
         ...process.env,
         ...foundryInitEnv,
-        SUNHAT_TEST_PACKAGE_ROOT: fixture.packageRoot,
       },
     },
   );
