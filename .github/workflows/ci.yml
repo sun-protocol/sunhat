@@ -21,7 +21,30 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run test:templates
+      - run: npm run test:hardhat3
       - run: npm run pack:check
+
+  hardhat3-minimum-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - run: npm ci
+      - run: npm run test:hardhat3
+
+  hardhat3-tron-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm ci
+      - run: npm run test:hardhat3:tron
 
   minimum-node:
     runs-on: ubuntu-latest

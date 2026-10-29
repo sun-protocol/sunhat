@@ -1,0 +1,13 @@
+{
+  "name": "sunhat-hardhat3-tron-probe",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-mocha": "4.0.1",
+    "@openzeppelin/tron-runtime": "0.1.0",
+    "ethers": "6.17.0",
+    "hardhat": "3.21.1",
+    "mocha": "12.0.3",
+    "tronweb": "6.5.1"
+  }
+}

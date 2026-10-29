@@ -19,6 +19,7 @@ import {
   foundryInstallEnv,
 } from './fixtures/foundry-install.js';
 import { copyCliRuntime } from './fixtures/runtime.js';
+import { isHardhat3NodeSupported } from '../dist/project/hardhat.js';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const packageMetadata = JSON.parse(
@@ -413,13 +414,205 @@ test('TRON rejects anvil without launching toolchain', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unsupported.*TRON/u);
 });
-test('Hardhat 3 is rejected with resolved version', () => {
+test('Hardhat 3 forwards native commands on supported Node versions', () => {
   const root = temp('hh3');
   binding(root, 'hardhat', 'evm');
-  hardhat(root, '3.0.0');
+  json(resolve(root, 'package.json'), {
+    type: 'module',
+    devDependencies: { hardhat: '3.21.1' },
+  });
+  hardhat(root, '3.21.1');
+  const result = run(root, [
+    'test',
+    'mocha',
+    '--grep',
+    'space value',
+    '--',
+    '',
+  ]);
+  if (!isHardhat3NodeSupported(process.versions.node)) {
+    assert.equal(result.status, 3, result.stderr);
+    assert.match(result.stderr, /Hardhat 3.*Node.js.*22\.13\.0/su);
+    assert.equal(result.stdout, '');
+  } else {
+    assert.equal(result.status, 17, result.stderr);
+    assert.equal(
+      result.stdout,
+      '["test","mocha","--grep","space value","--",""]',
+    );
+  }
+});
+
+test('Hardhat 3 EVM initialization is offline and uses separate ESM templates', () => {
+  const parent = temp('hh3-scaffold');
+  const root = resolve(parent, 'project');
+  const result = run(parent, [
+    'init',
+    '--framework',
+    'hardhat',
+    '--hardhat-version',
+    '3',
+    '--target',
+    'evm',
+    root,
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(
+    readFileSync(resolve(root, 'package.json'), 'utf8'),
+  );
+  assert.equal(manifest.type, 'module');
+  assert.equal(manifest.devDependencies.hardhat, '3.21.1');
+  assert.equal(
+    manifest.devDependencies['@nomicfoundation/hardhat-ethers'],
+    '4.2.1',
+  );
+  assert.equal(
+    manifest.devDependencies['@openzeppelin/hardhat-tron'],
+    undefined,
+  );
+  assert.equal(manifest.scripts.build, 'sunhat build');
+  assert.equal(manifest.scripts.test, 'sunhat test');
+  assert.equal(
+    manifest.devDependencies.sunhat,
+    `npm:${packageMetadata.name}@${packageMetadata.version}`,
+  );
+  assert.match(
+    readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'),
+    /plugins: \[hardhatEthers, hardhatMocha\]/u,
+  );
+  assert.match(
+    readFileSync(resolve(root, 'test/Counter.test.ts'), 'utf8'),
+    /network\.create\(\)/u,
+  );
+  assert.equal(existsSync(resolve(root, 'node_modules')), false);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
+});
+
+for (const args of [
+  ['--hardhat-version', '3'],
+  ['--framework', 'hardhat', '--hardhat-version', '4'],
+  ['--framework', 'hardhat', '--hardhat-version'],
+]) {
+  test(`invalid Hardhat version selection ${args.join(' ')} writes no project files`, () => {
+    const parent = temp('hh-version-args');
+    const root = resolve(parent, 'project');
+    const result = run(parent, ['init', ...args, root]);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /hardhat-version/u);
+    assert.equal(existsSync(root), false);
+  });
+}
+
+test('Hardhat 3 TRON initialization fails before writing instead of generating an incompatible project', () => {
+  const parent = temp('hh3-tron');
+  const root = resolve(parent, 'project');
+  const result = run(parent, [
+    'init',
+    '--framework',
+    'hardhat',
+    '--hardhat-version',
+    '3',
+    root,
+  ]);
+  assert.equal(result.status, 3, result.stderr);
+  assert.match(result.stderr, /Hardhat 3\/TRON.*compatible TRON plugin/u);
+  assert.equal(existsSync(root), false);
+});
+
+for (const [name, declared, moduleType, version, expected] of [
+  ['existing ESM project', '3.21.1', 'module', undefined, 0],
+  ['explicit major', '3.21.1', 'module', '3', 0],
+  ['major mismatch', '2.29.1', 'module', '3', 2],
+  ['CommonJS project', '3.21.1', 'commonjs', '3', 2],
+  ['unpinned version', '^3.21.1', 'module', '3', 2],
+]) {
+  test(`Hardhat 3 adoption validates ${name} before writing`, () => {
+    const root = temp('hh3-adopt');
+    const config = 'export default {};\n';
+    writeFileSync(resolve(root, 'hardhat.config.ts'), config);
+    const project = {
+      type: moduleType,
+      devDependencies: { hardhat: declared },
+    };
+    json(resolve(root, 'package.json'), project);
+    const result = run(root, [
+      'init',
+      '--adopt',
+      '--framework',
+      'hardhat',
+      '--target',
+      'evm',
+      ...(version ? ['--hardhat-version', version] : []),
+      root,
+    ]);
+    assert.equal(result.status, expected, result.stderr);
+    assert.equal(existsSync(resolve(root, 'sunhat.toml')), expected === 0);
+    assert.equal(
+      readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'),
+      config,
+    );
+    assert.deepEqual(
+      JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')),
+      project,
+    );
+  });
+}
+
+test('Hardhat 3 refuses a TRON binding before launching an EVM toolchain', () => {
+  const root = temp('hh3-tron-execute');
+  binding(root, 'hardhat', 'tron');
+  json(resolve(root, 'package.json'), {
+    type: 'module',
+    devDependencies: { hardhat: '3.21.1' },
+  });
+  hardhat(root, '3.21.1');
+  const result = run(root, ['test']);
+  assert.equal(result.status, 3, result.stderr);
+  assert.match(result.stderr, /Hardhat 3\/TRON/u);
+  assert.equal(result.stdout, '');
+});
+
+for (const [version, expected] of [
+  ['2.29.1', 0],
+  ['3.21.1', 2],
+]) {
+  test(`Hardhat ${version} adoption handles a cjs-only configuration before writing`, () => {
+    const root = temp('hh-cjs-adopt');
+    writeFileSync(
+      resolve(root, 'hardhat.config.cjs'),
+      'module.exports = {};\n',
+    );
+    json(resolve(root, 'package.json'), {
+      type: 'module',
+      devDependencies: { hardhat: version },
+    });
+    const result = run(root, [
+      'init',
+      '--adopt',
+      '--framework',
+      'hardhat',
+      '--target',
+      'evm',
+      root,
+    ]);
+    assert.equal(result.status, expected, result.stderr);
+    assert.equal(existsSync(resolve(root, 'sunhat.toml')), expected === 0);
+    if (expected !== 0) {
+      assert.match(
+        result.stderr,
+        /Hardhat 3 requires hardhat.config.ts or hardhat.config.js/u,
+      );
+    }
+  });
+}
+test('unsupported Hardhat majors are rejected with the resolved version', () => {
+  const root = temp('hh4');
+  binding(root, 'hardhat', 'evm');
+  hardhat(root, '4.0.0');
   const result = run(root, ['test']);
   assert.equal(result.status, 3);
-  assert.match(result.stderr, /Hardhat 2.*3\.0\.0/u);
+  assert.match(result.stderr, /Hardhat 2 or 3.*4\.0\.0/u);
+  assert.equal(result.stdout, '');
 });
 test('Foundry accepts a legacy lock without comparing its recorded digest', () => {
   const root = temp('digest');

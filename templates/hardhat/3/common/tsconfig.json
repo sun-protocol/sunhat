@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "types": ["node", "mocha"]
+  },
+  "include": ["hardhat.config.ts", "scripts", "test"]
+}

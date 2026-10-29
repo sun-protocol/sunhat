@@ -15,6 +15,10 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { resolveExecutable } from '../dist/adapters/executable.js';
 import { CliError } from '../dist/errors.js';
+import {
+  hardhatMajor,
+  isHardhat3NodeSupported,
+} from '../dist/project/hardhat.js';
 import { platformKey, releaseFor } from '../dist/toolchain/releases.js';
 
 const cli = fileURLToPath(new URL('../bin/sunhat.js', import.meta.url));
@@ -135,6 +139,7 @@ for (const [name, value] of [
   ['null dependencies', { dependencies: null }],
   ['array dependencies', { dependencies: [] }],
   ['numeric dependency', { devDependencies: { hardhat: 42 } }],
+  ['numeric module type', { type: 42 }],
 ]) {
   test(`Hardhat rejects project ${name} with its path`, (t) => {
     const context = hardhat(t);
@@ -158,6 +163,53 @@ test('Hardhat accepts valid dependency maps and a string bin entry', (t) => {
   const result = run(context.root, ['compile', '--force']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, '["compile","--force"]');
+});
+
+for (const [version, supported] of [
+  ['20.19.0', false],
+  ['22.12.0', false],
+  ['22.13.0', true],
+  ['22.14.0', true],
+  ['23.0.0', false],
+  ['24.0.0', true],
+  ['25.1.0', false],
+  ['26.0.0', true],
+  ['22.13', false],
+  ['invalid', false],
+]) {
+  test(`Hardhat 3 Node support for ${version} is ${supported}`, () => {
+    assert.equal(isHardhat3NodeSupported(version), supported);
+  });
+}
+
+test('Hardhat major selection rejects unsupported or malformed versions', () => {
+  for (const version of [undefined, '', '3', '3.invalid', '4.0.0', '^3.21.1']) {
+    assert.equal(hardhatMajor(version), undefined);
+  }
+  assert.equal(hardhatMajor('2.29.1'), 2);
+  assert.equal(hardhatMajor('3.21.1'), 3);
+  assert.equal(hardhatMajor('3.21.1-beta.1+fixture'), 3);
+});
+
+test('Hardhat 3 rejects a CommonJS project before starting the native CLI', (t) => {
+  const context = hardhat(t);
+  json(context.project, { devDependencies: { hardhat: '3.21.1' } });
+  json(context.manifest, { version: '3.21.1', bin: 'cli.js' });
+  const result = run(context.root, ['build']);
+  assertInvalid(result, context.project);
+  assert.match(result.stderr, /requires "type": "module"/u);
+});
+
+test('Hardhat 3 keeps exact project version checks before execution', (t) => {
+  const context = hardhat(t);
+  json(context.project, {
+    type: 'module',
+    devDependencies: { hardhat: '3.20.0' },
+  });
+  json(context.manifest, { version: '3.21.1', bin: 'cli.js' });
+  const result = run(context.root, ['build']);
+  assertInvalid(result, context.manifest);
+  assert.match(result.stderr, /expected 3\.20\.0, resolved 3\.21\.1/u);
 });
 
 for (const framework of ['hardhat', 'foundry']) {

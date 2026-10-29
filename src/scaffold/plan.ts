@@ -9,6 +9,12 @@ import { basename, join, resolve } from 'node:path';
 import { CliError, usage } from '../errors.js';
 import { packageRoot, readPackageMetadata } from '../package.js';
 import type { Framework, Target } from '../project/binding.js';
+import {
+  assertHardhatTarget,
+  hardhatMajor,
+  readHardhatPackage,
+} from '../project/hardhat.js';
+import type { HardhatMajor } from '../project/hardhat.js';
 
 export interface PlannedFile {
   readonly path: string;
@@ -30,7 +36,9 @@ export function planScaffold(
   directory: string,
   framework: Framework,
   target: Target,
+  hardhatVersion?: HardhatMajor,
 ): ScaffoldPlan {
+  validateHardhatSelection(framework, target, hardhatVersion);
   const root = resolve(directory);
   assertUnbound(root);
   const metadata = readPackageMetadata();
@@ -40,7 +48,10 @@ export function planScaffold(
     sunhatPackage,
     sunhatDependency: `npm:${sunhatPackage}`,
   };
-  const source = resolve(packageRoot, 'templates', framework);
+  const source =
+    framework === 'hardhat' && hardhatVersion === 3
+      ? resolve(packageRoot, 'templates/hardhat/3')
+      : resolve(packageRoot, 'templates', framework);
   const files = new Map<string, string>();
   collectTemplates(resolve(source, 'common'), '', files);
   collectTemplates(resolve(source, target), '', files);
@@ -57,10 +68,15 @@ export function planAdoption(
   directory: string,
   framework: Framework,
   target: Target,
+  hardhatVersion?: HardhatMajor,
 ): ScaffoldPlan {
+  validateHardhatSelection(framework, target, hardhatVersion);
   const root = resolve(directory);
   validateNativeProject(root, framework);
   assertUnbound(root);
+  if (framework === 'hardhat') {
+    validateHardhatAdoption(root, target, hardhatVersion);
+  }
   const template = resolve(packageRoot, 'templates', framework, target);
   const names = ['sunhat.toml'];
   if (
@@ -76,6 +92,62 @@ export function planAdoption(
       data: readFileSync(resolve(template, name)),
     })),
   };
+}
+
+function validateHardhatSelection(
+  framework: Framework,
+  target: Target,
+  version: HardhatMajor | undefined,
+): void {
+  if (version !== undefined && framework !== 'hardhat') {
+    return usage('--hardhat-version requires --framework hardhat');
+  }
+  if (framework === 'hardhat') {
+    assertHardhatTarget(version ?? 2, target);
+  }
+}
+
+function validateHardhatAdoption(
+  root: string,
+  target: Target,
+  expected: HardhatMajor | undefined,
+): void {
+  const path = resolve(root, 'package.json');
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
+    if (expected !== undefined) {
+      return usage(
+        `cannot verify Hardhat ${expected}: package.json not found at ${path}`,
+      );
+    }
+    return;
+  }
+  const project = readHardhatPackage(path);
+  const declared =
+    project.devDependencies?.hardhat ?? project.dependencies?.hardhat;
+  const major = hardhatMajor(declared);
+  if (expected !== undefined && expected !== major) {
+    return usage(
+      `Hardhat major mismatch: expected ${expected}, declared ${declared ?? 'unknown'} in ${path}`,
+    );
+  }
+  if (major !== undefined) {
+    assertHardhatTarget(major, target);
+  }
+  if (major === 3 && project.type !== 'module') {
+    return usage(`Hardhat 3 requires "type": "module" in ${path}`);
+  }
+  if (
+    major === 3 &&
+    !['ts', 'js'].some((extension) =>
+      statSync(resolve(root, `hardhat.config.${extension}`), {
+        throwIfNoEntry: false,
+      })?.isFile(),
+    )
+  ) {
+    return usage(
+      `Hardhat 3 requires hardhat.config.ts or hardhat.config.js in ${root}`,
+    );
+  }
 }
 
 function assertUnbound(root: string): void {

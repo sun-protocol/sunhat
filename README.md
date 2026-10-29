@@ -49,6 +49,8 @@ npm test
 
 `prepack` builds the CLI for both `npm pack` and `npm publish`.
 
+Hardhat 3 integration is under development. Its EVM artifact test runs with `npm run test:hardhat3`; TRON support remains pending. See the [compatibility report](docs/hardhat3-compatibility.md) for the frozen dependency matrix, verified behavior, and remaining acceptance work.
+
 Runtime tests use temporary CLI copies and release configuration for local archives. Installer tests replace download and extraction dependencies where needed; filesystem replacement and rollback tests use real files and directories.
 
 Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.

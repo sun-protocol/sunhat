@@ -13,6 +13,7 @@
     "templates/",
     "docs/toml-binding.md",
     "docs/QuickStart.md",
+    "docs/hardhat3-compatibility.md",
     "README.md"
   ],
   "engines": {
@@ -29,6 +30,8 @@
     "test": "npm run build && npm run test:runtime",
     "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
     "test:templates": "npm run build && node --test test/template-types.test.js",
+    "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
+    "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",
     "pack:check": "npm run clean && node --test test/package.test.js"
   },
   "devDependencies": {

@@ -12,10 +12,11 @@ import type { Invocation } from './parser.js';
 export const HELP = `Sunhat project-bound framework CLI
 
 Usage:
-  sunhat init [--framework <foundry|hardhat>] [--target <tron|evm>] [--adopt] [path]
+  sunhat init [--framework <foundry|hardhat>] [--hardhat-version <2|3>] [--target <tron|evm>] [--adopt] [path]
   sunhat <command> [args...]
 
 Init defaults: framework=foundry, target=tron
+Hardhat initialization defaults to version 2. Hardhat 3 currently supports EVM only.
 Init creates project files only. For Foundry, run \`sunhat toolchain install\` in the project directory.
 `;
 
@@ -34,7 +35,11 @@ export async function route(invocation: Invocation): Promise<number> {
   const root = findProjectRoot(process.cwd());
   const binding = readBinding(resolve(root, 'sunhat.toml'));
   if (binding.framework === 'hardhat') {
-    return await runHardhat(root, [invocation.command, ...invocation.args]);
+    return await runHardhat(
+      root,
+      [invocation.command, ...invocation.args],
+      binding.target,
+    );
   }
   if (invocation.command === 'toolchain') {
     return toolchain(root, binding.target, invocation.args);

@@ -106,6 +106,7 @@ test(
           'templates',
           'README.md',
           'docs/QuickStart.md',
+          'docs/hardhat3-compatibility.md',
           'docs/toml-binding.md',
         ]) {
           assert.ok(existsSync(resolve(installed, path)), `missing ${path}`);
