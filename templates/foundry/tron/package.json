@@ -2,6 +2,9 @@
   "name": "{{projectName}}",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
+  },
   "scripts": {
     "build": "sunhat build",
     "test": "sunhat test"

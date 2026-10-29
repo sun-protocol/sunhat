@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import type { ContractTransactionReceipt } from 'ethers';
-import { network } from 'hardhat';
+import { withConnection } from '../helpers/connection.js';
 
 describe('Counter', function () {
   it('deploys, changes state, and records the transaction event', async function () {
-    const connection = await network.create();
-    try {
+    await withConnection(async (connection) => {
       const counter = await connection.ethers.deployContract('Counter');
       await counter.waitForDeployment();
       assert.equal(await counter.number(), 0n);
@@ -20,8 +19,6 @@ describe('Counter', function () {
       assert.ok(event);
       assert.equal(event.args[0], 0n);
       assert.equal(event.args[1], 1n);
-    } finally {
-      await connection.close();
-    }
+    });
   });
 });

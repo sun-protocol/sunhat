@@ -4,7 +4,7 @@ This project uses Sunhat to run Hardhat 2 with the Hardhat-TRON plugin and a TRE
 
 ## Global command prerequisites
 
-The `sunhat ...` examples use the `{{sunhatPackage}}` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
+The `sunhat ...` examples use the `{{sunhatPackage}}` npm package. Use Node.js 22.x, 24.x, or 26.x for this project's TRON plugin; other majors are rejected. The Sunhat CLI also retains Node.js 20.11+ for other workflows, with deprecation planned for a future release. Ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
 
 ```bash
 npm install --global {{sunhatPackage}}

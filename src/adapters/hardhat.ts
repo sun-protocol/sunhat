@@ -76,7 +76,7 @@ export async function runHardhat(
     }
     if (!isHardhat3NodeSupported(process.versions.node)) {
       return toolchainError(
-        `Hardhat 3 requires Node.js 22.13.0 or later on a supported even major version; resolved ${process.versions.node} for ${manifestPath}`,
+        `Hardhat 3 requires Node.js 22.13+, 24.x or 26.x; resolved ${process.versions.node} for ${manifestPath}`,
       );
     }
   }

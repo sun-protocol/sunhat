@@ -21,11 +21,11 @@ The EVM dependency matrix was frozen on 2026-10-28. TRON plugin discovery and Do
 
 The selected Hardhat package exports `hardhat/package.json` and declares `dist/src/cli.js` as its executable. Sunhat resolves that project-local entry and checks that the project's exact declaration matches the installed version. There is no global fallback or implicit framework installation.
 
-The selected version's native Node check requires an even major version at or above Node 22.13.0. Sunhat checks this before starting Hardhat 3 and requires `type: module` in the consumer package. The CLI itself retains its Node 20.11 baseline for existing supported workflows.
+The selected Hardhat version's native check requires an even Node major at or above 22.13.0. Sunhat narrows this to Node 22.13+, 24.x, or 26.x and requires `type: module` in the consumer package. The CLI supports only Node 20.11+, 22.x, 24.x, and 26.x; Node 20 remains supported and will be deprecated in a future release. Odd majors and unlisted future even majors are rejected by the CLI entry point as well as package engine metadata.
 
-The artifact integration passed locally on macOS arm64 with Node 24.22.1 and Node 22.13.0. The latter runtime was downloaded from the official Node.js distribution and its archive verified against the published SHA-256 checksum. Linux CI jobs have been added for those two runtime baselines; their remote results are not claimed by this local report.
+The artifact integration passed locally on macOS arm64 with Node 22.13.0, 24.22.1, and 26.0.0, including package engine consistency and cleanup-error regression cases. Node 22.13.0 and 26.0.0 were downloaded from official Node.js distributions and checked against their published SHA-256 checksums. The Node 26.0.0 darwin-arm64 archive digest was `dcee8564c1a9342f9594dd5e52d533894dfef6b85aa771bbbb870baa3c403235`. Linux CI covers Node 22.13.0 and 26.0.0 in a matrix, Node 24.22.1 in the main job, and the Node 20.11.0 compatibility baseline separately; remote results are not claimed by this local report.
 
-The complete runtime suite passed locally on Node 24.22.1 and Node 20.11.0: 304 passed and two Linux-specific filesystem cases were skipped on macOS in each run. On Node 20 the Hardhat 3 launch tests verify rejection; they do not claim that Hardhat 3 itself runs on that version.
+The complete runtime suite passed locally on Node 20.11.0, 22.13.0, 24.22.1, and 26.0.0: 325 passed and two Linux-specific filesystem cases were skipped on macOS in each run. On Node 20 the Hardhat 3 launch tests verify rejection; they do not claim that Hardhat 3 itself runs on that version. Boundary tests also verify rejection of odd majors and unlisted future even majors.
 
 ## Verified EVM behavior
 
@@ -39,7 +39,7 @@ npm test
 
 These commands require a Sunhat build containing the new integration. The integration suite substitutes its locally packed CLI for the published registry CLI while leaving framework dependencies at their generated exact versions.
 
-The template uses explicit plugin registration and `network.create()` for ethers connections. Tests deploy the example contract, check its initial value, submit a mutation, verify the successful receipt and emitted event, and check the new value. Scripts close their connections in `finally` blocks.
+The template uses explicit plugin registration and `network.create()` for ethers connections. Tests deploy the example contract, check its initial value, submit a mutation, verify the successful receipt and emitted event, and check the new value. Tests and scripts share a connection helper that preserves the original thrown value if cleanup also fails, while reporting the secondary error. A cleanup-only failure is propagated.
 
 Run the complete artifact integration check with:
 
@@ -47,7 +47,7 @@ Run the complete artifact integration check with:
 npm run test:hardhat3
 ```
 
-This check packs the built package, installs it outside the repository, generates an EVM project using the installed CLI, installs exact framework dependencies, runs `tsc --noEmit`, invokes the generated build/test npm scripts, and executes the deployment script. It uses an in-process EVM and broadcasts no transactions to public networks.
+This check packs the built package, installs it outside the repository, generates an EVM project using the installed CLI, installs exact framework dependencies, runs `tsc --noEmit`, invokes the generated build/test npm scripts, and executes the deployment script. It also checks package and template engine ranges against the installed runtime guards and injects a failing public Hardhat close hook to verify original exception identity, including `undefined`, `null`, and `false`, even when diagnostic reporting fails. Finally, it removes the temporary project's artifacts and checks that the generated deployment script and Mocha test both retain their missing-artifact errors when cleanup also fails. It uses an in-process EVM and broadcasts no transactions to public networks.
 
 Existing `sunhat init` defaults remain Foundry/TRON. Hardhat initialization without a major version still selects Hardhat 2. `--hardhat-version` is an initialization/adoption option, not an additional routing field or runtime override. Adoption validates explicit version conflicts and Hardhat 3's ESM requirement before writing, without rewriting the consumer's configuration or dependency declaration.
 
@@ -97,7 +97,7 @@ The probe uses:
 
 The compiler is downloaded automatically. Set `SUNHAT_TRON_SOLC=/absolute/path/to/soljson.js` to reuse a local copy; the same fixed checksum is always enforced. The probe does not write to global compiler caches.
 
-The native probe passed locally on macOS arm64 with Node 24.22.1 and Node 22.13.0. The latter run downloaded and verified the compiler through the probe's default path. It compiled the example, broadcast real `CreateSmartContract` and `TriggerSmartContract` transactions, verified successful native receipts and transaction IDs, read state before and after the mutation, decoded `NumberChanged`, and checked Base58/TRON hex/EVM address round trips and native contract address derivation. No EDR network connection is created in this test.
+The native probe passed locally on macOS arm64 with Node 22.13.0, 24.22.1, and 26.0.0. The Node 22.13.0 run downloaded and verified the compiler through the probe's default path. It compiled the example, broadcast real `CreateSmartContract` and `TriggerSmartContract` transactions, verified successful native receipts and transaction IDs, read state before and after the mutation, decoded `NumberChanged`, and checked Base58/TRON hex/EVM address round trips and native contract address derivation. No EDR network connection is created in this test.
 
 One successful run reported these original receipt fields:
 

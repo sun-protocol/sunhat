@@ -174,6 +174,9 @@ for (const [version, supported] of [
   ['24.0.0', true],
   ['25.1.0', false],
   ['26.0.0', true],
+  ['27.0.0', false],
+  ['28.0.0', false],
+  ['30.0.0', false],
   ['22.13', false],
   ['invalid', false],
 ]) {

@@ -432,7 +432,7 @@ test('Hardhat 3 forwards native commands on supported Node versions', () => {
   ]);
   if (!isHardhat3NodeSupported(process.versions.node)) {
     assert.equal(result.status, 3, result.stderr);
-    assert.match(result.stderr, /Hardhat 3.*Node.js.*22\.13\.0/su);
+    assert.match(result.stderr, /Hardhat 3.*Node.js.*22\.13/su);
     assert.equal(result.stdout, '');
   } else {
     assert.equal(result.status, 17, result.stderr);
@@ -482,6 +482,10 @@ test('Hardhat 3 EVM initialization is offline and uses separate ESM templates', 
   );
   assert.match(
     readFileSync(resolve(root, 'test/Counter.test.ts'), 'utf8'),
+    /withConnection/u,
+  );
+  assert.match(
+    readFileSync(resolve(root, 'helpers/connection.ts'), 'utf8'),
     /network\.create\(\)/u,
   );
   assert.equal(existsSync(resolve(root, 'node_modules')), false);

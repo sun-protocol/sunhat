@@ -4,7 +4,7 @@ Sunhat runs Hardhat or Foundry using the framework and target recorded in the pr
 
 ## Requirements
 
-- Node.js **20.11+** for Sunhat. Node.js 24 is used for repository development and validation.
+- Node.js **20.11+, 22.x, 24.x, or 26.x** for Sunhat; other majors are rejected. Node.js 20 remains supported and will be deprecated in a future release. Node.js 24 is used for repository development. Hardhat 3 requires **22.13+, 24.x, or 26.x**; the Hardhat 2/TRON plugin requires **22.x, 24.x, or 26.x**.
 - Foundry toolchain installation needs access to the configured GitHub release and `tar` on macOS/Linux or PowerShell on Windows. Its installer supports macOS/Linux arm64 and x64, and Windows x64.
 - Hardhat projects currently require **Hardhat 2**, declared as an exact version matching the installed package. Hardhat TRON tests need a running TRE JSON-RPC endpoint. Container startup is disabled by default; Docker is required only if you choose to run TRE in a container.
 - First compilation needs network access when the compiler is not already cached.

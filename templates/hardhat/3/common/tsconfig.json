@@ -6,5 +6,5 @@
     "noEmit": true,
     "types": ["node", "mocha"]
   },
-  "include": ["hardhat.config.ts", "scripts", "test"]
+  "include": ["hardhat.config.ts", "helpers", "scripts", "test"]
 }

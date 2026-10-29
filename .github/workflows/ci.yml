@@ -24,15 +24,19 @@ jobs:
       - run: npm run test:hardhat3
       - run: npm run pack:check
 
-  hardhat3-minimum-node:
+  hardhat3-supported-node:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22.13.0, 26.0.0]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22.13.0
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm test
       - run: npm run test:hardhat3
 
   hardhat3-tron-probe:

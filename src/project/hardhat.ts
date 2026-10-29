@@ -1,5 +1,6 @@
 import { toolchainError } from '../errors.js';
 import { isRecord, readJson } from '../json.js';
+import { isSupportedNode } from '../runtime.js';
 import type { Target } from './binding.js';
 
 export type HardhatMajor = 2 | 3;
@@ -22,13 +23,7 @@ export function hardhatMajor(
 }
 
 export function isHardhat3NodeSupported(version: string): boolean {
-  const match = version.match(/^(\d+)\.(\d+)\.\d+$/u);
-  if (!match) {
-    return false;
-  }
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  return (major === 22 && minor >= 13) || (major >= 24 && major % 2 === 0);
+  return isSupportedNode(version, { major: 22, minor: 13 });
 }
 
 export function assertHardhatTarget(major: HardhatMajor, target: Target): void {

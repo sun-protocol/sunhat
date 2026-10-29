@@ -19,7 +19,7 @@ Commands use the selected framework's syntax: `sunhat compile` for Hardhat, `sun
 
 ## Start a project
 
-Use Node.js 20.11 or newer. The default project is Foundry + TRON:
+Use Node.js 20.11+, 22.x, 24.x, or 26.x. Other major versions are rejected. Node.js 20 remains supported and will be deprecated in a future release. Hardhat 3 requires 22.13+, 24.x, or 26.x; framework plugins may impose stricter requirements. The default project is Foundry + TRON:
 
 ```bash
 npm install --global @sun-protocol/sunhat@2.0.0

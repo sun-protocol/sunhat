@@ -1,14 +1,11 @@
-import { network } from 'hardhat';
+import { withConnection } from '../helpers/connection.js';
 
 async function main(): Promise<void> {
-  const connection = await network.create();
-  try {
+  await withConnection(async (connection) => {
     const counter = await connection.ethers.deployContract('Counter');
     await counter.waitForDeployment();
     console.log(await counter.getAddress());
-  } finally {
-    await connection.close();
-  }
+  });
 }
 
 main().catch((error: unknown) => {

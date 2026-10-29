@@ -17,7 +17,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=20.11"
+    "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
@@ -28,7 +28,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepack": "npm run build",
     "test": "npm run build && npm run test:runtime",
-    "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
+    "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/runtime.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
     "test:templates": "npm run build && node --test test/template-types.test.js",
     "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
     "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",

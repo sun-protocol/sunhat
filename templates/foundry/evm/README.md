@@ -4,7 +4,7 @@ This project uses Sunhat to select and run a project-local Foundry toolchain for
 
 ## Global command prerequisites
 
-The `sunhat ...` examples use the `{{sunhatPackage}}` npm package. Use Node.js `>=20.11` and ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
+The `sunhat ...` examples use the `{{sunhatPackage}}` npm package. Use Node.js 20.11+, 22.x, 24.x, or 26.x; other majors are rejected. Node.js 20 remains supported and will be deprecated in a future release. Ensure npm's global executable directory is on `PATH`. Install and verify the global CLI with:
 
 ```bash
 npm install --global {{sunhatPackage}}
