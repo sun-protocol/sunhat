@@ -6,6 +6,8 @@ Read this reference when changing check configuration, resolving type issues, or
 
 Check `engines`, CI runtimes, the lockfile, TypeScript version, `package.json.type`, `module`, `moduleResolution`, `target`, `lib`, and framework settings. The Node version used to build may be newer than the package's minimum runtime; report validation of these separately.
 
+This repository supports only Node.js 20.11+, 22.x, 24.x, and 26.x. Node.js 20 is retained with deprecation planned for a future release. Hardhat 3 requires 22.13+, 24.x, or 26.x. Verify package and template engine ranges against runtime guards, including rejection of odd majors and unlisted future even majors.
+
 - Choose Node module settings according to the actual ESM or CJS output. Frontend bundlers may need `bundler` resolution; do not impose `NodeNext` everywhere.
 - Successful target and declaration checks do not prove that the minimum runtime provides the same APIs. Execute the relevant compiled paths, using an isolated installation with only production dependencies when necessary.
 - Check library runtime and browser requirements, import formats, declarations, and maintenance. Adopting a newer library must not silently raise the supported runtime or syntax baseline.

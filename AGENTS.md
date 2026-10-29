@@ -12,3 +12,5 @@ For TypeScript development, refactoring, engineering reviews, and related CLI, t
 - The local guidelines are authoritative for this repository. When they differ from the global skill of the same name, use the local version. Global guidance may supplement topics not covered locally; explicit instructions from the user take precedence.
 - Maintain additions and revisions directly in `.agents/skills/typescript-quality/`, and review and version them with the project code.
 - Keep an independent local copy rather than a symlink to a global directory. Review differences before importing global updates and preserve project-specific changes.
+- Support only Node.js majors 20, 22, 24, and 26. The CLI minimum is 20.11.0; Node.js 20 remains supported and will be deprecated in a future release. Hardhat 3 requires 22.13.0, 24.x, or 26.x. Keep runtime guards, package engines, lockfile metadata, templates, and CI consistent; do not automatically admit future even majors.
+- Cleanup failures must never replace the original exception. If both the operation and cleanup fail, preserve the original thrown value and report the cleanup failure separately.

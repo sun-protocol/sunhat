@@ -11,6 +11,10 @@ Use English for all content maintained in this directory, including code, commen
 
 Deliver TypeScript changes with clear responsibilities, useful failure diagnostics, and verifiable results. Keep the current task as the scope boundary: a quality improvement does not authorize dependency upgrades, framework migrations, or a repository-wide rewrite.
 
+## Runtime support
+
+Sunhat supports only Node.js majors 20, 22, 24, and 26. The CLI minimum is 20.11.0. Node.js 20 remains supported and will be deprecated in a future release. Hardhat 3 requires Node.js 22.13+, 24.x, or 26.x; the Hardhat 2/TRON plugin requires 22.x, 24.x, or 26.x. Keep CLI guards, package engines, lockfile metadata, template requirements, and CI consistent. Do not admit odd majors or unlisted future even majors automatically.
+
 ## Workflow
 
 - Distinguish analysis, implementation, and review from the request and session context. Stay read-only when asked only to analyze; otherwise follow the authorized scope and commit sequence.
@@ -39,7 +43,7 @@ When changing TypeScript, ESLint, or formatter configuration, read [Checks and c
 - Distinguish read failures, syntax errors, and business validation failures. Include the relevant path, field, or operation. Check filesystem error codes before classification: for example, `EEXIST` from exclusive creation is a conflict, while other errors need their own diagnostics.
 - Preserve causes and error codes when wrapping errors, using the target runtime's `cause` support or existing project mechanisms. Project command functions should return status or throw; the entry point controls process exit.
 - For multi-stage replacement, use an existing transaction or define the commit point and recovery path. Prepare and validate new state before replacing old state. If recovery fails, retain usable backups and report their exact locations.
-- Handle cleanup failures separately and continue attempting other cleanup steps. Cleanup errors must not replace the primary failure. After a successful commit, report leftover temporary files without misrepresenting the operation as unsuccessful.
+- Handle cleanup failures separately and continue attempting other cleanup steps. If both the operation and cleanup fail, preserve the original thrown value, including non-Error values, and report the cleanup error separately. Do not discard or replace the primary exception. After a successful commit, report leftover temporary files without misrepresenting the operation as unsuccessful.
 
 For file replacement, CLI processes, or npm packages, also read [Node, CLI, and package validation](references/node-cli-packaging.md). Apply these requirements when relevant, not to unrelated frontend or pure-function changes.
 

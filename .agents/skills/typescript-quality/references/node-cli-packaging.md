@@ -11,6 +11,7 @@ Read the sections relevant to the task. Ordinary frontend or pure-function work 
 - Do not assume that system temporary directories, project directories, and metadata directories share a filesystem. Put staging files near their destinations when atomic rename is required. Cross-filesystem copying needs complete validation and a recovery path.
 - Multiple renames do not automatically form a transaction. Prepare and validate new files, then back up and activate them. Define commit ordering for lockfiles and other metadata, and verify intermediate failures and failed recovery. Retain the only recoverable copy if recovery fails.
 - Attempt cleanup for each temporary directory independently. Report leftovers, preserve the primary error, and distinguish completed commits from cleanup failures.
+- For asynchronous resource cleanup, a rejection in `finally` must not replace an existing operation failure. Preserve the original thrown value and report the cleanup failure separately. Cover simultaneous operation/cleanup failures and the intended cleanup-only behavior in regression tests.
 
 These requirements do not mean that every file write needs a generic transaction framework.
 
