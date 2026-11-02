@@ -29,14 +29,9 @@ module.exports = function createModule() {
     const { HttpProvider } = providers;
 
     const accounts = hre.network.config.accounts || [];
-    if (!Array.isArray(accounts) || accounts.length === 0) {
-      throw new Error(
-        `No private key configured for network ${hre.network.name}. Set one in hardhat.config.cjs.`,
-      );
-    }
-
     const raw = accounts[0];
-    const pk = raw.startsWith('0x') ? raw.slice(2) : raw;
+    const pk =
+      raw === undefined ? undefined : raw.startsWith('0x') ? raw.slice(2) : raw;
     const url = hre.network.config.url.replace(/\/jsonrpc$/i, '');
 
     const cacheKey = `${url}:${pk}`;
@@ -50,8 +45,14 @@ module.exports = function createModule() {
     // pre-built HttpProvider so the axios timeout can be raised
     // (TronWeb's string-URL constructor would use the default 30 s).
     const provider = new HttpProvider(url, HTTP_TIMEOUT_MS);
-    const tronWeb = new TronWeb({ fullHost: provider, privateKey: pk });
-    const entry = { tronWeb, address: tronWeb.address.fromPrivateKey(pk) };
+    const tronWeb = new TronWeb({
+      fullHost: provider,
+      ...(pk === undefined ? {} : { privateKey: pk }),
+    });
+    if (pk === undefined) {
+      tronWeb.setAddress(TronWeb.address.fromHex('41' + '0'.repeat(40)));
+    }
+    const entry = { tronWeb, address: tronWeb.defaultAddress.base58 };
     _tronWebCache.set(cacheKey, entry);
     return entry;
   }

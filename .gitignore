@@ -3,3 +3,4 @@
 /.sunhat/toolchains/
 /*.tgz
 **/.DS_Store
+/.sunhat/tre/

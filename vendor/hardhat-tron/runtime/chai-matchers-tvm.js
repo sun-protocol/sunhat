@@ -31,7 +31,10 @@ module.exports = function createModule(deps) {
 
   const { ethers: ethersV6 } = require('ethers');
   const { TronWeb } = require('tronweb');
-  const { lookupTvmActualBase58 } = deps.cheatcodes;
+  const { AsyncLocalStorage } = require('node:async_hooks');
+  const selectedContext = new AsyncLocalStorage();
+  const lookupTvmActualBase58 = (address) =>
+    selectedContext.getStore()?.tre.lookupTvmActualBase58(address);
 
   const ERC20_TRANSFER_TOPIC = ethersV6.id('Transfer(address,address,uint256)');
   // Unit model: 1 wei == 1 sun pass-through on the JS↔TVM boundary;
@@ -407,9 +410,9 @@ module.exports = function createModule(deps) {
       function (account, expected, options) {
         const negated = this.__flags.negate;
         const subject = this._obj;
-        const hre = deps.context;
         const derived = (async () => {
           const txResponse = await resolveTxResponse(subject);
+          const hre = deps.resolveContext(txResponse);
           // Ensure the tx has landed (so internal_transactions are populated)
           if (txResponse && typeof txResponse.wait === 'function') {
             await txResponse.wait();
@@ -448,9 +451,9 @@ module.exports = function createModule(deps) {
       function (accounts, expected, options) {
         const negated = this.__flags.negate;
         const subject = this._obj;
-        const hre = deps.context;
         const derived = (async () => {
           const txResponse = await resolveTxResponse(subject);
+          const hre = deps.resolveContext(txResponse);
           if (txResponse && typeof txResponse.wait === 'function') {
             await txResponse.wait();
           }
@@ -540,10 +543,51 @@ module.exports = function createModule(deps) {
     // CommonJS, so a plain `require('chai')` would also work; explicit
     // for clarity).
     const chai = require('chai');
+    const methods = [
+      'changeTokenBalance',
+      'changeTokenBalances',
+      'changeEtherBalance',
+      'changeEtherBalances',
+    ];
+    const original = new Map(
+      methods.map((name) => [name, chai.Assertion.prototype[name]]),
+    );
     supportChangeTokenBalance(chai.Assertion);
     supportChangeTokenBalances(chai.Assertion);
     supportChangeEtherBalance(chai.Assertion);
     supportChangeEtherBalances(chai.Assertion);
+    for (const name of methods) {
+      const adapted = chai.Assertion.prototype[name];
+      chai.Assertion.addMethod(name, function (...args) {
+        const subject = this._obj;
+        const pending = Promise.resolve(
+          typeof subject === 'function' ? subject() : subject,
+        ).then((response) => {
+          this._obj = response;
+          const context = deps.resolveContext(response);
+          if (context) {
+            const explicitConnection =
+              args[0] &&
+              typeof args[0].getSigners === 'function' &&
+              args[0].provider;
+            return selectedContext.run(context, () =>
+              adapted.apply(this, explicitConnection ? args.slice(1) : args),
+            );
+          }
+          const fallback = original.get(name);
+          if (typeof fallback !== 'function') {
+            throw new Error(
+              `${name} requires a TRON transaction or the corresponding EVM matcher plugin`,
+            );
+          }
+          return fallback.apply(this, args);
+        });
+        this.then = pending.then.bind(pending);
+        this.catch = pending.catch.bind(pending);
+        this.promise = pending;
+        return this;
+      });
+    }
     _registered = true;
   }
 

@@ -1,6 +1,6 @@
 # Hardhat 3 compatibility status
 
-The working tree supports Hardhat 3/EVM initialization, adoption and native command execution. The actual npm tarball has passed dependency installation, TypeScript checking, compilation, deployment and state/event tests on a local EVM. Hardhat 3/TRON remains incomplete and is explicitly rejected before project files are written or a native framework is launched.
+The working tree supports Hardhat 3/EVM initialization, adoption and native command execution. The actual npm tarball has passed dependency installation, TypeScript checking, compilation, deployment and state/event tests on a local EVM. The public TRON plugin now passes ordinary and patched Docker TRE artifact checks; generated TRON projects and CLI dispatch remain the next stage and are still rejected until that stage passes.
 
 This report records development after commit `70bb493`. It does not change the capabilities of the already published Sunhat 2.0.0 package or mark the combined EVM/TRON requirement complete.
 
@@ -76,7 +76,7 @@ npm view @openzeppelin/tron-runtime@0.1.0 version peerDependencies engines --jso
 
 The reference plugin's entry point and compiler use `extendConfig`, `extendEnvironment`, `subtask`, and Hardhat 2 internal imports. Its ethers bridge assumes a shared HRE, and its test/node lifecycle wrappers use the old task override model. Changing its peer range cannot adapt those APIs.
 
-The implementation direction is an independent Hardhat 3 plugin using public configuration and network extension points, with `@openzeppelin/tron-runtime` reused through its root exports. Hardhat 3.21.1's public compiler `path` setting already accepts the verified TRON compiler, so the initial integration does not require a Hardhat core fork or the deprecated `getCompiler` hook. A downloader/configuration layer and the ethers network bridge still need to be delivered as an installable plugin. This working tree does not invent a registry package name or version for that missing release.
+The implementation uses public Hardhat 3 hooks and reuses the licensed upstream runtime behind connection-scoped factories. The public entry is `@sun-protocol/sunhat/hardhat3-tron` in the existing Sunhat artifact; it does not depend on a separate unpublished plugin. The [plugin guide](hardhat3-tron-plugin.md) documents dependency ownership, compiler/artifact selection, native units, Docker policies and helper boundaries. Hardhat 2 consumers continue using their existing plugin.
 
 ## Local Docker TRE probe
 
@@ -112,9 +112,8 @@ A separate Linux CI job runs this probe. Its remote execution result has not bee
 
 ## Remaining acceptance
 
-The Docker environment and native compiler/transaction path are now verified. The independent plugin, typed ethers connection integration and generated TRON template remain incomplete. Initialization, adoption and runtime dispatch therefore continue to reject Hardhat 3/TRON before writing files or launching a framework.
+The Docker environment, public plugin and typed ethers connection integration are verified through an isolated tgz. The artifact suite additionally checks EVM coexistence, different TRON nodes and accounts, native assertions, read-only connections, compiler batches, direct Mocha startup, test-failure cleanup, reuse and persistent node shutdown. The [staged plan](hardhat3-tron-development-plan.md) records review and execution evidence.
 
-- Deliver the Hardhat 3 plugin's compiler setup and native ethers network connection, with an installable, pinned artifact and documented public extension points.
 - Run the generated TRON project's TypeScript, build, test and deployment lifecycle through the packed Sunhat CLI on Docker TRE. Preserve compiler identity, original resource fields and native receipt/event semantics.
 - Add the production TRON template and artifact acceptance coverage; remove the temporary rejection only after that path passes. The native probe above cannot replace those checks.
 - Freeze the final release version and update the user-facing support matrix and migration documentation for EVM and TRON together.

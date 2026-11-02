@@ -1,0 +1,208 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import test from 'node:test';
+import { createHardhatRuntimeEnvironment } from 'hardhat/hre';
+import plugin from '../dist/plugins/tron/index.js';
+import ethersMatchers from '@nomicfoundation/hardhat-ethers-chai-matchers';
+import { expect } from 'chai';
+import core from '../vendor/hardhat-tron/index.js';
+import { normalizeTre } from '../dist/plugins/tron/config.js';
+import {
+  createTreManager,
+  taskContext,
+  withCleanup,
+} from '../dist/plugins/tron/resources.js';
+
+test('optional TRON configuration rejects null objects', () => {
+  for (const value of [
+    null,
+    { compiler: null },
+    { startupEnv: null },
+    { compiler: { batches: null } },
+  ]) {
+    assert.throws(() => normalizeTre(value), /must (be|contain)/);
+  }
+});
+
+test('programmatic EVM configuration retains its compiler and resolves separate TRON artifacts and jar paths', async (t) => {
+  const root = mkdtempSync(resolve(tmpdir(), 'sunhat-tron-hre-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(resolve(root, 'package.json'), '{"type":"module"}');
+  const hre = await createHardhatRuntimeEnvironment(
+    {
+      plugins: [plugin],
+      paths: { artifacts: 'artifacts-tron' },
+      solidity: '0.8.26',
+      tre: { jarPath: './tre/patched.jar', compiler: { enabled: false } },
+    },
+    {},
+    root,
+  );
+  assert.equal(hre.config.tre.compiler.target, 'evm');
+  assert.equal(hre.config.paths.artifacts, resolve(root, 'artifacts-tron'));
+  assert.notEqual(
+    hre.config.tre.artifactPaths.evm,
+    hre.config.tre.artifactPaths.tron,
+  );
+  assert.equal(hre.config.tre.jarPath, resolve(root, 'tre/patched.jar'));
+  for (const profile of Object.values(hre.config.solidity.profiles)) {
+    for (const compiler of profile.compilers) {
+      assert.equal(compiler.path, undefined);
+    }
+  }
+});
+
+test('invalid signing scalars fail before Docker or network work', async (t) => {
+  const root = mkdtempSync(resolve(tmpdir(), 'sunhat-tron-keys-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(resolve(root, 'package.json'), '{"type":"module"}');
+  for (const key of ['0x' + '0'.repeat(64), '0x' + 'f'.repeat(64)]) {
+    const hre = await createHardhatRuntimeEnvironment(
+      {
+        plugins: [plugin],
+        solidity: '0.8.26',
+        tre: { autoStart: true, compiler: { target: 'evm' } },
+        networks: {
+          default: {
+            type: 'http',
+            tron: true,
+            url: 'http://127.0.0.1:1/jsonrpc',
+            accounts: [
+              {
+                _type: 'ConfigurationVariable',
+                name: 'SUNHAT_INVALID_TEST_KEY',
+                default: key,
+              },
+            ],
+          },
+        },
+      },
+      {},
+      root,
+    );
+    await assert.rejects(hre.network.create(), (error) => {
+      assert.match(error.message, /Invalid TRON signing account/);
+      assert.ok(!error.message.includes(key));
+      return true;
+    });
+  }
+});
+
+function fakeLifecycle() {
+  let running = false;
+  let starts = 0;
+  let stops = 0;
+  return {
+    async ensureUp(_, url) {
+      if (running) {
+        return { spawned: false, name: null, url };
+      }
+      running = true;
+      starts += 1;
+      return { spawned: true, name: String(starts), url };
+    },
+    teardown() {
+      running = false;
+      stops += 1;
+    },
+    async isReachable() {
+      return running;
+    },
+    status() {
+      return { running, starts, stops };
+    },
+  };
+}
+test('owned TRE release and concurrent reacquire cannot reuse a disappearing container', async () => {
+  const lifecycle = fakeLifecycle();
+  const manager = createTreManager(lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  await taskContext.run('test', async () => {
+    const first = await manager.acquire(
+      config,
+      'http://127.0.0.1:9090/jsonrpc',
+    );
+    const [, next] = await Promise.all([
+      first(),
+      manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+    ]);
+    assert.equal(lifecycle.status().running, true);
+    assert.equal(lifecycle.status().starts, 2);
+    await next();
+    assert.deepEqual(lifecycle.status(), {
+      running: false,
+      starts: 2,
+      stops: 2,
+    });
+  });
+});
+test('node acquisition promotes an existing owned TRE lease to persistent', async () => {
+  const lifecycle = fakeLifecycle();
+  const manager = createTreManager(lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  const first = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  const node = await taskContext.run('node', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  await first();
+  await node();
+  assert.deepEqual(lifecycle.status(), { running: true, starts: 1, stops: 0 });
+});
+test('connection cleanup preserves every original thrown value', async () => {
+  for (const original of [
+    new Error('EXPECTED_PRIMARY'),
+    undefined,
+    null,
+    false,
+  ]) {
+    let caught = false;
+    try {
+      await withCleanup(
+        async () => {
+          throw original;
+        },
+        async () => {
+          throw new Error('EXPECTED_CLEANUP');
+        },
+      );
+    } catch (error) {
+      caught = true;
+      assert.equal(error, original);
+    }
+    assert.equal(caught, true);
+  }
+});
+
+test(
+  'TRON matcher registration preserves the official EVM balance matcher',
+  { timeout: 10000 },
+  async () => {
+    const hre = await createHardhatRuntimeEnvironment(
+      {
+        plugins: [plugin, ethersMatchers],
+        tre: { compiler: { target: 'evm' } },
+      },
+      {},
+      process.cwd(),
+    );
+    const connection = await hre.network.create();
+    await withCleanup(
+      async () => {
+        core.registerMatchers();
+        const [sender, recipient] = await connection.ethers.getSigners();
+        await expect(
+          sender.sendTransaction({ to: recipient.address, value: 9n }),
+        ).to.changeEtherBalances(
+          connection.ethers,
+          [sender, recipient],
+          [-9n, 9n],
+        );
+      },
+      () => connection.close(),
+    );
+  },
+);

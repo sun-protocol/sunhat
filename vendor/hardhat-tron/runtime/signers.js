@@ -131,15 +131,13 @@ module.exports = function createModule(runtimeDeps) {
 
       // Plain TransferContract txs don't surface an `info.receipt`
       // object (the receipt field is a contract-execution shape), so
-      // polling for it would time out. Skip the poll for transfers and
-      // synthesize an empty info; the call path still polls because it
-      // needs `receipt.result` / logs.
+      // polling for an execution receipt would time out. Transfers instead
+      // wait for native transaction-info inclusion with a block number.
       const waitForReceipt =
         deps.waitForReceipt || (hre.tre && hre.tre.waitForReceipt);
-      const info =
-        hasDataField && waitForReceipt
-          ? await waitForReceipt(tronWeb, txId)
-          : null;
+      const info = await waitForReceipt(tronWeb, txId, {
+        executionReceipt: hasDataField,
+      });
       // Hook for EVM-pred → TVM-actual address mapping: record any CREATE
       // internal_txs from this receipt so subsequent `to:` lookups can rewrite.
       try {
@@ -154,7 +152,7 @@ module.exports = function createModule(runtimeDeps) {
       // gate the revert check on `hasDataField`.
       const succeeded = hasDataField
         ? info && info.receipt && info.receipt.result === 'SUCCESS'
-        : true;
+        : info.result !== 'FAILED';
       const callValueSun = valueToCallValue(value);
       const feeSun = (info && info.fee) || 0;
       const energyFee =
@@ -167,6 +165,9 @@ module.exports = function createModule(runtimeDeps) {
           : 0;
       const totalFeeSun = feeSun || energyFee + netFee;
       const receipt = {
+        nativeTransactionId: txId,
+        nativeReceipt: info.receipt,
+        nativeTransactionInfo: info,
         hash: '0x' + txId,
         transactionHash: '0x' + txId,
         status: succeeded ? 1 : 0,
@@ -184,7 +185,7 @@ module.exports = function createModule(runtimeDeps) {
         throw buildRevertError(txId, info);
       }
       const { tronToHex } = runtimeDeps.bridge;
-      return {
+      return runtimeDeps.context.registerSubject({
         hash: receipt.hash,
         transactionHash: receipt.hash,
         blockNumber: receipt.blockNumber,
@@ -194,7 +195,7 @@ module.exports = function createModule(runtimeDeps) {
         feeSun: totalFeeSun,
         internalTransactions: receipt.internalTransactions,
         wait: async () => receipt,
-      };
+      });
     }
 
     // Pre-compute and stash a `CreateSmartContract` tx for a future
@@ -307,11 +308,10 @@ module.exports = function createModule(runtimeDeps) {
         wallet.signTypedData(domain, types, value),
 
       // Tests sometimes do `signer.connect(provider)` to rebind to a
-      // specific provider; return the same signer since our provider
-      // is global.
+      // specific provider; native signers retain their connection's provider.
       connect: () => signer,
     };
-    return signer;
+    return runtimeDeps.context.registerSubject(signer);
   }
 
   function toBase58(value) {
@@ -361,6 +361,11 @@ module.exports = function createModule(runtimeDeps) {
 
     const configured = hre.network.config.accounts;
     const shouldFund = hre.config.tre.fundSigners === true;
+    if (shouldFund && configured.length === 0) {
+      throw new Error(
+        'fundSigners requires a configured local signing account',
+      );
+    }
     const keys = shouldFund
       ? Array.from({ length: SIGNER_COUNT }, (_, i) =>
           i === 0 ? configured[0] : deriveKey(i).privateKey,

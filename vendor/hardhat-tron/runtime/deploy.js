@@ -7,8 +7,6 @@ module.exports = function createModule(deps) {
   // receipt-poll discipline from wait.js with TronWeb's smart-contract
   // creation path.
 
-  const { mine } = deps.cheatcodes;
-
   // Recursively expand tuple types in an ABI input descriptor. TronWeb's
   // bundled ethers v6 AbiCoder rejects the literal `"tuple"` /
   // `"tuple[]"` type strings (it only handles full canonical forms like
@@ -143,55 +141,18 @@ module.exports = function createModule(deps) {
   // practice. (Polling will still mine as a recovery hatch if the tx
   // hasn't surfaced — see the `iter % 5` block below.)
   async function pollDeployReceipt(tronWeb, txId, opts = {}) {
-    // Wall-clock budget for deploy. Default 180 s — late in a long
-    // test run, TRE's per-block work grows with chain state and deploys
-    // can take longer than 30 s. The wider margin avoids hiding real
-    // hangs.
-    const deadline = Date.now() + (opts.deployTimeout ?? 180_000);
-    let iter = 0;
-    // Receipt-result check: TVM sets `contract_address` on the info
-    // shape even when the constructor REVERTS — the address is
-    // computed deterministically and recorded regardless of execution
-    // outcome. Without this gate, deployContract returns a facade for
-    // a contract that doesn't actually exist on-chain, and tests like
-    // `expect(deployContract(...)).to.be.revertedWithCustomError(...)`
-    // see "didn't revert" instead of the constructor's revert data.
-    while (Date.now() < deadline) {
-      const info = await tronWeb.trx.getUnconfirmedTransactionInfo(txId);
-      if (info && info.contract_address) {
-        const result = info.receipt && info.receipt.result;
-        // SUCCESS or undefined-receipt (early surfacing) → happy path.
-        // Anything else → constructor revert; surface txId + info shape
-        // so the caller can inspect.
-        if (result === 'SUCCESS' || !result) {
-          return { address: info.contract_address, txId, info };
-        }
-        // Lazy-require the bridge to avoid the bridge ↔ deploy.js
-        // module-load cycle; the bridge's `buildRevertError` wraps the
-        // raw `info` in an ethers-shaped Error with `.data` so chai
-        // matchers' `revertedWithCustomError` can decode it.
-        const { buildRevertError } = deps.bridge;
-        throw buildRevertError(txId, info);
-      }
-      if (iter && iter % 5 === 0) {
-        await mine(tronWeb).catch(() => {});
-      }
-      iter++;
-      await new Promise((r) => setImmediate(r));
+    const info = await deps.wait.waitForReceipt(tronWeb, txId, {
+      timeout: opts.deployTimeout ?? 180000,
+    });
+    if (info.receipt?.result !== 'SUCCESS') {
+      throw deps.bridge.buildRevertError(txId, info);
     }
-    // Public-network hedge: try the solidified view once before timing
-    // out.
-    const info = await tronWeb.trx.getTransactionInfo(txId);
-    if (info && info.contract_address) {
-      const result = info.receipt && info.receipt.result;
-      if (result === 'SUCCESS' || !result) {
-        return { address: info.contract_address, txId, info };
-      }
+    if (typeof info.contract_address !== 'string') {
       throw new Error(
-        `deploy reverted (${result}) tx ${txId}: ${JSON.stringify(info)}`,
+        `Successful deployment ${txId} has no native contract address`,
       );
     }
-    throw new Error(`deploy timeout — no contract_address for tx ${txId}`);
+    return { address: info.contract_address, txId, info };
   }
 
   return { deployContract, prebuildDeploy, submitPrebuilt };

@@ -15,7 +15,8 @@
     "docs/QuickStart.md",
     "docs/hardhat3-compatibility.md",
     "README.md",
-    "vendor/hardhat-tron/"
+    "vendor/hardhat-tron/",
+    "docs/hardhat3-tron-plugin.md"
   ],
   "engines": {
     "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
@@ -34,17 +35,25 @@
     "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
     "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",
     "pack:check": "npm run clean && node --test test/package.test.js",
-    "test:tron-core": "node --test test/tron-core.test.js"
+    "test:tron-core": "node --test test/tron-core.test.js",
+    "test:hardhat3:tron-plugin": "npm run build && node --test test/hardhat3-tron-plugin.integration.test.js",
+    "tre:build-jar": "bash scripts/build-tre-jar.sh",
+    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-plugin.test.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@nomicfoundation/hardhat-ethers": "4.2.1",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "3.0.11",
+    "@nomicfoundation/hardhat-mocha": "4.0.1",
     "@openzeppelin/tron-runtime": "0.1.0",
+    "@types/chai": "5.2.2",
     "@types/node": "22.10.2",
+    "chai": "5.3.3",
     "eslint": "10.13.0",
     "ethers": "6.17.0",
     "globals": "17.13.0",
     "hardhat": "3.21.1",
+    "mocha": "12.0.3",
     "prettier": "3.9.10",
     "prettier-plugin-solidity": "2.4.1",
     "solc": "0.8.26",
@@ -56,12 +65,13 @@
     "smol-toml": "1.9.1"
   },
   "peerDependencies": {
-    "hardhat": "*",
     "@nomicfoundation/hardhat-ethers": "*",
-    "ethers": "*",
     "@openzeppelin/tron-runtime": "*",
+    "ethers": "*",
+    "hardhat": "*",
+    "solc": "*",
     "tronweb": "*",
-    "solc": "*"
+    "@nomicfoundation/hardhat-mocha": "*"
   },
   "peerDependenciesMeta": {
     "hardhat": {
@@ -81,6 +91,16 @@
     },
     "solc": {
       "optional": true
+    },
+    "@nomicfoundation/hardhat-mocha": {
+      "optional": true
     }
+  },
+  "exports": {
+    "./hardhat3-tron": {
+      "types": "./dist/plugins/tron/index.d.ts",
+      "import": "./dist/plugins/tron/index.js"
+    },
+    "./package.json": "./package.json"
   }
 }

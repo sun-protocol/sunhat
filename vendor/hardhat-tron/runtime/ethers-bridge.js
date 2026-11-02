@@ -104,8 +104,8 @@ module.exports = function createModule(deps) {
     return cached;
   }
 
-  // stubProvider is shared across every facade and signer the bridge
-  // hands out. The methods below are filled in at hook-time once `hre`
+  // stubProvider is shared by facades and signers within this connection.
+  // The methods below are filled in at hook-time once `hre`
   // is available (we need TronWeb to actually query chain state).
   // Until then they return sane defaults for tests that probe them at
   // load time.
@@ -119,6 +119,31 @@ module.exports = function createModule(deps) {
     },
     async getTransactionReceipt(hash) {
       return knownReceipts.get(hash) || null;
+    },
+    async waitForTransaction(hash, confirmations = 1, timeout = 240000) {
+      if (typeof hash !== 'string' || !/^(?:0x)?[a-fA-F0-9]{64}$/.test(hash)) {
+        throw new Error('A native TRON transaction ID is required');
+      }
+      if (
+        !Number.isSafeInteger(confirmations) ||
+        confirmations < 0 ||
+        confirmations > 1
+      ) {
+        throw new Error(
+          'TRON waitForTransaction currently supports inclusion with zero or one confirmation',
+        );
+      }
+      const txId = hash.replace(/^0x/, '').toLowerCase();
+      const cached = knownReceipts.get('0x' + txId);
+      if (cached) {
+        return cached;
+      }
+      const info = await deps.context.tre.waitForReceipt(this._tw(), txId, {
+        timeout,
+      });
+      const receipt = translateReceipt(txId, info);
+      rememberReceipt('0x' + txId, receipt);
+      return receipt;
     },
     async getNetwork() {
       const chainId = await deps.context.network.provider.request({
@@ -1453,6 +1478,11 @@ module.exports = function createModule(deps) {
       // (which has `from`, `value`, …) aren't misclassified.
       const { overrides, args } = splitOverrides(rawArgs, fnAbi.inputs.length);
       const normalized = args.map((a, i) => normalizeArg(a, fnAbi.inputs[i]));
+      if (!isView && !tronWeb.defaultPrivateKey) {
+        throw new Error(
+          'TRON state changes require a configured local signing account',
+        );
+      }
       if (isView) {
         // Use the low-level path: gives us revert data for
         // chai-matchers' `revertedWithCustomError`, and decodes tuples
@@ -1795,7 +1825,7 @@ module.exports = function createModule(deps) {
       meta.callValueSun !== null && meta.callValueSun !== undefined
         ? valueToCallValue(meta.callValueSun)
         : 0n;
-    return {
+    return deps.context.registerSubject({
       hash: '0x' + txId,
       transactionHash: '0x' + txId,
       txId,
@@ -1807,7 +1837,7 @@ module.exports = function createModule(deps) {
       internalTransactions: receipt.internalTransactions,
       logs: receipt.logs,
       wait: async () => receipt,
-    };
+    });
   }
 
   // -- Contract facade -----------------------------------------------
@@ -1941,124 +1971,126 @@ module.exports = function createModule(deps) {
       provider: stubProvider,
     };
 
-    return new Proxy(target, {
-      get(t, prop) {
-        if (prop in t) {
-          return t[prop];
-        }
-        if (prop === 'getAddress') {
-          return async () => hexAddress;
-        }
-        if (prop === 'getFunction') {
-          // ethers v6 API: contract.getFunction('name(type,type)') returns
-          // a method handle for an exact-signature lookup. Used by tests
-          // that disambiguate overloads explicitly. For bare names with
-          // multiple overloads, return the same arg-shape dispatcher the
-          // `contract.name(...)` proxy path uses — ethers v6 lets you
-          // call `getFunction('name')(...args)` and resolves the overload
-          // at call time via `ethers.Typed.X(...)` wrappers, identical to
-          // accessing the method directly. SignatureChecker.test.js's
-          // ERC1271/ERC7913 cases exercise this:
-          //   `mock.getFunction('$isValidSignatureNow')(Typed.address(...), ...)`
-          // and
-          //   `mock.getFunction('$isValidSignatureNow')(Typed.bytes(...), ...)`
-          // both target the same name but different `bytes`/`address` first
-          // argument types.
-          return (signature) => {
-            if (typeof signature === 'string' && signature.includes('(')) {
-              const fn = lookupBySignature(signature);
-              if (fn) {
-                return methodFor(fn);
+    return deps.context.registerSubject(
+      new Proxy(target, {
+        get(t, prop) {
+          if (prop in t) {
+            return t[prop];
+          }
+          if (prop === 'getAddress') {
+            return async () => hexAddress;
+          }
+          if (prop === 'getFunction') {
+            // ethers v6 API: contract.getFunction('name(type,type)') returns
+            // a method handle for an exact-signature lookup. Used by tests
+            // that disambiguate overloads explicitly. For bare names with
+            // multiple overloads, return the same arg-shape dispatcher the
+            // `contract.name(...)` proxy path uses — ethers v6 lets you
+            // call `getFunction('name')(...args)` and resolves the overload
+            // at call time via `ethers.Typed.X(...)` wrappers, identical to
+            // accessing the method directly. SignatureChecker.test.js's
+            // ERC1271/ERC7913 cases exercise this:
+            //   `mock.getFunction('$isValidSignatureNow')(Typed.address(...), ...)`
+            // and
+            //   `mock.getFunction('$isValidSignatureNow')(Typed.bytes(...), ...)`
+            // both target the same name but different `bytes`/`address` first
+            // argument types.
+            return (signature) => {
+              if (typeof signature === 'string' && signature.includes('(')) {
+                const fn = lookupBySignature(signature);
+                if (fn) {
+                  return methodFor(fn);
+                }
               }
-            }
-            const overloads = overloadsByName.get(signature);
-            if (overloads && overloads.length === 1) {
-              return methodFor(overloads[0]);
-            }
-            if (overloads && overloads.length > 1) {
-              return makeOverloadDispatcher(
-                overloads,
-                tronAddress,
-                tronWeb,
-                hre,
-                ethersInterface,
-              );
-            }
-            throw new Error(`getFunction: no match for "${signature}"`);
-          };
-        }
-        if (prop === 'connect') {
-          // contract.connect(signer) → rebuild the facade routed
-          // through the signer's TronWeb so subsequent state-changing
-          // calls are signed by that signer's key.
-          return (signer) => {
-            if (signer && signer.tronWeb) {
-              return makeFacade(abi, tronAddress, signer.tronWeb, hre);
-            }
-            return makeFacade(abi, tronAddress, tronWeb, hre);
-          };
-        }
-        if (prop === 'attach') {
-          return (addr) => makeFacade(abi, toTronBase58(addr), tronWeb, hre);
-        }
-        if (prop === 'waitForDeployment') {
-          return async () => target;
-        }
-        if (prop === 'deploymentTransaction') {
-          // chai-matchers' `.to.emit(contract, ...)` against a
-          // `contract.deploymentTransaction()` destructures `{hash}`
-          // and awaits `.wait()` to scan logs for the expected event.
-          // Synthesize a TransactionResponse from the deploy receipt
-          // when we have one; null is only acceptable when nothing
-          // was deployed (e.g. an `attach`).
-          return () => deploymentTx || null;
-        }
-        if (prop === 'then' || typeof prop === 'symbol') {
-          return undefined;
-        }
-
-        // Selector lookup: `contract[selector]()` where selector is a
-        // 4-byte hex string. Used by upstream OZ tests that grab the
-        // selector via `fnRestricted.getFragment().selector` and call
-        // by that without re-binding to the function name.
-        if (typeof prop === 'string' && /^0x[0-9a-fA-F]{8}$/.test(prop)) {
-          const fn = fnsBySelector.get(prop.toLowerCase());
-          if (fn) {
-            return methodFor(fn);
+              const overloads = overloadsByName.get(signature);
+              if (overloads && overloads.length === 1) {
+                return methodFor(overloads[0]);
+              }
+              if (overloads && overloads.length > 1) {
+                return makeOverloadDispatcher(
+                  overloads,
+                  tronAddress,
+                  tronWeb,
+                  hre,
+                  ethersInterface,
+                );
+              }
+              throw new Error(`getFunction: no match for "${signature}"`);
+            };
           }
-        }
-
-        // Match on full signature first (for explicit disambiguation),
-        // then fall back to name-with-overload-by-arity dispatch.
-        // `lookupBySignature` accepts both the canonical form
-        // `name(type,type)` and the named-parameter form
-        // `name(type name1, type name2)` — Arrays.test.js dispatches
-        // through `this.mock['$slice(address[] arr, uint256 start)']`.
-        if (typeof prop === 'string' && prop.includes('(')) {
-          const fn = lookupBySignature(prop);
-          if (fn) {
-            return methodFor(fn);
+          if (prop === 'connect') {
+            // contract.connect(signer) → rebuild the facade routed
+            // through the signer's TronWeb so subsequent state-changing
+            // calls are signed by that signer's key.
+            return (signer) => {
+              if (signer && signer.tronWeb) {
+                return makeFacade(abi, tronAddress, signer.tronWeb, hre);
+              }
+              return makeFacade(abi, tronAddress, tronWeb, hre);
+            };
           }
-        }
-        const overloads = overloadsByName.get(prop);
-        if (!overloads || overloads.length === 0) {
-          return undefined;
-        }
-        if (overloads.length === 1) {
-          return methodFor(overloads[0]);
-        }
-        // Multiple overloads — return a dispatcher that picks by arg
-        // count at call time. This is what ethers v6's Contract Proxy
-        // does for overloaded methods.
-        return makeOverloadDispatcher(
-          overloads,
-          tronAddress,
-          tronWeb,
-          hre,
-          ethersInterface,
-        );
-      },
-    });
+          if (prop === 'attach') {
+            return (addr) => makeFacade(abi, toTronBase58(addr), tronWeb, hre);
+          }
+          if (prop === 'waitForDeployment') {
+            return async () => target;
+          }
+          if (prop === 'deploymentTransaction') {
+            // chai-matchers' `.to.emit(contract, ...)` against a
+            // `contract.deploymentTransaction()` destructures `{hash}`
+            // and awaits `.wait()` to scan logs for the expected event.
+            // Synthesize a TransactionResponse from the deploy receipt
+            // when we have one; null is only acceptable when nothing
+            // was deployed (e.g. an `attach`).
+            return () => deploymentTx || null;
+          }
+          if (prop === 'then' || typeof prop === 'symbol') {
+            return undefined;
+          }
+
+          // Selector lookup: `contract[selector]()` where selector is a
+          // 4-byte hex string. Used by upstream OZ tests that grab the
+          // selector via `fnRestricted.getFragment().selector` and call
+          // by that without re-binding to the function name.
+          if (typeof prop === 'string' && /^0x[0-9a-fA-F]{8}$/.test(prop)) {
+            const fn = fnsBySelector.get(prop.toLowerCase());
+            if (fn) {
+              return methodFor(fn);
+            }
+          }
+
+          // Match on full signature first (for explicit disambiguation),
+          // then fall back to name-with-overload-by-arity dispatch.
+          // `lookupBySignature` accepts both the canonical form
+          // `name(type,type)` and the named-parameter form
+          // `name(type name1, type name2)` — Arrays.test.js dispatches
+          // through `this.mock['$slice(address[] arr, uint256 start)']`.
+          if (typeof prop === 'string' && prop.includes('(')) {
+            const fn = lookupBySignature(prop);
+            if (fn) {
+              return methodFor(fn);
+            }
+          }
+          const overloads = overloadsByName.get(prop);
+          if (!overloads || overloads.length === 0) {
+            return undefined;
+          }
+          if (overloads.length === 1) {
+            return methodFor(overloads[0]);
+          }
+          // Multiple overloads — return a dispatcher that picks by arg
+          // count at call time. This is what ethers v6's Contract Proxy
+          // does for overloaded methods.
+          return makeOverloadDispatcher(
+            overloads,
+            tronAddress,
+            tronWeb,
+            hre,
+            ethersInterface,
+          );
+        },
+      }),
+    );
   }
 
   function makeOverloadDispatcher(
@@ -2351,6 +2383,11 @@ module.exports = function createModule(deps) {
       signer && signer.tronAddress
         ? signer.tronAddress
         : hre.tre.makeTronWeb().address;
+    if (!tronWeb.defaultPrivateKey) {
+      throw new Error(
+        'TRON deployment requires a configured local signing account',
+      );
+    }
     const artifact = loadArtifact(hre, name);
     const ctor = artifact.abi.find((a) => a.type === 'constructor');
     const ctorInputCount = ctor ? ctor.inputs.length : 0;
@@ -2373,13 +2410,13 @@ module.exports = function createModule(deps) {
       const iface = new ethersV6.Interface(artifact.abi);
       const deployReceipt = translateReceipt(txId, info, iface);
       rememberReceipt('0x' + txId, deployReceipt);
-      const deploymentTx = {
+      const deploymentTx = deps.context.registerSubject({
         hash: '0x' + txId,
         transactionHash: '0x' + txId,
         blockNumber: info ? info.blockNumber : undefined,
         logs: deployReceipt.logs,
         wait: async () => deployReceipt,
-      };
+      });
       return makeFacade(artifact.abi, address, tronWeb, hre, deploymentTx);
     }
 
@@ -2454,13 +2491,13 @@ module.exports = function createModule(deps) {
     const iface = new ethersV6.Interface(artifact.abi);
     const deployReceipt = translateReceipt(txId, info, iface);
     rememberReceipt('0x' + txId, deployReceipt);
-    const deploymentTx = {
+    const deploymentTx = deps.context.registerSubject({
       hash: '0x' + txId,
       transactionHash: '0x' + txId,
       blockNumber: info ? info.blockNumber : undefined,
       logs: deployReceipt.logs,
       wait: async () => deployReceipt,
-    };
+    });
 
     return makeFacade(artifact.abi, address, tronWeb, hre, deploymentTx);
   }
@@ -2528,6 +2565,11 @@ module.exports = function createModule(deps) {
     const hex21 = TronWeb.address.toHex(base58);
     const checksum = ethersV6.getAddress('0x' + hex21.slice(2));
     const deployerTronWeb = hre.tre.makeTronWeb().tronWeb;
+    if (!deployerTronWeb.defaultPrivateKey) {
+      throw new Error(
+        'TRON impersonation requires a configured local signing account',
+      );
+    }
     // Prototype-clone the deployer's TronWeb so all methods and state
     // (defaultAddress, privateKey, fullNode) are inherited unchanged
     // and only the impersonation tag lives on our local object.
@@ -2570,13 +2612,13 @@ module.exports = function createModule(deps) {
             multisig: true,
           });
         }
-        const info = hasDataField
-          ? await hre.tre.waitForReceipt(deployerTronWeb, txId)
-          : null;
+        const info = await hre.tre.waitForReceipt(deployerTronWeb, txId, {
+          executionReceipt: hasDataField,
+        });
         registerCreateMappingsFromReceipt(info);
         const succeeded = hasDataField
           ? info && info.receipt && info.receipt.result === 'SUCCESS'
-          : true;
+          : info.result !== 'FAILED';
         const callValueSun = valueToCallValue(value);
         const energyFee =
           info && info.receipt && Number.isFinite(info.receipt.energy_fee)
@@ -2588,6 +2630,9 @@ module.exports = function createModule(deps) {
             : 0;
         const totalFeeSun = (info && info.fee) || energyFee + netFee;
         const receipt = {
+          nativeTransactionId: txId,
+          nativeReceipt: info?.receipt,
+          nativeTransactionInfo: info,
           hash: '0x' + txId,
           transactionHash: '0x' + txId,
           status: succeeded ? 1 : 0,
@@ -2600,7 +2645,7 @@ module.exports = function createModule(deps) {
         if (hasDataField && !receipt.status) {
           throw buildRevertError(txId, info);
         }
-        return {
+        return deps.context.registerSubject({
           hash: receipt.hash,
           transactionHash: receipt.hash,
           blockNumber: receipt.blockNumber,
@@ -2610,10 +2655,10 @@ module.exports = function createModule(deps) {
           feeSun: totalFeeSun,
           internalTransactions: receipt.internalTransactions,
           wait: async () => receipt,
-        };
+        });
       },
     };
-    return signer;
+    return deps.context.registerSubject(signer);
   }
 
   // -- Snapshot + loadFixture --------------------------------------
@@ -2621,7 +2666,7 @@ module.exports = function createModule(deps) {
   // Probed once: does the running container support `tre_snapshot` /
   // `tre_revert`? The patched fork advertises itself via the
   // `tre_version` suffix `oz-tron`. Cached for the lifetime of the
-  // test process.
+  // connection.
   let _snapshotSupported = null;
   async function _supportsSnapshot(tronWeb) {
     if (_snapshotSupported !== null) {

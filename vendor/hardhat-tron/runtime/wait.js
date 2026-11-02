@@ -67,7 +67,11 @@ module.exports = function createModule(deps) {
     return jsonParseBigSafe(text);
   }
 
-  async function waitForReceipt(tronWeb, txId, { timeout = 240_000 } = {}) {
+  async function waitForReceipt(
+    tronWeb,
+    txId,
+    { timeout = 240_000, executionReceipt = true } = {},
+  ) {
     const deadline = Date.now() + timeout;
     let iter = 0;
     // `tronContract.method(...).send()` internally drives a single block
@@ -108,7 +112,13 @@ module.exports = function createModule(deps) {
         '/wallet/gettransactioninfobyid',
         deadline,
       );
-      if (info && info.receipt) {
+      if (
+        info &&
+        (info.receipt ||
+          (!executionReceipt &&
+            typeof info.id === 'string' &&
+            Number.isSafeInteger(info.blockNumber)))
+      ) {
         return info;
       }
       if (iter && iter % 3 === 0) {
@@ -118,7 +128,13 @@ module.exports = function createModule(deps) {
           '/walletsolidity/gettransactioninfobyid',
           deadline,
         ).catch(() => null);
-        if (confirmed && confirmed.receipt) {
+        if (
+          confirmed &&
+          (confirmed.receipt ||
+            (!executionReceipt &&
+              typeof confirmed.id === 'string' &&
+              Number.isSafeInteger(confirmed.blockNumber)))
+        ) {
           return confirmed;
         }
       }
@@ -138,7 +154,13 @@ module.exports = function createModule(deps) {
       '/walletsolidity/gettransactioninfobyid',
       deadline,
     );
-    if (info && info.receipt) {
+    if (
+      info &&
+      (info.receipt ||
+        (!executionReceipt &&
+          typeof info.id === 'string' &&
+          Number.isSafeInteger(info.blockNumber)))
+    ) {
       return info;
     }
     throw new Error(`Timed out waiting for receipt of tx ${txId}`);

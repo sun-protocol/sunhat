@@ -1,6 +1,7 @@
 'use strict';
 
 const ethers = require('ethers');
+const { AsyncLocalStorage } = require('node:async_hooks');
 const createCheatcodes = require('./runtime/cheatcodes');
 const createTime = require('./runtime/time');
 const createSigners = require('./runtime/signers');
@@ -9,18 +10,28 @@ const createWait = require('./runtime/wait');
 const createDeploy = require('./runtime/deploy');
 const createBridge = require('./runtime/ethers-bridge');
 const createLifecycleModule = require('./tre/lifecycle');
+const subjects = new WeakMap();
 
 function createRuntime(input) {
   const originalProvider = input.network.provider;
+  const forwarding = new AsyncLocalStorage();
   const network = {
     ...input.network,
     provider: {
-      request: (args) => originalProvider.request(args),
+      request: (args) =>
+        (
+          forwarding.getStore() ??
+          originalProvider.request.bind(originalProvider)
+        )(args),
       send: (method, params = []) =>
         originalProvider.request({ method, params }),
     },
   };
   const context = { ...input, network, ethers: { ...ethers, ...input.ethers } };
+  context.registerSubject = (subject) => {
+    subjects.set(subject, context);
+    return subject;
+  };
   const deps = { context };
   deps.cheatcodes = createCheatcodes();
   deps.time = createTime(deps);
@@ -35,6 +46,14 @@ function createRuntime(input) {
     ...deps.deploy,
     ...deps.wait,
     makeTronWeb,
+    instanceId: () =>
+      require('./runtime/instance-id')({
+        lifecycle: createLifecycle(),
+      }).instanceId({
+        networkName: context.network.name,
+        url: context.network.config.url,
+        provider: context.network.provider,
+      }),
   };
   deps.bridge.install(context);
 
@@ -62,17 +81,30 @@ function createRuntime(input) {
     setBalance: (address, balance) =>
       requireSupported(
         'setBalance',
-        deps.cheatcodes.setAccountBalance(tw(), address, balance),
+        deps.cheatcodes.setAccountBalance(
+          tw(),
+          deps.bridge.toTronBase58(address),
+          balance,
+        ),
       ),
     setCode: (address, code) =>
       requireSupported(
         'setCode',
-        deps.cheatcodes.setAccountCode(tw(), address, code),
+        deps.cheatcodes.setAccountCode(
+          tw(),
+          deps.bridge.toTronBase58(address),
+          code,
+        ),
       ),
     setStorageAt: (address, slot, value) =>
       requireSupported(
         'setStorageAt',
-        deps.cheatcodes.setAccountStorageAt(tw(), address, slot, value),
+        deps.cheatcodes.setAccountStorageAt(
+          tw(),
+          deps.bridge.toTronBase58(address),
+          slot,
+          value,
+        ),
       ),
     impersonateAccount: async (address) => {
       const base58 = deps.bridge.toTronBase58(address);
@@ -92,7 +124,13 @@ function createRuntime(input) {
     },
   };
   context.tre.helpers = helpers;
-  return { ethers: context.ethers, tre: context.tre, helpers };
+  return {
+    ethers: context.ethers,
+    tre: context.tre,
+    helpers,
+    request: (args, next) =>
+      forwarding.run(next, () => context.network.provider.request(args)),
+  };
 }
 
 function createLifecycle(options = {}) {
@@ -108,4 +146,16 @@ function createCompiler(options = {}) {
   return { ...deps.manifest, ...require('./compile/downloader')(deps) };
 }
 
-module.exports = { createRuntime, createLifecycle, createCompiler };
+let matchers;
+function registerMatchers() {
+  matchers ??= require('./runtime/chai-matchers-tvm')({
+    resolveContext: (subject) => subjects.get(subject),
+  });
+  matchers.register();
+}
+module.exports = {
+  createRuntime,
+  createLifecycle,
+  createCompiler,
+  registerMatchers,
+};
