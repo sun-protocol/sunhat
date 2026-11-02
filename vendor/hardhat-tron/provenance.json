@@ -1,0 +1,48 @@
+{
+  "package": "@openzeppelin/hardhat-tron",
+  "version": "0.1.0",
+  "archive": "https://registry.npmjs.org/@openzeppelin/hardhat-tron/-/hardhat-tron-0.1.0.tgz",
+  "integrity": "sha512-ae0WwYPUiaEbdaPlgWzo0H2SgyBfJPk3Xw7dy6lgYJvbLqc0dYWhc6OQW81WH1vdc9PfMcq/VWiXPYfkAHR6ng==",
+  "license": "MIT",
+  "files": {
+    "runtime/ethers-bridge.js": {
+      "upstreamSha256": "2d83210c5db98d0614328d9b2fd9c6dbcf0e3a64bf9cf3bbeb104f1b350264ed"
+    },
+    "runtime/cheatcodes.js": {
+      "upstreamSha256": "f4db18742392511e89989ad3f5f2207ce90d5bc4a1179b1dd191a9407434c81c"
+    },
+    "runtime/signers.js": {
+      "upstreamSha256": "068803cd62b76730f2ee3e269f2e82759f4c4997e73edaca4be2c34c5d16a3a7"
+    },
+    "runtime/time.js": {
+      "upstreamSha256": "d0b583316c2feeb6a2762b242b0a059bf7c30c65905e105496785a44781dde2a"
+    },
+    "runtime/tre-web.js": {
+      "upstreamSha256": "e55c0b8af6d5ee1b6faa3a2aa22c428131d7b7d07a86b0d5df28296d62c759a9"
+    },
+    "runtime/wait.js": {
+      "upstreamSha256": "55af1155cbcd7a9a7bdc4103c881630828727260f88afd883d178da80b5a4acb"
+    },
+    "runtime/deploy.js": {
+      "upstreamSha256": "32d3f1d052c535542a77d16d3db583f1a9edf35d40ea79b952b5f5a89f637a8d"
+    },
+    "runtime/instance-id.js": {
+      "upstreamSha256": "59bd5244457ab03eadcea36b03d8fb89a80b4fe2a5f811b38d44c9511f54b53a"
+    },
+    "runtime/chai-matchers-tvm.js": {
+      "upstreamSha256": "bdf920aef4a4d435941bdeb632bc3569cf166ee410da858c4f43bc85c9fc58db"
+    },
+    "tre/lifecycle.js": {
+      "upstreamSha256": "81bec8986dac4de2fb6342544bc16043d57e0dc975143d4a81f013919f12e6f1"
+    },
+    "compile/downloader.js": {
+      "upstreamSha256": "c04af793953d5bcdf8d92aeb77175547ad50ad8ae5e46a32833ca083c4932627"
+    },
+    "compile/manifest.js": {
+      "upstreamSha256": "647724ec4c1333346ddb27a61c0a9bf4f17d173ce19726a0aa3be74933c15079"
+    },
+    "compile/errors.js": {
+      "upstreamSha256": "67d79288f4dcf71ec8af002f776912e81f3119b5d03ba0908b335584ad4c329a"
+    }
+  }
+}

@@ -14,7 +14,8 @@
     "docs/toml-binding.md",
     "docs/QuickStart.md",
     "docs/hardhat3-compatibility.md",
-    "README.md"
+    "README.md",
+    "vendor/hardhat-tron/"
   ],
   "engines": {
     "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
@@ -32,19 +33,54 @@
     "test:templates": "npm run build && node --test test/template-types.test.js",
     "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
     "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",
-    "pack:check": "npm run clean && node --test test/package.test.js"
+    "pack:check": "npm run clean && node --test test/package.test.js",
+    "test:tron-core": "node --test test/tron-core.test.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@nomicfoundation/hardhat-ethers": "4.2.1",
+    "@openzeppelin/tron-runtime": "0.1.0",
     "@types/node": "22.10.2",
     "eslint": "10.13.0",
+    "ethers": "6.17.0",
     "globals": "17.13.0",
+    "hardhat": "3.21.1",
     "prettier": "3.9.10",
     "prettier-plugin-solidity": "2.4.1",
+    "solc": "0.8.26",
+    "tronweb": "6.5.1",
     "typescript": "5.7.2",
     "typescript-eslint": "8.72.1"
   },
   "dependencies": {
     "smol-toml": "1.9.1"
+  },
+  "peerDependencies": {
+    "hardhat": "*",
+    "@nomicfoundation/hardhat-ethers": "*",
+    "ethers": "*",
+    "@openzeppelin/tron-runtime": "*",
+    "tronweb": "*",
+    "solc": "*"
+  },
+  "peerDependenciesMeta": {
+    "hardhat": {
+      "optional": true
+    },
+    "@nomicfoundation/hardhat-ethers": {
+      "optional": true
+    },
+    "ethers": {
+      "optional": true
+    },
+    "@openzeppelin/tron-runtime": {
+      "optional": true
+    },
+    "tronweb": {
+      "optional": true
+    },
+    "solc": {
+      "optional": true
+    }
   }
 }
