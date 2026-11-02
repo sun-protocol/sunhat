@@ -507,7 +507,7 @@ for (const args of [
   });
 }
 
-test('Hardhat 3 TRON initialization fails before writing instead of generating an incompatible project', () => {
+test('Hardhat 3 TRON initialization is offline and selects the public plugin', () => {
   const parent = temp('hh3-tron');
   const root = resolve(parent, 'project');
   const result = run(parent, [
@@ -518,9 +518,20 @@ test('Hardhat 3 TRON initialization fails before writing instead of generating a
     '3',
     root,
   ]);
-  assert.equal(result.status, 3, result.stderr);
-  assert.match(result.stderr, /Hardhat 3\/TRON.*compatible TRON plugin/u);
-  assert.equal(existsSync(root), false);
+  assert.equal(result.status, 0, result.stderr);
+  const manifest = JSON.parse(readFileSync(resolve(root, 'package.json')));
+  assert.equal(manifest.devDependencies.hardhat, '3.21.1');
+  assert.equal(
+    manifest.devDependencies['@openzeppelin/hardhat-tron'],
+    undefined,
+  );
+  assert.equal(manifest.devDependencies['@openzeppelin/tron-runtime'], '0.1.0');
+  assert.match(
+    readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'),
+    /sunhat\/hardhat3-tron/u,
+  );
+  assert.equal(existsSync(resolve(root, 'node_modules')), false);
+  assert.equal(existsSync(resolve(root, '.sunhat')), false);
 });
 
 for (const [name, declared, moduleType, version, expected] of [
@@ -562,7 +573,7 @@ for (const [name, declared, moduleType, version, expected] of [
   });
 }
 
-test('Hardhat 3 refuses a TRON binding before launching an EVM toolchain', () => {
+test('Hardhat 3 TRON diagnoses a missing local plugin before framework launch', () => {
   const root = temp('hh3-tron-execute');
   binding(root, 'hardhat', 'tron');
   json(resolve(root, 'package.json'), {
@@ -572,7 +583,12 @@ test('Hardhat 3 refuses a TRON binding before launching an EVM toolchain', () =>
   hardhat(root, '3.21.1');
   const result = run(root, ['test']);
   assert.equal(result.status, 3, result.stderr);
-  assert.match(result.stderr, /Hardhat 3\/TRON/u);
+  assert.match(
+    result.stderr,
+    isHardhat3NodeSupported(process.versions.node)
+      ? /Hardhat 3\/TRON.*hardhat3-tron/u
+      : /Hardhat 3.*Node.js/u,
+  );
   assert.equal(result.stdout, '');
 });
 

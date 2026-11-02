@@ -1,6 +1,6 @@
 {
   "name": "@sun-protocol/sunhat",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Project-bound Hardhat and Foundry CLI for EVM and TRON development",
   "type": "module",
   "license": "MIT OR Apache-2.0",
@@ -38,7 +38,8 @@
     "test:tron-core": "node --test test/tron-core.test.js",
     "test:hardhat3:tron-plugin": "npm run build && node --test test/hardhat3-tron-plugin.integration.test.js",
     "tre:build-jar": "bash scripts/build-tre-jar.sh",
-    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-plugin.test.js"
+    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-plugin.test.js",
+    "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -99,7 +100,8 @@
   "exports": {
     "./hardhat3-tron": {
       "types": "./dist/plugins/tron/index.d.ts",
-      "import": "./dist/plugins/tron/index.js"
+      "import": "./dist/plugins/tron/index.js",
+      "default": "./dist/plugins/tron/index.js"
     },
     "./package.json": "./package.json"
   }

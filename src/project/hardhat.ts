@@ -1,7 +1,6 @@
 import { toolchainError } from '../errors.js';
 import { isRecord, readJson } from '../json.js';
 import { isSupportedNode } from '../runtime.js';
-import type { Target } from './binding.js';
 
 export type HardhatMajor = 2 | 3;
 
@@ -24,14 +23,6 @@ export function hardhatMajor(
 
 export function isHardhat3NodeSupported(version: string): boolean {
   return isSupportedNode(version, { major: 22, minor: 13 });
-}
-
-export function assertHardhatTarget(major: HardhatMajor, target: Target): void {
-  if (major === 3 && target === 'tron') {
-    return toolchainError(
-      'Hardhat 3/TRON is not available yet; a compatible TRON plugin is required',
-    );
-  }
 }
 
 export function readHardhatPackage(path: string): HardhatPackage {

@@ -16,7 +16,7 @@ Usage:
   sunhat <command> [args...]
 
 Init defaults: framework=foundry, target=tron
-Hardhat initialization defaults to version 2. Hardhat 3 currently supports EVM only.
+Hardhat initialization defaults to version 2. Hardhat 3 supports EVM and TRON.
 Init creates project files only. For Foundry, run \`sunhat toolchain install\` in the project directory.
 `;
 

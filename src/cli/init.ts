@@ -19,7 +19,7 @@ export function initProject(argv: readonly string[]): number {
   const options = parseInitOptions(argv);
   if (!options) {
     process.stdout.write(
-      'Usage: sunhat init [--framework <foundry|hardhat>] [--hardhat-version <2|3>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron; hardhat-version=2 for new Hardhat projects\nCreates project files only; install framework dependencies separately.\nHardhat 3 currently supports EVM only.\n',
+      'Usage: sunhat init [--framework <foundry|hardhat>] [--hardhat-version <2|3>] [--target <tron|evm>] [--adopt] [path]\nDefaults: framework=foundry, target=tron; hardhat-version=2 for new Hardhat projects\nCreates project files only; install framework dependencies separately.\nHardhat 3 supports EVM and TRON.\n',
     );
     return 0;
   }

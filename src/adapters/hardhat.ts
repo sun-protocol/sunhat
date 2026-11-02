@@ -5,7 +5,6 @@ import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import { spawnNative } from '../process.js';
 import type { Target } from '../project/binding.js';
 import {
-  assertHardhatTarget,
   hardhatMajor,
   isHardhat3NodeSupported,
   readHardhatPackage,
@@ -67,7 +66,6 @@ export async function runHardhat(
       `Hardhat version mismatch: expected ${expected}, resolved ${manifest.version} at ${manifestPath}`,
     );
   }
-  assertHardhatTarget(major, target);
   if (major === 3) {
     if (project.type !== 'module') {
       return toolchainError(
@@ -78,6 +76,9 @@ export async function runHardhat(
       return toolchainError(
         `Hardhat 3 requires Node.js 22.13+, 24.x or 26.x; resolved ${process.versions.node} for ${manifestPath}`,
       );
+    }
+    if (target === 'tron') {
+      assertTronPlugin(require);
     }
   }
   const relative =
@@ -92,4 +93,29 @@ export async function runHardhat(
   }
   const entry = resolveExecutable(dirname(manifestPath), relative, 'Hardhat');
   return await spawnNative(process.execPath, [entry, ...args], root);
+}
+
+function assertTronPlugin(require: NodeJS.Require): void {
+  for (const name of [
+    'sunhat/hardhat3-tron',
+    '@sun-protocol/sunhat/hardhat3-tron',
+  ]) {
+    try {
+      require.resolve(name);
+      return;
+    } catch (error) {
+      if (
+        !hasErrorCode(error, 'MODULE_NOT_FOUND') &&
+        !hasErrorCode(error, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
+      ) {
+        return toolchainError(
+          `cannot resolve ${name}: ${errorMessage(error)}`,
+          { cause: error },
+        );
+      }
+    }
+  }
+  return toolchainError(
+    'Hardhat 3/TRON requires the Sunhat hardhat3-tron plugin; install project dependencies and register sunhat/hardhat3-tron in hardhat.config',
+  );
 }

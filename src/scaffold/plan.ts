@@ -9,11 +9,7 @@ import { basename, join, resolve } from 'node:path';
 import { CliError, usage } from '../errors.js';
 import { packageRoot, readPackageMetadata } from '../package.js';
 import type { Framework, Target } from '../project/binding.js';
-import {
-  assertHardhatTarget,
-  hardhatMajor,
-  readHardhatPackage,
-} from '../project/hardhat.js';
+import { hardhatMajor, readHardhatPackage } from '../project/hardhat.js';
 import type { HardhatMajor } from '../project/hardhat.js';
 
 export interface PlannedFile {
@@ -38,7 +34,7 @@ export function planScaffold(
   target: Target,
   hardhatVersion?: HardhatMajor,
 ): ScaffoldPlan {
-  validateHardhatSelection(framework, target, hardhatVersion);
+  validateHardhatSelection(framework, hardhatVersion);
   const root = resolve(directory);
   assertUnbound(root);
   const metadata = readPackageMetadata();
@@ -70,12 +66,12 @@ export function planAdoption(
   target: Target,
   hardhatVersion?: HardhatMajor,
 ): ScaffoldPlan {
-  validateHardhatSelection(framework, target, hardhatVersion);
+  validateHardhatSelection(framework, hardhatVersion);
   const root = resolve(directory);
   validateNativeProject(root, framework);
   assertUnbound(root);
   if (framework === 'hardhat') {
-    validateHardhatAdoption(root, target, hardhatVersion);
+    validateHardhatAdoption(root, hardhatVersion);
   }
   const template = resolve(packageRoot, 'templates', framework, target);
   const names = ['sunhat.toml'];
@@ -96,20 +92,15 @@ export function planAdoption(
 
 function validateHardhatSelection(
   framework: Framework,
-  target: Target,
   version: HardhatMajor | undefined,
 ): void {
   if (version !== undefined && framework !== 'hardhat') {
     return usage('--hardhat-version requires --framework hardhat');
   }
-  if (framework === 'hardhat') {
-    assertHardhatTarget(version ?? 2, target);
-  }
 }
 
 function validateHardhatAdoption(
   root: string,
-  target: Target,
   expected: HardhatMajor | undefined,
 ): void {
   const path = resolve(root, 'package.json');
@@ -129,9 +120,6 @@ function validateHardhatAdoption(
     return usage(
       `Hardhat major mismatch: expected ${expected}, declared ${declared ?? 'unknown'} in ${path}`,
     );
-  }
-  if (major !== undefined) {
-    assertHardhatTarget(major, target);
   }
   if (major === 3 && project.type !== 'module') {
     return usage(`Hardhat 3 requires "type": "module" in ${path}`);
