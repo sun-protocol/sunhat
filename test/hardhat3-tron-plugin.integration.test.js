@@ -304,7 +304,13 @@ test(
           project,
           'node_modules/hardhat/dist/src/cli.js',
         );
-        for (const mode of ['success', 'failure', 'keep']) {
+        for (const mode of [
+          'success',
+          'failure',
+          'keep',
+          'compile',
+          'disabled',
+        ]) {
           const name = `sunhat-tron-owned-${randomUUID()}`;
           subtest.after(() => removeContainer(name));
           const options = {
@@ -320,6 +326,8 @@ test(
               SUNHAT_TRE_KEEP: String(mode === 'keep'),
               SUNHAT_OWNED_JAR: jar,
               SUNHAT_PATCHED_TRE: 'true',
+              SUNHAT_TRE_AUTO_COMPILE: String(mode === 'compile'),
+              SUNHAT_TRE_AUTO_TEST: String(mode !== 'disabled'),
             },
           };
           if (mode === 'failure') {
@@ -333,6 +341,15 @@ test(
               failed.stdout + failed.stderr,
               /EXPECTED_TRON_TEST_FAILURE/,
             );
+          } else if (mode === 'compile') {
+            run(process.execPath, [hardhat, 'build'], options);
+          } else if (mode === 'disabled') {
+            const tested = run(
+              process.execPath,
+              [hardhat, 'test', 'mocha', '--no-compile', '--grep', '^$'],
+              options,
+            );
+            assert.match(tested.stdout, /0 passing/);
           } else {
             const tested = run(
               process.execPath,

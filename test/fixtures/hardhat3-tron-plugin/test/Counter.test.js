@@ -213,6 +213,35 @@ describe('Hardhat 3 TRON plugin', function () {
       assert.equal(impersonatedReceipt.status, 1);
       assert.ok(impersonatedReceipt.nativeTransactionInfo.blockNumber > 0);
       await first.tre.helpers.stopImpersonatingAccount(recipient);
+      let fixtureRuns = 0;
+      async function deployFixture() {
+        fixtureRuns += 1;
+        const fixtureCounter = await first.ethers.deployContract('Counter');
+        await fixtureCounter.waitForDeployment();
+        return fixtureCounter;
+      }
+      const fixtureCounter = await first.tre.helpers.loadFixture(deployFixture);
+      await (await fixtureCounter.increment()).wait();
+      const restoredFixture =
+        await first.tre.helpers.loadFixture(deployFixture);
+      assert.equal(restoredFixture, fixtureCounter);
+      assert.equal(await restoredFixture.number(), 0n);
+      assert.equal(fixtureRuns, 1);
+      let laterFixtureRuns = 0;
+      async function laterFixture() {
+        laterFixtureRuns += 1;
+        return deployFixture();
+      }
+      await first.tre.helpers.loadFixture(laterFixture);
+      await first.tre.helpers.loadFixture(deployFixture);
+      await first.tre.helpers.loadFixture(laterFixture);
+      assert.equal(laterFixtureRuns, 2);
+      const beforeSecondFixture = fixtureRuns;
+      await second.tre.helpers.loadFixture(deployFixture);
+      assert.equal(fixtureRuns, beforeSecondFixture + 1);
+      const block = await first.tre.helpers.time.latestBlock();
+      await first.tre.helpers.mineUpTo(block + 2);
+      assert.ok((await first.tre.helpers.time.latestBlock()) >= block + 2);
     } else {
       await assert.rejects(first.tre.helpers.takeSnapshot(), /tre_snapshot/);
       await assert.rejects(first.tre.helpers.time.increase(5), /patched/);

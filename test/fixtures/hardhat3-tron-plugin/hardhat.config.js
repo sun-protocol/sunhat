@@ -22,6 +22,8 @@ export default defineConfig({
   },
   tre: {
     autoStart: process.env.SUNHAT_TRE_AUTO === 'true',
+    autoStartOnCompile: process.env.SUNHAT_TRE_AUTO_COMPILE === 'true',
+    autoStartOnTest: process.env.SUNHAT_TRE_AUTO_TEST !== 'false',
     keepRunning: process.env.SUNHAT_TRE_KEEP === 'true',
     containerName: process.env.SUNHAT_TRE_NAME,
     jarPath: process.env.SUNHAT_OWNED_JAR,

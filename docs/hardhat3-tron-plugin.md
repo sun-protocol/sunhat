@@ -47,7 +47,10 @@ The facade covers the inherited TRON testing surface, not every ethers Provider 
 
 ## Validation
 
+Run these repository checks from a source checkout:
+
 ```bash
+npm run build
 npm run test:tron-plugin
 npm run tre:build-jar
 npm run test:hardhat3:tron-plugin

@@ -96,6 +96,58 @@ test(
     const installed = resolve(consumer, 'node_modules', metadata.name);
     assert.equal(lstatSync(installed).isSymbolicLink(), false);
     const cli = resolve(installed, 'bin/sunhat.js');
+    for (const name of Object.keys(metadata.peerDependencies)) {
+      assert.equal(
+        existsSync(resolve(consumer, 'node_modules', name)),
+        false,
+        `CLI-only installation unexpectedly installed optional peer ${name}`,
+      );
+    }
+
+    await t.test(
+      'the artifact installs alongside an existing Hardhat 2 and ethers 5 host',
+      () => {
+        const legacy = resolve(temporary, 'legacy host');
+        mkdirSync(legacy);
+        run(
+          [
+            npm,
+            'install',
+            '--ignore-scripts',
+            '--no-audit',
+            '--no-fund',
+            resolve(archives, tarballs[0]),
+            'hardhat@2.22.0',
+            'ethers@5.7.2',
+          ],
+          legacy,
+          { timeout: 90000 },
+        );
+        for (const [name, version] of [
+          ['hardhat', '2.22.0'],
+          ['ethers', '5.7.2'],
+        ]) {
+          assert.equal(
+            JSON.parse(
+              readFileSync(
+                resolve(legacy, 'node_modules', name, 'package.json'),
+              ),
+            ).version,
+            version,
+          );
+        }
+        assert.equal(
+          run(
+            [
+              resolve(legacy, 'node_modules', metadata.name, 'bin/sunhat.js'),
+              '--version',
+            ],
+            legacy,
+          ).stdout,
+          `sunhat ${metadata.version}\n`,
+        );
+      },
+    );
 
     await t.test(
       'the artifact contains runtime files, templates and documentation',
@@ -103,6 +155,10 @@ test(
         for (const path of [
           'dist/cli/main.js',
           'dist/package.js',
+          'dist/plugins/tron/index.js',
+          'dist/plugins/tron/index.d.ts',
+          'vendor/hardhat-tron/LICENSE',
+          'docs/hardhat3-tron-plugin.md',
           'templates',
           'README.md',
           'docs/QuickStart.md',
@@ -150,11 +206,18 @@ test(
     );
 
     configureFoundryTemplates(installed);
-    for (const framework of ['foundry', 'hardhat']) {
+    for (const [framework, version] of [
+      ['foundry', undefined],
+      ['hardhat', 2],
+      ['hardhat', 3],
+    ]) {
       for (const target of ['evm', 'tron']) {
-        const project = resolve(consumer, `${framework}-${target}`);
+        const project = resolve(
+          consumer,
+          `${framework}-${version ?? 'native'}-${target}`,
+        );
         await t.test(
-          `${framework}/${target} initializes offline from the installed templates`,
+          `${framework}${version ?? ''}/${target} initializes offline from the installed templates`,
           () => {
             const downloadLog = resolve(
               temporary,
@@ -168,6 +231,9 @@ test(
                 'init',
                 '--framework',
                 framework,
+                ...(version === undefined
+                  ? []
+                  : ['--hardhat-version', String(version)]),
                 '--target',
                 target,
                 project,

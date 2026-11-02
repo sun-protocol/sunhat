@@ -2,7 +2,7 @@
 
 The working tree supports Hardhat 3 initialization, adoption and native command execution for EVM and TRON. Both generated projects have passed real npm-artifact installation, declaration-inclusive TypeScript, build, test and deployment checks. TRON acceptance uses local Docker TRE; the plugin also has separate ordinary/patched-node acceptance.
 
-This report records development after commit `70bb493`. It does not change the capabilities of the already published Sunhat 2.0.0 package or mark the combined EVM/TRON requirement complete.
+This report records the completed Hardhat 3 EVM/TRON integration after commit `70bb493`, targeting unpublished Sunhat 2.1.0. It does not change the capabilities of the already published Sunhat 2.0.0 package. Release publication and remote CI results are outside this local completion record.
 
 ## Frozen EVM validation dependencies
 
@@ -108,7 +108,7 @@ One successful run reported these original receipt fields:
 
 These are observed local-node results, not fixed cost guarantees. Assertions require positive native energy and bandwidth usage or its sun fee; they do not relabel either resource as EVM gas. TRE omits empty event `data` in protobuf JSON when all arguments are indexed; the fixture normalizes that omission to `0x` before ABI decoding.
 
-A separate Linux CI job runs this probe. Its remote execution result has not been observed locally.
+A Linux CI matrix now runs the full public-plugin and generated-template suites on Node 22.13.0, 24.22.1 and 26.0.0, including the pinned patched-jar build. Remote execution results have not been observed locally. The native probe remains available as a separate diagnostic command.
 
 ## Generated TRON project
 
@@ -122,8 +122,24 @@ npm run build
 TRE_AUTO_START=true npm test
 ```
 
-Use the development 2.1.0 artifact for these commands until that version is published. The generated alias always uses the creating package's metadata. The existing released 2.0.0 package remains unchanged. Run `npm run test:hardhat3:tron-template` for the isolated generated-project check. The [staged plan](hardhat3-tron-development-plan.md) records review and execution evidence; R4 completes the supported-Node and CI matrix.
+Use the development 2.1.0 artifact for these commands until that version is published. The generated alias always uses the creating package's metadata. The existing released 2.0.0 package remains unchanged. Run `npm run test:hardhat3:tron-template` for the isolated generated-project check. The [staged plan](hardhat3-tron-development-plan.md) records review and execution evidence.
 
 For adoption, configure the native Hardhat 3 project with the TRON plugin and appropriate networks first, then run `sunhat init --adopt --framework hardhat --hardhat-version 3 --target tron`. Adoption preserves source, configuration and dependencies. The CLI checks the installed plugin entry before launch; this checks availability, not registration or the behavior of arbitrary scripts. The native configuration owns chain selection. Generated TRON actions explicitly require `connection.tre`; adapted user scripts should apply the same guard before writes.
+
+## Final local acceptance
+
+All results below were observed locally on macOS arm64. Linux/Windows CI configuration is committed; remote runs have not been observed.
+
+| Check                                                                                            | Actual runtimes                   | Result                                           |
+| ------------------------------------------------------------------------------------------------ | --------------------------------- | ------------------------------------------------ |
+| Existing CLI/runtime, filesystem rollback and command routing                                    | 20.11.0, 22.13.0, 24.22.1, 26.0.0 | 325 passed, two Linux-only skips on each runtime |
+| Core/plugin units plus packaged EVM/TRON lifecycles and ordinary/patched TRE                     | 22.13.0, 26.0.0                   | 26 passed on each runtime                        |
+| Ordinary/patched plugin and owned task policies                                                  | 24.22.1                           | Four passed                                      |
+| H2 dependency/declaration regression, H3 EVM/TRON generated lifecycle                            | 24.22.1                           | Eight passed                                     |
+| Clean-built artifact, six offline template combinations, CLI-only peers and old H2/ethers 5 host | 24.22.1                           | 13 passed                                        |
+
+The final patched acceptance jar was built by the repository script with the pinned TRE/JDK images and has SHA-256 `46d6c901ee5d4f7ec151aa970d7569847b165ef515bf41b1f410051b7e62eed7`. The JDK image index was inspected and includes Linux amd64 and arm64; local execution used arm64. Neither the jar nor Java test sources are included in the npm artifact. The tests verify state-only snapshot restoration, retained native transaction history, fixture reuse/newer-fixture invalidation, mining/time, account mutation, impersonation, native assertions, compiler batches, different nodes/accounts and EVM coexistence.
+
+Foundry regression uses existing local release fixtures for installer/routing behavior; this record does not claim a new live Foundry chain acceptance run. Ordinary and patched TRE acceptance broadcasts only to test-owned local nodes. Lint, formatting, maintained-path/content English checks and `git diff --check` passed.
 
 References: [Hardhat 3 migration](https://hardhat.org/docs/migrate-from-hardhat2), [Node.js support](https://hardhat.org/docs/reference/nodejs-support), [ethers plugin](https://hardhat.org/docs/plugins/hardhat-ethers), [OpenZeppelin plugin at the inspected revision](https://github.com/OpenZeppelin/hardhat-tron/blob/d3aa82e3914087778b0cdc21d6faa05be87cecd9/package.json), [published TRON plugin metadata](https://registry.npmjs.org/@openzeppelin%2fhardhat-tron/0.1.0), [TRON upgrades plugin metadata](https://registry.npmjs.org/@openzeppelin%2fhardhat-tron-upgrades/0.1.1), [LayerZero plugin metadata](https://registry.npmjs.org/@layerzerolabs%2fhardhat-tron/3.0.168), [shared TRON runtime](https://github.com/OpenZeppelin/tron-runtime), and [reference Docker lifecycle](https://github.com/OpenZeppelin/hardhat-tron/blob/d3aa82e3914087778b0cdc21d6faa05be87cecd9/src/tre/lifecycle.js).

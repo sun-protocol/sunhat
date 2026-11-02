@@ -152,6 +152,7 @@ test(
             (version) => isSupportedNode(version, { major: 22, minor: 0 }),
           ],
           ['hardhat/3/evm', isHardhat3NodeSupported],
+          ['hardhat/3/tron', isHardhat3NodeSupported],
         ];
         const versions = [
           '18.0.0',

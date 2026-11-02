@@ -16,7 +16,10 @@
     "docs/hardhat3-compatibility.md",
     "README.md",
     "vendor/hardhat-tron/",
-    "docs/hardhat3-tron-plugin.md"
+    "docs/hardhat3-tron-plugin.md",
+    "docs/hardhat3-tron-requirements.md",
+    "docs/hardhat3-tron-development-plan.md",
+    "docs/release-2.1.0.md"
   ],
   "engines": {
     "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
@@ -39,7 +42,8 @@
     "test:hardhat3:tron-plugin": "npm run build && node --test test/hardhat3-tron-plugin.integration.test.js",
     "tre:build-jar": "bash scripts/build-tre-jar.sh",
     "test:tron-plugin": "node --test test/tron-core.test.js test/tron-plugin.test.js",
-    "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js"
+    "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js",
+    "check:english": "node scripts/check-english.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

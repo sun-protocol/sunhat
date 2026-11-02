@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,11 +40,28 @@ for (const target of ['evm', 'tron']) {
       );
       t.after(() => rmSync(temporary, { recursive: true, force: true }));
       const project = resolve(temporary, 'project with spaces');
+      const archives = resolve(temporary, 'archives');
+      mkdirSync(archives);
+      const packed = JSON.parse(
+        run(
+          [
+            process.env.npm_execpath,
+            'pack',
+            '--ignore-scripts',
+            '--json',
+            '--pack-destination',
+            archives,
+          ],
+          repository,
+          30000,
+        ).stdout,
+      );
+      const archive = resolve(archives, packed[0].filename);
       run(
         [cli, 'init', '--framework', 'hardhat', '--target', target, project],
         temporary,
       );
-      // Use the generated package as-is, including its exact dependency versions.
+      // Test the development artifact while retaining exact framework dependencies.
       run(
         [
           process.env.npm_execpath,
@@ -52,6 +69,8 @@ for (const target of ['evm', 'tron']) {
           '--ignore-scripts',
           '--no-audit',
           '--no-fund',
+          '--save-dev',
+          `sunhat@file:${archive}`,
         ],
         project,
         150_000,
