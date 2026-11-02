@@ -11,14 +11,10 @@
     "bin/",
     "dist/",
     "templates/",
-    "docs/toml-binding.md",
     "docs/QuickStart.md",
-    "docs/hardhat3-compatibility.md",
     "README.md",
     "vendor/hardhat-tron/",
     "docs/hardhat3-tron-plugin.md",
-    "docs/hardhat3-tron-requirements.md",
-    "docs/hardhat3-tron-development-plan.md",
     "docs/release-2.1.0.md"
   ],
   "engines": {

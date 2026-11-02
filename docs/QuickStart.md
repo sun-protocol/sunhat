@@ -155,7 +155,7 @@ Use `framework = "hardhat"` for Hardhat or `target = "evm"` for EVM. Choose the 
 | `foundry-toolchain.json`        | Foundry release, platform archives, and installation checksums        |
 | `package.json` and its lockfile | npm dependencies and project scripts                                  |
 
-Run commands from the project root or a subdirectory. Sunhat locates the nearest ancestor containing `sunhat.toml` and runs the framework from that project root. See [TOML compatibility](toml-binding.md) for binding syntax details.
+Run commands from the project root or a subdirectory. Sunhat locates the nearest ancestor containing `sunhat.toml` and runs the framework from that project root. Use TOML 1.0 syntax for the binding's `project` table; `framework` accepts `hardhat` or `foundry`, and `target` accepts `evm` or `tron`.
 
 ## Compiler installation
 

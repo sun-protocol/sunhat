@@ -9,9 +9,28 @@ const names = execFileSync(
   ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
   { cwd: root, encoding: 'utf8' },
 );
+const internalNames = execFileSync(
+  'git',
+  [
+    'ls-files',
+    '--others',
+    '--ignored',
+    '--exclude-standard',
+    '-z',
+    '--',
+    'docs/internal/',
+    'docs/hardhat3-tron-requirements.md',
+    'docs/hardhat3-tron-development-plan.md',
+    'docs/hardhat3-compatibility.md',
+    'docs/toml-binding.md',
+  ],
+  { cwd: root, encoding: 'utf8' },
+);
 const chinese = /\p{Script=Han}/u;
 const failures = [];
-for (const name of new Set(names.split('\0').filter(Boolean))) {
+for (const name of new Set(
+  (names + internalNames).split('\0').filter(Boolean),
+)) {
   if (chinese.test(name)) {
     failures.push(`${name}: Chinese characters in path`);
   }

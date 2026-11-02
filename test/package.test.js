@@ -66,6 +66,15 @@ test(
     t.after(() => rmSync(temporary, { recursive: true, force: true }));
     const archives = resolve(temporary, 'archives');
     mkdirSync(archives);
+    const internal = resolve(repository, 'docs/internal');
+    mkdirSync(internal, { recursive: true });
+    const privateFixture = mkdtempSync(resolve(internal, 'package-check-'));
+    t.after(() => rmSync(privateFixture, { recursive: true, force: true }));
+    writeFileSync(
+      resolve(privateFixture, 'private-note.md'),
+      'Internal packaging test fixture. This file must not be published.\n',
+      { flag: 'wx' },
+    );
     run([npm, 'pack', '--pack-destination', archives], repository, {
       timeout: 90_000,
     });
@@ -162,12 +171,20 @@ test(
           'templates',
           'README.md',
           'docs/QuickStart.md',
-          'docs/hardhat3-compatibility.md',
-          'docs/toml-binding.md',
+          'docs/release-2.1.0.md',
         ]) {
           assert.ok(existsSync(resolve(installed, path)), `missing ${path}`);
         }
-        for (const path of ['src', 'test', '.github']) {
+        for (const path of [
+          'src',
+          'test',
+          '.github',
+          'docs/internal',
+          'docs/hardhat3-tron-requirements.md',
+          'docs/hardhat3-tron-development-plan.md',
+          'docs/hardhat3-compatibility.md',
+          'docs/toml-binding.md',
+        ]) {
           assert.equal(
             existsSync(resolve(installed, path)),
             false,

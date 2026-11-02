@@ -57,10 +57,10 @@ npm test
 
 `prepack` builds the CLI for both `npm pack` and `npm publish`.
 
-Run `npm run test:hardhat3` for the generated EVM artifact lifecycle and `npm run test:tron-plugin` for core/adapter regressions. With Docker running, `npm run tre:build-jar`, `npm run test:hardhat3:tron-plugin` and `npm run test:hardhat3:tron-template` verify ordinary/patched TRE and the generated TRON lifecycle. `npm run check:english` checks maintained paths/text. See the [compatibility report](docs/hardhat3-compatibility.md) and [2.1.0 development release notes](docs/release-2.1.0.md) for evidence and limits.
+Run `npm run test:hardhat3` for the generated EVM artifact lifecycle and `npm run test:tron-plugin` for core/adapter regressions. With Docker running, `npm run tre:build-jar`, `npm run test:hardhat3:tron-plugin` and `npm run test:hardhat3:tron-template` verify ordinary/patched TRE and the generated TRON lifecycle. `npm run check:english` checks maintained paths/text. See the [2.1.0 development release notes](docs/release-2.1.0.md) for supported behavior and limits.
 
 Runtime tests use temporary CLI copies and release configuration for local archives. Installer tests replace download and extraction dependencies where needed; filesystem replacement and rollback tests use real files and directories.
 
 Source builds reject unused declarations, incomplete return paths, and switch fallthrough. ESLint uses type information for `src/` to catch unhandled promises, async callbacks in synchronous APIs, and unsafe type assertions. Template linting does not require installing each generated project's dependencies.
 
-Initialization files and Foundry release data live under `templates/<framework>/common/` and `templates/<framework>/<target>/`; Hardhat 3 uses `templates/hardhat/3/`. Target files override matching common files. The [TOML compatibility note](docs/toml-binding.md) documents the binding syntax baseline and parser limits.
+Initialization files and Foundry release data live under `templates/<framework>/common/` and `templates/<framework>/<target>/`; Hardhat 3 uses `templates/hardhat/3/`. Target files override matching common files. The `sunhat.toml` binding uses TOML 1.0 syntax with a `project` table containing `framework` and `target`.
