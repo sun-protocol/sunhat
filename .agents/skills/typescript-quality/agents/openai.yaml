@@ -1,4 +1,0 @@
-interface:
-  display_name: 'Sunhat TypeScript Quality'
-  short_description: 'Local TypeScript quality, style, and CLI delivery rules'
-  default_prompt: 'Use $typescript-quality from .agents/skills/typescript-quality/ in this repository to review engineering quality and code style, implement necessary changes by impact, and run appropriate validation.'

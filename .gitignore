@@ -4,6 +4,7 @@
 /*.tgz
 **/.DS_Store
 /.sunhat/tre/
+/.agents/
 
 # Internal requirements, design notes, plans and validation records stay local.
 /docs/internal/
