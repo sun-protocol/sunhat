@@ -157,18 +157,18 @@ Compilers are resolved by the framework on first compilation. Foundry toolchain 
 
 | Project            | First compilation                                                    | Compiler selection                                                              |
 | ------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Foundry EVM        | `sunhat build` downloads uncached `solc`                             | Source pragmas or the `solc` setting in `foundry.toml`; the sample uses 0.8.28  |
-| Foundry TRON       | `sunhat build` resolves native `tron-solc`                           | `solc` in `foundry.toml`; the selected toolchain defaults to 0.8.28             |
+| Foundry EVM        | `sunhat build` downloads uncached `solc`                             | `solc` in `foundry.toml`; templates pin 0.8.28                                  |
+| Foundry TRON       | `sunhat build` resolves native `tron-solc`                           | `solc` in `foundry.toml`; templates pin 0.8.28                                  |
 | Hardhat 2 EVM/TRON | After `npm install`, `sunhat compile` resolves the selected compiler | `solidity` in `hardhat.config.ts`; templates select 0.8.26                      |
 | Hardhat 3 EVM/TRON | After `npm install`, `sunhat build` resolves the selected compiler   | `solidity` plus the TRON plugin's target/path settings; templates select 0.8.26 |
 
-For example, set this key under the existing `[profile.default]` section in `foundry.toml`:
+Both Foundry templates include this key under `[profile.default]` in `foundry.toml`:
 
 ```toml
 solc = "0.8.28"
 ```
 
-Foundry also accepts a local compiler path through `solc`. Foundry-TRON caches downloaded native compilers under `~/.foundry-tron/solc/`. Hardhat 2/TRON uses the compiler downloader supplied by `@openzeppelin/hardhat-tron`. Hardhat 3/TRON uses the verified downloader adapted in `sunhat/hardhat3-tron` and Hardhat 3's public compiler path setting.
+Edit the quoted value to select another compiler version, such as `"0.8.26"`, and update source pragmas to accept that version. Foundry also accepts a local compiler path through `solc`; TRON projects require a native `tron-solc` executable. Foundry-TRON caches downloaded native compilers under `~/.foundry-tron/solc/`. Hardhat 2/TRON uses the compiler downloader supplied by `@openzeppelin/hardhat-tron`. Hardhat 3/TRON uses the verified downloader adapted in `sunhat/hardhat3-tron` and Hardhat 3's public compiler path setting.
 
 ## Common Foundry commands
 

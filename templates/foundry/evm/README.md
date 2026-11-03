@@ -30,7 +30,7 @@ npm test
 
 `sunhat init` only generates project files. `sunhat toolchain install` installs and verifies the release declared in `foundry-toolchain.json` and stores the binaries under `.sunhat/toolchains/`. Subsequent commands run the installed executables without rehashing them or probing their versions. If installation fails, retry with the same install command. Use `toolchain info` to inspect installed metadata.
 
-The first `sunhat build` downloads the `solc` version required by the sources if it is not cached. To select the compiler explicitly, set `solc = "0.8.28"` under `[profile.default]` in `foundry.toml`. Initialization does not predownload the compiler.
+The generated `foundry.toml` pins `solc = "0.8.28"` under `[profile.default]`. Change this quoted value to select another version or a local compiler path, and keep the source pragmas compatible with that version. The first `sunhat build` downloads the selected compiler if it is not cached. Initialization does not predownload the compiler.
 
 ## Commands
 

@@ -61,4 +61,4 @@ sunhat build
 sunhat test
 ```
 
-The first `sunhat build` downloads native `tron-solc` through Foundry-TRON. The current toolchain defaults to `0.8.28` and caches it under `~/.foundry-tron/solc/`. Set `solc` under `[profile.default]` in `foundry.toml` to select a version or local executable. Initialization does not predownload the compiler. `anvil` and `chisel` are unavailable for this target.
+The generated `foundry.toml` pins `solc = "0.8.28"` under `[profile.default]`. Change this quoted value to select another supported TRON compiler version or a local native `tron-solc` executable, and keep the source pragmas compatible with that version. The first `sunhat build` downloads the selected native `tron-solc` through Foundry-TRON and caches it under `~/.foundry-tron/solc/`. Initialization does not predownload the compiler. `anvil` and `chisel` are unavailable for this target.
