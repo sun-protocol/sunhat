@@ -81,7 +81,7 @@ test(
     });
     mkdirSync(resolve(project, 'contracts'), { recursive: true });
     cpSync(
-      resolve(repository, 'templates/hardhat/3/common/contracts/Counter.sol'),
+      resolve(repository, 'templates/hardhat/common/contracts/Counter.sol'),
       resolve(project, 'contracts/Counter.sol'),
     );
     const dependencies = JSON.parse(

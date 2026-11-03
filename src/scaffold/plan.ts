@@ -44,13 +44,16 @@ export function planScaffold(
     sunhatPackage,
     sunhatDependency: `npm:${sunhatPackage}`,
   };
-  const source =
-    framework === 'hardhat' && hardhatVersion === 3
-      ? resolve(packageRoot, 'templates/hardhat/3')
-      : resolve(packageRoot, 'templates', framework);
+  const source = resolve(packageRoot, 'templates', framework);
+  const sources = [source];
+  if (framework === 'hardhat') {
+    sources.push(resolve(source, `v${hardhatVersion ?? 2}`));
+  }
   const files = new Map<string, string>();
-  collectTemplates(resolve(source, 'common'), '', files);
-  collectTemplates(resolve(source, target), '', files);
+  for (const directory of sources) {
+    collectTemplates(resolve(directory, 'common'), '', files);
+    collectTemplates(resolve(directory, target), '', files);
+  }
   return {
     root,
     files: Array.from(files, ([name, from]) => ({

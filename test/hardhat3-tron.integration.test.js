@@ -93,7 +93,7 @@ test(
     });
     mkdirSync(resolve(project, 'contracts'));
     cpSync(
-      resolve(repository, 'templates/hardhat/3/common/contracts/Counter.sol'),
+      resolve(repository, 'templates/hardhat/common/contracts/Counter.sol'),
       resolve(project, 'contracts/Counter.sol'),
     );
     const compilerPath = resolve(temporary, 'tron-soljson.cjs');

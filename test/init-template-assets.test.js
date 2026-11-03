@@ -112,12 +112,20 @@ test('adoption planning preserves the project and checks late conflicts before c
   }
 });
 
-for (const framework of ['hardhat', 'foundry']) {
+for (const [framework, hardhatVersion] of [
+  ['hardhat', 2],
+  ['hardhat', 3],
+  ['foundry', undefined],
+]) {
   for (const target of ['evm', 'tron']) {
-    test(`${framework}/${target} initialization follows template changes without rebuilding`, (t) => {
+    test(`${framework}${hardhatVersion ?? ''}/${target} initialization follows template changes without rebuilding`, (t) => {
       const fixture = runtime(t);
       const source = resolve(fixture.packageRoot, 'templates', framework);
-      const variant = resolve(source, target);
+      const selected =
+        framework === 'hardhat'
+          ? resolve(source, `v${hardhatVersion}`)
+          : source;
+      const variant = resolve(selected, target);
       const project = resolve(
         fixture.temporary,
         process.platform === 'win32'
@@ -151,14 +159,29 @@ for (const framework of ['hardhat', 'foundry']) {
       assert.notEqual(customizedConfig, originalConfig);
       writeFileSync(resolve(variant, native), customizedConfig);
       const binding = readFileSync(
-        resolve(variant, 'sunhat.toml'),
+        resolve(source, target, 'sunhat.toml'),
         'utf8',
       ).replace(/\n$/u, ' # template-owned binding\n');
-      writeFileSync(resolve(variant, 'sunhat.toml'), binding);
+      writeFileSync(resolve(source, target, 'sunhat.toml'), binding);
       const readme = `# Customized ${framework}/${target} template\n`;
       writeFileSync(resolve(variant, 'README.md'), readme);
       json(resolve(source, 'common/config/shared.json'), { enabled: true });
       json(resolve(source, 'common/config/runtime.json'), { layer: 'common' });
+      if (framework === 'hardhat') {
+        json(resolve(source, 'common/config/version.json'), {
+          layer: 'shared-common',
+        });
+        json(resolve(source, target, 'config/version.json'), {
+          layer: 'shared-target',
+        });
+        json(resolve(selected, 'common/config/version.json'), {
+          layer: 'version-common',
+          version: hardhatVersion,
+        });
+        json(resolve(selected, 'common/config/runtime.json'), {
+          layer: 'version-common',
+        });
+      }
       json(resolve(variant, 'config/runtime.json'), {
         layer: target,
         name: '{{projectName}}',
@@ -167,6 +190,9 @@ for (const framework of ['hardhat', 'foundry']) {
       const result = run(fixture, [
         '--framework',
         framework,
+        ...(hardhatVersion === undefined
+          ? []
+          : ['--hardhat-version', String(hardhatVersion)]),
         '--target',
         target,
         project,
@@ -180,7 +206,15 @@ for (const framework of ['hardhat', 'foundry']) {
         readFileSync(resolve(project, 'package.json')),
       );
       assert.equal(generated.name, basename(project));
-      assert.equal(generated.devDependencies?.sunhat, undefined);
+      const metadata = JSON.parse(
+        readFileSync(resolve(fixture.packageRoot, 'package.json')),
+      );
+      assert.equal(
+        generated.devDependencies?.sunhat,
+        framework === 'hardhat' && hardhatVersion === 3 && target === 'tron'
+          ? `npm:${metadata.name}@${metadata.version}`
+          : undefined,
+      );
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
       if (toolchain) {
@@ -210,6 +244,12 @@ for (const framework of ['hardhat', 'foundry']) {
           name: basename(project),
         },
       );
+      if (framework === 'hardhat') {
+        assert.deepEqual(
+          JSON.parse(readFileSync(resolve(project, 'config/version.json'))),
+          { layer: 'version-common', version: hardhatVersion },
+        );
+      }
     });
   }
 }

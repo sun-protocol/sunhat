@@ -139,13 +139,13 @@ test(
         const templates = [
           ['foundry/evm', isSupportedNode],
           ['foundry/tron', isSupportedNode],
-          ['hardhat/evm', isSupportedNode],
+          ['hardhat/v2/evm', isSupportedNode],
           [
-            'hardhat/tron',
+            'hardhat/v2/tron',
             (version) => isSupportedNode(version, { major: 22, minor: 0 }),
           ],
-          ['hardhat/3/evm', isHardhat3NodeSupported],
-          ['hardhat/3/tron', isHardhat3NodeSupported],
+          ['hardhat/v3/evm', isHardhat3NodeSupported],
+          ['hardhat/v3/tron', isHardhat3NodeSupported],
         ];
         const versions = [
           '18.0.0',
