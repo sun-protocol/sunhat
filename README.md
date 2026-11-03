@@ -38,6 +38,8 @@ The example above uses released 2.0.0. For this checkout's Hardhat 3 features, b
 | Hardhat 2 | Existing ethers template          | Existing OpenZeppelin Hardhat 2 plugin                                   |
 | Hardhat 3 | Explicit ethers/Mocha connections | Native TVM plugin at `sunhat/hardhat3-tron`, ordinary/patched Docker TRE |
 
+In this 2.1.0 checkout, only the Hardhat 3/TRON template declares Sunhat as a project dependency, because it imports the native TRON plugin. Other templates do not install the CLI locally. Hardhat npm scripts invoke local Hardhat directly; Foundry npm scripts use Sunhat on `PATH` to select the project-pinned toolchain. Released 2.0.0 templates retain their original dependency policy.
+
 The [TRON plugin guide](docs/hardhat3-tron-plugin.md) covers native sun units, compiler/artifact separation, Docker policies, assertions and patched-node limits. Adoption preserves user code and configuration; register the appropriate native plugins before adopting.
 
 ## Development
@@ -51,7 +53,7 @@ npm run format:check
 npm test
 ```
 
-`npm run test:templates` generates Hardhat 2 EVM/TRON projects, installs the local tgz with unchanged exact framework dependencies, and runs declaration-inclusive `tsc --noEmit`.
+`npm run test:templates` generates Hardhat 2 EVM/TRON projects, installs their exact generated framework dependencies without a Sunhat dependency, and runs declaration-inclusive `tsc --noEmit`.
 
 `npm run pack:check` starts without build artifacts, installs the actual tarball in an isolated project, and exercises the installed CLI and all six templates. This check requires npm registry access; Foundry release downloads use local fixtures.
 

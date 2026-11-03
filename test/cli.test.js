@@ -11,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
 import {
   configureFoundryTemplates,
@@ -21,10 +20,6 @@ import {
 import { copyCliRuntime } from './fixtures/runtime.js';
 import { isHardhat3NodeSupported } from '../dist/project/hardhat.js';
 
-const repository = fileURLToPath(new URL('../', import.meta.url));
-const packageMetadata = JSON.parse(
-  readFileSync(resolve(repository, 'package.json'), 'utf8'),
-);
 const temporary = mkdtempSync(resolve(tmpdir(), 'sunhat-cli-'));
 after(() => rmSync(temporary, { recursive: true, force: true }));
 const { packageRoot, cli } = copyCliRuntime(resolve(temporary, 'runtime'));
@@ -191,11 +186,8 @@ test('Hardhat scaffold requires explicit framework and refuses overwrite', () =>
   );
   const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   assert.doesNotMatch(JSON.stringify(pkg), /hardhat-tron/u);
-  assert.equal(
-    pkg.devDependencies.sunhat,
-    `npm:${packageMetadata.name}@${packageMetadata.version}`,
-  );
-  assert.equal(pkg.scripts.build, 'sunhat compile');
+  assert.equal(pkg.devDependencies.sunhat, undefined);
+  assert.equal(pkg.scripts.build, 'hardhat compile');
   const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
   assert.match(readme, /Hardhat EVM Project with Sunhat/u);
   assert.doesNotMatch(readme, /TRE_URL/u);
@@ -470,12 +462,9 @@ test('Hardhat 3 EVM initialization is offline and uses separate ESM templates', 
     manifest.devDependencies['@openzeppelin/hardhat-tron'],
     undefined,
   );
-  assert.equal(manifest.scripts.build, 'sunhat build');
-  assert.equal(manifest.scripts.test, 'sunhat test');
-  assert.equal(
-    manifest.devDependencies.sunhat,
-    `npm:${packageMetadata.name}@${packageMetadata.version}`,
-  );
+  assert.equal(manifest.scripts.build, 'hardhat build');
+  assert.equal(manifest.scripts.test, 'hardhat test');
+  assert.equal(manifest.devDependencies.sunhat, undefined);
   assert.match(
     readFileSync(resolve(root, 'hardhat.config.ts'), 'utf8'),
     /plugins: \[hardhatEthers, hardhatMocha\]/u,

@@ -11,9 +11,11 @@ npm install --global {{sunhatPackage}}
 sunhat --version
 ```
 
+For an unpublished local build, install the creating CLI tgz globally instead of requesting that version from the registry.
+
 Run project commands from this directory or a subdirectory. Install the Foundry toolchain with the command below before building or testing. Global Sunhat uses the binaries in this project's `.sunhat/` directory.
 
-The generated project declares `{{sunhatPackage}}` as an exact local development dependency under the `sunhat` alias. For local-only use, replace `sunhat` with `npx --no-install sunhat` in the examples. `npm run build` and `npm test` use the project's local Sunhat automatically. A global invocation does not automatically switch to the local Sunhat copy.
+This project does not declare a Sunhat npm dependency. `npm run build` and `npm test` use the globally installed `sunhat` on `PATH` to run the project-pinned toolchain. Keep that global CLI available when using the npm scripts.
 
 ## Quick start
 
@@ -24,7 +26,7 @@ npm run build
 npm test
 ```
 
-The install command installs all declared dependencies. The Sunhat dependency uses an npm alias that is independent of the machine that initialized this project.
+`npm install` is optional for this dependency-free template. Foundry is installed separately through the global Sunhat CLI.
 
 `sunhat init` only generates project files. `sunhat toolchain install` installs and verifies the release declared in `foundry-toolchain.json` and stores the binaries under `.sunhat/toolchains/`. Subsequent commands run the installed executables without rehashing them or probing their versions. If installation fails, retry with the same install command. Use `toolchain info` to inspect installed metadata.
 

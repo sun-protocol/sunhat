@@ -101,25 +101,18 @@ test(
     const generated = JSON.parse(
       readFileSync(resolve(project, 'package.json'), 'utf8'),
     );
-    assert.equal(
-      generated.devDependencies.sunhat,
-      `npm:${metadata.name}@${metadata.version}`,
-    );
+    assert.equal(generated.devDependencies.sunhat, undefined);
     assert.equal(generated.devDependencies.hardhat, '3.21.1');
-    // Exercise the local artifact under development rather than the registry's
-    // released CLI, leaving every framework dependency exactly as generated.
+    // Install the generated framework dependencies without a project-local CLI.
     run(
-      [
-        npm,
-        'install',
-        '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--save-dev',
-        `sunhat@file:${archive}`,
-      ],
+      [npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund'],
       project,
       90_000,
+    );
+    assert.equal(
+      JSON.parse(readFileSync(resolve(project, 'package.json'))).devDependencies
+        .sunhat,
+      undefined,
     );
     await t.test(
       'package engines agree with the installed runtime guards',

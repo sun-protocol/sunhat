@@ -8,8 +8,5 @@
   "scripts": {
     "build": "sunhat build",
     "test": "sunhat test"
-  },
-  "devDependencies": {
-    "sunhat": "{{sunhatDependency}}"
   }
 }

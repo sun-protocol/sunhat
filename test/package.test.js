@@ -304,9 +304,14 @@ test(
               readFileSync(resolve(project, 'package.json'), 'utf8'),
             );
             assert.equal(
-              manifest.devDependencies.sunhat,
-              `npm:${metadata.name}@${metadata.version}`,
+              manifest.devDependencies?.sunhat,
+              framework === 'hardhat' && version === 3 && target === 'tron'
+                ? `npm:${metadata.name}@${metadata.version}`
+                : undefined,
             );
+            assert.equal(manifest.dependencies?.sunhat, undefined);
+            assert.equal(manifest.dependencies?.[metadata.name], undefined);
+            assert.equal(manifest.devDependencies?.[metadata.name], undefined);
             const binding = parse(
               readFileSync(resolve(project, 'sunhat.toml'), 'utf8'),
             );
@@ -336,6 +341,24 @@ test(
           },
         );
         if (framework === 'foundry') {
+          await t.test(
+            `${framework}/${target} installs npm metadata without a Sunhat dependency`,
+            () => {
+              run(
+                [npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund'],
+                project,
+              );
+              const manifest = JSON.parse(
+                readFileSync(resolve(project, 'package.json')),
+              );
+              assert.equal(manifest.dependencies?.sunhat, undefined);
+              assert.equal(manifest.devDependencies?.sunhat, undefined);
+              assert.equal(
+                existsSync(resolve(project, 'node_modules/sunhat')),
+                false,
+              );
+            },
+          );
           await t.test(
             `${framework}/${target} installs its toolchain explicitly`,
             () => {

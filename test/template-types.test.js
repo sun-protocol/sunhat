@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,28 +40,15 @@ for (const target of ['evm', 'tron']) {
       );
       t.after(() => rmSync(temporary, { recursive: true, force: true }));
       const project = resolve(temporary, 'project with spaces');
-      const archives = resolve(temporary, 'archives');
-      mkdirSync(archives);
-      const packed = JSON.parse(
-        run(
-          [
-            process.env.npm_execpath,
-            'pack',
-            '--ignore-scripts',
-            '--json',
-            '--pack-destination',
-            archives,
-          ],
-          repository,
-          30000,
-        ).stdout,
-      );
-      const archive = resolve(archives, packed[0].filename);
       run(
         [cli, 'init', '--framework', 'hardhat', '--target', target, project],
         temporary,
       );
-      // Test the development artifact while retaining exact framework dependencies.
+      const manifest = JSON.parse(
+        readFileSync(resolve(project, 'package.json')),
+      );
+      assert.equal(manifest.devDependencies.sunhat, undefined);
+      // Install the framework exactly as generated; no Sunhat override is needed.
       run(
         [
           process.env.npm_execpath,
@@ -69,12 +56,11 @@ for (const target of ['evm', 'tron']) {
           '--ignore-scripts',
           '--no-audit',
           '--no-fund',
-          '--save-dev',
-          `sunhat@file:${archive}`,
         ],
         project,
         150_000,
       );
+      assert.equal(existsSync(resolve(project, 'node_modules/sunhat')), false);
       const config = JSON.parse(
         readFileSync(resolve(project, 'tsconfig.json'), 'utf8'),
       );
@@ -88,6 +74,20 @@ for (const target of ['evm', 'tron']) {
         project,
         30_000,
       );
+      if (target === 'evm') {
+        await t.test(
+          'native build and test scripts run without a local Sunhat package',
+          () => {
+            run([process.env.npm_execpath, 'run', 'build'], project, 90000);
+            const tested = run(
+              [process.env.npm_execpath, 'test'],
+              project,
+              30000,
+            );
+            assert.match(tested.stdout, /1 passing/u);
+          },
+        );
+      }
       if (target === 'tron') {
         await t.test(
           'the default test task never starts or stops Docker',

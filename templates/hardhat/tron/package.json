@@ -6,8 +6,8 @@
     "node": "^22.0.0 || ^24.0.0 || ^26.0.0"
   },
   "scripts": {
-    "build": "sunhat compile",
-    "test": "sunhat test"
+    "build": "hardhat compile",
+    "test": "hardhat test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "2.0.0",
@@ -19,7 +19,6 @@
     "hardhat": "2.29.1",
     "ts-node": "10.9.2",
     "typescript": "5.6.3",
-    "@openzeppelin/hardhat-tron": "0.1.0",
-    "sunhat": "{{sunhatDependency}}"
+    "@openzeppelin/hardhat-tron": "0.1.0"
   }
 }

@@ -3,6 +3,7 @@
 Status: unpublished. This checkout adds Hardhat 3 on EVM and TRON while retaining the Hardhat 2 and Foundry routes. The released 2.0.0 artifact remains unchanged.
 
 - Initialize ESM Hardhat 3 projects with `--framework hardhat --hardhat-version 3 --target evm|tron`. Hardhat initialization still defaults to version 2. Init writes files without installing dependencies; adopt preserves native configuration and source.
+- Keep project dependencies limited to the framework and its plugins. Only H3/TRON retains Sunhat for its plugin; other templates omit it. Hardhat npm scripts use native Hardhat commands, while Foundry scripts use the installed Sunhat on `PATH` for the pinned toolchain.
 - Import the native TRON plugin through `@sun-protocol/sunhat/hardhat3-tron`, or `sunhat/hardhat3-tron` through the generated alias. It reuses the attributed OpenZeppelin TRON runtime/facade and Docker lifecycle through connection-scoped factories and public Hardhat 3 hooks.
 - Compile checksum-verified TVM bytecode, keep EVM/TRON artifacts separate, and use native deployments, calls, events and receipts through `connection.ethers`. Original TRON IDs and Energy/Bandwidth fields remain inspectable. Values and balances use sun.
 - Retain opt-in Docker TRE startup, existing-node reuse, owned-container cleanup and persistent node mode. Ordinary TRE supports the generated lifecycle. Patched TRE adds snapshots/fixtures, time and account mutation/impersonation; snapshots restore account/contract state while retaining block/transaction history.

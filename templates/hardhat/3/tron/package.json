@@ -7,8 +7,8 @@
     "node": "^22.13.0 || ^24.0.0 || ^26.0.0"
   },
   "scripts": {
-    "build": "sunhat build",
-    "test": "sunhat test"
+    "build": "hardhat build",
+    "test": "hardhat test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "4.2.1",

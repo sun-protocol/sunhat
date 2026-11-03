@@ -14,18 +14,12 @@ import fs, {
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { copyCliRuntime } from './fixtures/runtime.js';
 import { initProject } from '../dist/cli/init.js';
 import { CliError } from '../dist/errors.js';
 import { applyScaffold } from '../dist/scaffold/apply.js';
 import { planAdoption, planScaffold } from '../dist/scaffold/plan.js';
-
-const repository = fileURLToPath(new URL('../', import.meta.url));
-const packageMetadata = JSON.parse(
-  readFileSync(resolve(repository, 'package.json'), 'utf8'),
-);
 
 function runtime(t) {
   const temporary = realpathSync(
@@ -133,6 +127,7 @@ for (const framework of ['hardhat', 'foundry']) {
       const manifest = JSON.parse(
         readFileSync(resolve(variant, 'package.json')),
       );
+      manifest.devDependencies ??= {};
       manifest.devDependencies['@types/node'] = '22.10.2';
       manifest.scripts.typecheck = 'tsc --noEmit';
       json(resolve(variant, 'package.json'), manifest);
@@ -185,10 +180,7 @@ for (const framework of ['hardhat', 'foundry']) {
         readFileSync(resolve(project, 'package.json')),
       );
       assert.equal(generated.name, basename(project));
-      assert.equal(
-        generated.devDependencies.sunhat,
-        `npm:${packageMetadata.name}@${packageMetadata.version}`,
-      );
+      assert.equal(generated.devDependencies?.sunhat, undefined);
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
       if (toolchain) {
@@ -222,7 +214,7 @@ for (const framework of ['hardhat', 'foundry']) {
   }
 }
 
-test('package metadata drives the version command and every generated Sunhat dependency', (t) => {
+test('package metadata drives versions and only the H3/TRON plugin dependency', (t) => {
   const fixture = runtime(t);
   const path = resolve(fixture.packageRoot, 'package.json');
   const metadata = JSON.parse(readFileSync(path, 'utf8'));
@@ -251,15 +243,30 @@ test('package metadata drives the version command and every generated Sunhat dep
       const generated = JSON.parse(
         readFileSync(resolve(project, 'package.json'), 'utf8'),
       );
-      assert.equal(
-        generated.devDependencies.sunhat,
-        `npm:${metadata.name}@${metadata.version}`,
-      );
+      assert.equal(generated.devDependencies?.sunhat, undefined);
       const readme = readFileSync(resolve(project, 'README.md'), 'utf8');
       assert.ok(readme.includes(`${metadata.name}@${metadata.version}`));
       assert.doesNotMatch(readme, /\{\{sunhatPackage\}\}/u);
     }
   }
+  const pluginProject = resolve(fixture.temporary, 'hardhat3-tron');
+  const initialized = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--hardhat-version',
+    '3',
+    '--target',
+    'tron',
+    pluginProject,
+  ]);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const manifest = JSON.parse(
+    readFileSync(resolve(pluginProject, 'package.json')),
+  );
+  assert.equal(
+    manifest.devDependencies.sunhat,
+    `npm:${metadata.name}@${metadata.version}`,
+  );
 });
 
 test('new template files participate in conflict checks before any project file is written', (t) => {
