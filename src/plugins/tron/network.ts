@@ -1,11 +1,12 @@
 import type { NetworkHooks } from 'hardhat/types/hooks';
 import type { NetworkConnection } from 'hardhat/types/network';
-import { HDNodeWallet, SigningKey } from 'ethers';
 import { createHardhatRuntimeEnvironment } from 'hardhat/hre';
 import type { ArtifactManager } from 'hardhat/types/artifacts';
 import core from '../../../vendor/hardhat-tron/index.js';
-import { normalizeTre } from './config.js';
-import { acquireTre, withCleanup } from './resources.js';
+import { normalizeTre } from './settings.js';
+import { resolveSigningAccounts } from './accounts.js';
+import { withCleanup } from './cleanup.js';
+import { acquireTre } from './resources.js';
 
 export default async (): Promise<Partial<NetworkHooks>> => {
   const releases = new WeakMap<
@@ -42,36 +43,7 @@ export default async (): Promise<Partial<NetworkHooks>> => {
       try {
         const config = context.config.tre ?? normalizeTre(undefined);
         const url = await network.url.getUrl();
-        const accounts: string[] = [];
-        if (network.accounts === 'remote') {
-          // Native writes require local keys; remote accounts remain read-only.
-        } else if (Array.isArray(network.accounts)) {
-          for (const account of network.accounts) {
-            accounts.push(await account.getHexString());
-          }
-        } else {
-          const mnemonic = await network.accounts.mnemonic.get();
-          const passphrase = await network.accounts.passphrase.get();
-          for (let index = 0; index < network.accounts.count; index += 1) {
-            accounts.push(
-              HDNodeWallet.fromPhrase(
-                mnemonic,
-                passphrase,
-                `${network.accounts.path}/${network.accounts.initialIndex + index}`,
-              ).privateKey,
-            );
-          }
-        }
-        for (const key of accounts) {
-          if (!/^0x[a-fA-F0-9]{64}$/u.test(key)) {
-            throw new Error('Invalid TRON signing account format');
-          }
-          try {
-            void new SigningKey(key).publicKey;
-          } catch {
-            throw new Error('Invalid TRON signing account');
-          }
-        }
+        const accounts = await resolveSigningAccounts(network.accounts);
         release = await acquireTre(config, url);
         const runtime = core.createRuntime({
           config: {

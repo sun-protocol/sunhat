@@ -3,7 +3,8 @@ import type {
   NewTaskActionFunction,
 } from 'hardhat/types/tasks';
 import type { HardhatRuntimeEnvironment } from 'hardhat/types/hre';
-import { acquireTre, taskContext, withCleanup } from './resources.js';
+import { acquireTre, taskContext } from './resources.js';
+import { withCleanup } from './cleanup.js';
 import type { TreTask } from './resources.js';
 
 async function acquireSelected(

@@ -8,11 +8,11 @@ import plugin from '../dist/plugins/tron/index.js';
 import ethersMatchers from '@nomicfoundation/hardhat-ethers-chai-matchers';
 import { expect } from 'chai';
 import core from '../vendor/hardhat-tron/index.js';
-import { normalizeTre } from '../dist/plugins/tron/config.js';
+import { normalizeTre } from '../dist/plugins/tron/settings.js';
+import { withCleanup } from '../dist/plugins/tron/cleanup.js';
 import {
   createTreManager,
   taskContext,
-  withCleanup,
 } from '../dist/plugins/tron/resources.js';
 
 test('optional TRON configuration rejects null objects', () => {
