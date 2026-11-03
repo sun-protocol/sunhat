@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse } from 'smol-toml';
 import {
@@ -167,6 +167,7 @@ test(
           'dist/plugins/tron/index.js',
           'dist/plugins/tron/index.d.ts',
           'vendor/hardhat-tron/LICENSE',
+          'config/tron-defaults.json',
           'docs/hardhat3-tron-plugin.md',
           'templates',
           'README.md',
@@ -191,6 +192,37 @@ test(
             `unexpected ${path}`,
           );
         }
+      },
+    );
+
+    await t.test(
+      'installed TRON defaults load outside the repository and preserve project overrides',
+      () => {
+        const configured = run(
+          [
+            '--input-type=module',
+            '-e',
+            `const { normalizeTre } = await import(process.argv[1]);
+           console.log(JSON.stringify({
+             defaults: normalizeTre(undefined),
+             overridden: normalizeTre({ image: 'custom/tre:test', compiler: { mirror: 'https://example.invalid/solc' } })
+           }));`,
+            pathToFileURL(resolve(installed, 'dist/plugins/tron/settings.js'))
+              .href,
+          ],
+          consumer,
+        );
+        const { defaults, overridden } = JSON.parse(configured.stdout);
+        const asset = JSON.parse(
+          readFileSync(resolve(installed, 'config/tron-defaults.json')),
+        );
+        assert.equal(defaults.image, asset.image);
+        assert.equal(defaults.compiler.mirror, asset.compilerMirror);
+        assert.equal(overridden.image, 'custom/tre:test');
+        assert.equal(
+          overridden.compiler.mirror,
+          'https://example.invalid/solc',
+        );
       },
     );
 

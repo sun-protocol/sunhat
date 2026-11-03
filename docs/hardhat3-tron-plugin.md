@@ -27,6 +27,8 @@ export default defineConfig({
 
 ## Compiler and connections
 
+The package's default TRE image and compiler mirror are maintained in `config/tron-defaults.json`. A project's `tre.image` and `tre.compiler.mirror` settings override these defaults; `tre.compiler.path` selects a local compiler instead.
+
 `tre.compiler.target` is `auto`, `tron` or `evm`. Auto uses the configured `networks.default.tron` flag when resolving configuration; a command-line network flag does not change the compiler target. Keep separate configurations or explicitly select the target when compiling for both VMs. TRON artifacts use `<artifacts>-tron`; EVM connections read the original artifact root. Build both targets before a test that deploys on both.
 
 The downloader verifies the upstream compiler manifest and checksum before atomic cache replacement. `tre.compiler.path` accepts only the pinned 0.8.26 TVM compiler with SHA-256 `31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1`. `include`, `exclude`, `batches` and `batchesPath` adapt source selection through the public build hook. `hardhat tron:compile-batches` builds the configured batches without deleting earlier batch artifacts.

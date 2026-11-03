@@ -11,6 +11,7 @@
     "bin/",
     "dist/",
     "templates/",
+    "config/tron-defaults.json",
     "docs/QuickStart.md",
     "README.md",
     "vendor/hardhat-tron/",

@@ -10,10 +10,58 @@ import { expect } from 'chai';
 import core from '../vendor/hardhat-tron/index.js';
 import { normalizeTre } from '../dist/plugins/tron/settings.js';
 import { withCleanup } from '../dist/plugins/tron/cleanup.js';
+import { readTronDefaults } from '../dist/plugins/tron/defaults.js';
 import {
   createTreManager,
   taskContext,
 } from '../dist/plugins/tron/resources.js';
+
+test('TRON defaults read configuration data and reject invalid or missing assets', (t) => {
+  const root = mkdtempSync(resolve(tmpdir(), 'sunhat-tron-defaults-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = resolve(root, 'defaults.json');
+  const configured = {
+    image: 'example/tre:test',
+    compilerMirror: 'https://example.invalid/solc',
+  };
+  writeFileSync(path, JSON.stringify(configured));
+  assert.deepEqual(readTronDefaults(path), configured);
+  for (const value of [
+    null,
+    [],
+    {},
+    { ...configured, image: ' ' },
+    { ...configured, compilerMirror: 42 },
+  ]) {
+    writeFileSync(path, JSON.stringify(value));
+    assert.throws(
+      () => readTronDefaults(path),
+      (error) => {
+        assert.match(error.message, /Invalid TRON defaults/);
+        assert.ok(error.message.includes(path));
+        return true;
+      },
+    );
+  }
+  writeFileSync(path, '{');
+  assert.throws(
+    () => readTronDefaults(path),
+    (error) => {
+      assert.ok(error.cause instanceof SyntaxError);
+      assert.ok(error.message.includes(path));
+      return true;
+    },
+  );
+  rmSync(path);
+  assert.throws(
+    () => readTronDefaults(path),
+    (error) => {
+      assert.equal(error.cause.code, 'ENOENT');
+      assert.ok(error.message.includes(path));
+      return true;
+    },
+  );
+});
 
 test('optional TRON configuration rejects null objects', () => {
   for (const value of [

@@ -1,10 +1,7 @@
 import { isRecord } from '../../json.js';
 import type { CompilerBatch, TreConfig } from './types.js';
+import { tronDefaults } from './defaults.js';
 
-export const TRE_IMAGE =
-  'tronbox/tre@sha256:f4332e11df12a9f360639a4546fd046593909630fda48af00b30410c144342f0';
-const DEFAULT_COMPILER_MIRROR =
-  'https://raw.githubusercontent.com/tronprotocol/solc-bin/32695fe4b8d85704da9ec4cedce107a905e412ac';
 function string(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`${field} must be a non-empty string`);
@@ -122,7 +119,9 @@ export function normalizeTre(
     fundSigners: boolean(input.fundSigners, 'tre.fundSigners', false),
     matchers: boolean(input.matchers, 'tre.matchers', false),
     image:
-      input.image === undefined ? TRE_IMAGE : string(input.image, 'tre.image'),
+      input.image === undefined
+        ? tronDefaults.image
+        : string(input.image, 'tre.image'),
     readinessTimeoutMs: integer(
       input.readinessTimeoutMs,
       'tre.readinessTimeoutMs',
@@ -143,7 +142,7 @@ export function normalizeTre(
       target,
       mirror:
         compiler.mirror === undefined
-          ? DEFAULT_COMPILER_MIRROR
+          ? tronDefaults.compilerMirror
           : string(compiler.mirror, 'tre.compiler.mirror'),
       include: strings(compiler.include, 'tre.compiler.include'),
       exclude: strings(compiler.exclude, 'tre.compiler.exclude'),
