@@ -54,7 +54,10 @@ export default async (): Promise<Partial<NetworkHooks>> => {
               artifacts:
                 config.artifactPaths?.tron ?? context.config.paths.artifacts,
             },
-            tre: { fundSigners: config.fundSigners },
+            tre: {
+              fundSigners: config.fundSigners,
+              transaction: config.transaction,
+            },
           },
           network: {
             name: connection.networkName,

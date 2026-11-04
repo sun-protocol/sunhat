@@ -569,8 +569,7 @@ module.exports = function createModule(deps) {
     // units they expect on EVM. java-tron's `INVALID` handler routes
     // through `Program.spendAllEnergy()`, so on a full-burn the
     // receipt reports `energy_usage_total == feeLimit / energy_price`;
-    // the bridge maps `gasLimit → feeLimit = gasLimit * 100`, so the
-    // ratio inverts cleanly back to gasLimit.
+    // the bridge converts gasLimit using the configured or current node price.
     const energyUsed =
       info && info.receipt && Number.isFinite(info.receipt.energy_usage_total)
         ? BigInt(info.receipt.energy_usage_total)
@@ -904,14 +903,7 @@ module.exports = function createModule(deps) {
           contract_address: TronWeb.address.toHex(contractTronBase58),
           function_selector: sig,
           parameter,
-          // Default to TRE's 1_000_000_000 sun (≈10M energy @ 100
-          // sun/energy) ceiling. Honor `overrides.feeLimit` (already
-          // mapped from `overrides.gasLimit` by `makeMethod.invoke`)
-          // when supplied so OOG probes actually constrain the budget.
-          fee_limit:
-            overrides.feeLimit !== null && overrides.feeLimit !== undefined
-              ? Number(overrides.feeLimit)
-              : 1_000_000_000,
+          fee_limit: deps.fees.feeLimit(overrides.feeLimit),
           call_value: callValueSun,
           visible: false,
         }),
@@ -1055,21 +1047,7 @@ module.exports = function createModule(deps) {
           overrides,
         );
       }
-      // Honor `overrides.gasLimit` by mapping to TVM's `feeLimit` via
-      // TRE's energy price (~100 sun/energy — see the feeLimit comment
-      // below). Without this, a test passing `{gasLimit: 100_000}` to
-      // force an OOG sub-call path silently ran with the full 1B-sun
-      // budget and the constrained-gas scenario was never exercised
-      // (e.g. test/governance/TimelockController.test.js's
-      // mockFunctionOutOfGas case, test/utils/Address.test.js's
-      // $functionCall(..., {gasLimit: 120_000n}) case).
-      const _gasLimitSun =
-        overrides.gasLimit !== null && overrides.gasLimit !== undefined
-          ? Math.max(
-              1,
-              Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
-            )
-          : 1_000_000_000;
+      const feeLimit = await deps.fees.resolve(tronWeb, overrides.gasLimit);
       // Impersonated write: route through the raw HTTP path with a
       // forged `owner_address`. `_impersonatedFrom` is set by
       // `makeImpersonatingSigner`; for normal signers it's undefined
@@ -1082,7 +1060,7 @@ module.exports = function createModule(deps) {
           tronWeb._impersonatedFrom,
           normalized,
           deployerTronWeb,
-          { ...overrides, feeLimit: _gasLimitSun },
+          { ...overrides, feeLimit: feeLimit },
         );
         const info = await hre.tre.waitForReceipt(deployerTronWeb, txId);
         if (!(info && info.receipt && info.receipt.result === 'SUCCESS')) {
@@ -1107,16 +1085,7 @@ module.exports = function createModule(deps) {
           callValueSun: impCallValueSun,
         });
       }
-      // feeLimit caps the energy a single tx can buy. TRE's hard
-      // ceiling is 1_000_000_000 sun (1000 TRX) — TronWeb's validator
-      // rejects anything higher with "feeLimit must be >= 0 and <=
-      // 1000000000". At TRE's energy price of ~100 sun/energy, that
-      // converts to a 10M-energy budget, which matches the
-      // `originEnergyLimit` cap. We set the max here so heavier calls
-      // (e.g. Create2 deploy of full VestingWallet bytecode) get the
-      // full budget. Tests that still exhaust 10M surface a real TVM
-      // ceiling — see test 4 in Create2.test.js.
-      const sendOpts = { feeLimit: _gasLimitSun };
+      const sendOpts = { feeLimit };
       if (overrides.value !== null && overrides.value !== undefined) {
         // 1 wei == 1 sun pass-through (cheatcodes.js top-of-file).
         // TronWeb's contract proxy expects `callValue` in sun. It also
@@ -1154,7 +1123,7 @@ module.exports = function createModule(deps) {
               ? overrides.value
               : 0n,
           multisig: false,
-          feeLimit: _gasLimitSun,
+          feeLimit,
         });
         const info = await hre.tre.waitForReceipt(tronWeb, txId);
         if (!(info && info.receipt && info.receipt.result === 'SUCCESS')) {
@@ -1715,7 +1684,7 @@ module.exports = function createModule(deps) {
   // negligible for the test suite.
   const _prebuildCache = new Map();
 
-  async function prepareDeployment(deployerAddress, artifact, args) {
+  async function prepareDeployment(tronWeb, deployerAddress, artifact, args) {
     const iface = new ethersV6.Interface(artifact.abi);
     const inputs = iface.deploy.inputs;
     const { overrides, args: constructorArgs } = splitOverrides(
@@ -1732,18 +1701,13 @@ module.exports = function createModule(deps) {
     // Capture effective overrides before any asynchronous work. Both the
     // cache identity and the transaction builder consume these values.
     const callValue = valueToCallValue(overrides.value ?? 0);
+    const gasLimit = overrides.gasLimit;
+    const parameters = await normalizeArguments(inputs, ctorArgs);
     const deployOpts = {
       callValue:
         typeof callValue === 'bigint' ? callValue.toString() : callValue,
-      feeLimit:
-        overrides.gasLimit === null || overrides.gasLimit === undefined
-          ? 1_000_000_000
-          : Math.max(
-              1,
-              Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
-            ),
+      feeLimit: await deps.fees.resolve(tronWeb, gasLimit),
     };
-    const parameters = await normalizeArguments(inputs, ctorArgs);
     deployOpts.rawParameter = iface.encodeDeploy(parameters);
     const cacheKey = JSON.stringify({
       deployer: tronToHex(deployerAddress),
@@ -1784,6 +1748,7 @@ module.exports = function createModule(deps) {
     }
     const artifact = selectedArtifact ?? (await loadArtifact(hre, name));
     const { cacheKey, deployOpts } = await prepareDeployment(
+      tronWeb,
       deployerAddress,
       artifact,
       args,
@@ -1939,7 +1904,7 @@ module.exports = function createModule(deps) {
       connect() {
         return signer;
       },
-      async sendTransaction({ to, data, value } = {}) {
+      async sendTransaction({ to, data, value, gasLimit } = {}) {
         const toBase58 = signersMod.toBase58(to);
         // Any `data` field (including '0x') → TriggerSmartContract;
         // `data === undefined` → plain TRX transfer. `multisig: true`
@@ -1954,8 +1919,14 @@ module.exports = function createModule(deps) {
             data,
             value,
             multisig: true,
+            feeLimit: await deps.fees.resolve(deployerTronWeb, gasLimit),
           });
         } else {
+          if (gasLimit !== undefined && gasLimit !== null) {
+            throw new Error(
+              'TRON gasLimit applies to contract execution, not plain TRX transfers',
+            );
+          }
           txId = await sendTransferTx(deployerTronWeb, {
             fromBase58: base58,
             toBase58,

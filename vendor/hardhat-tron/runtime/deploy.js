@@ -52,12 +52,11 @@ module.exports = function createModule(deps) {
     const params = {
       abi: expandAbiForTronWeb(artifact.abi),
       bytecode: artifact.bytecode,
-      feeLimit: opts.feeLimit ?? 1_000_000_000,
+      feeLimit: deps.fees.feeLimit(opts.feeLimit),
       callValue: opts.callValue ?? 0,
       userFeePercentage: opts.userFeePercentage ?? 100,
-      // `originEnergyLimit` caps energy a single tx can consume on this
-      // contract regardless of caller's `feeLimit`. TVM's hard ceiling
-      // is 10^7 — anything higher fails TronWeb's param validator.
+      // Bound the deployer's energy contribution per contract call.
+      // The pinned SDK accepts at most 10^7 for this field.
       originEnergyLimit: opts.originEnergyLimit ?? 10_000_000,
       // TVM rejects CreateSmartContract with `contractName.length > 32`
       // ("Contract validate error : contractName's length cannot be
@@ -84,6 +83,10 @@ module.exports = function createModule(deps) {
   // result can hand it off to the rest of the deploy pipeline without
   // branching.
   async function submitPrebuilt(tronWeb, signed, opts = {}) {
+    if (signed?.raw_data?.fee_limit === undefined) {
+      throw new Error('TRON prebuilt deployment is missing raw_data.fee_limit');
+    }
+    deps.fees.feeLimit(signed.raw_data.fee_limit);
     const sent = await tronWeb.trx.sendRawTransaction(signed);
     if (!sent.result) {
       throw new Error(`deploy failed: ${JSON.stringify(sent)}`);

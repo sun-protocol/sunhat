@@ -33,7 +33,10 @@ function createRuntime(input) {
     return subject;
   };
   const deps = { context };
-  deps.cheatcodes = createCheatcodes();
+  deps.fees = require('./runtime/fees').createFeePolicy(
+    context.config.tre?.transaction,
+  );
+  deps.cheatcodes = createCheatcodes(deps);
   deps.capabilities = require('./runtime/capabilities')(deps.cheatcodes);
   deps.time = createTime(deps);
   deps.signers = createSigners(deps);

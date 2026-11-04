@@ -1,4 +1,8 @@
 export type * from '@nomicfoundation/hardhat-ethers';
+import type {
+  TransactionConfig,
+  TransactionUserConfig,
+} from '../../../vendor/hardhat-tron/runtime/fees.js';
 import type { TreRuntime } from '../../../vendor/hardhat-tron/index.js';
 
 export interface CompilerBatch {
@@ -8,6 +12,7 @@ export interface CompilerBatch {
   extraLeaves?: string[];
 }
 export interface TreUserConfig {
+  transaction?: TransactionUserConfig;
   autoStart?: boolean;
   autoStartOnTest?: boolean;
   autoStartOnCompile?: boolean;
@@ -34,6 +39,7 @@ export interface TreUserConfig {
   };
 }
 export interface TreConfig {
+  transaction: TransactionConfig;
   artifactPaths?: { evm: string; tron: string };
   autoStart: boolean;
   autoStartOnTest: boolean;

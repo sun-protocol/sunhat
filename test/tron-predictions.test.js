@@ -46,7 +46,12 @@ async function fixture(t) {
     },
   });
   const signers = await runtime.ethers.getSigners();
-  const state = { builds: 0, broadcasts: [], beforeHeader: undefined };
+  const state = {
+    builds: 0,
+    broadcasts: [],
+    beforeHeader: undefined,
+    energyPrice: 100,
+  };
   for (const client of new Set([
     runtime.tre.makeTronWeb().tronWeb,
     ...signers.map((signer) => signer.tronWeb),
@@ -69,6 +74,11 @@ async function fixture(t) {
     };
   }
   t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (new URL(url).pathname === '/wallet/getchainparameters') {
+      return Response.json({
+        chainParameter: [{ key: 'getEnergyFee', value: state.energyPrice }],
+      });
+    }
     assert.equal(new URL(url).pathname, '/wallet/gettransactioninfobyid');
     const { value: txId } = JSON.parse(options.body);
     const transaction = state.broadcasts.find((entry) => entry.txID === txId);
@@ -212,11 +222,11 @@ test('Typed and equivalent effective overrides share the predicted transaction',
     state,
   } = await fixture(t);
   const predicted = await signer.predictAddress('Empty', [
-    Typed.overrides({ value: 7n, gasLimit: 20000000n }),
+    Typed.overrides({ value: 7n, gasLimit: 10000000n }),
   ]);
   const deployed = await runtime.ethers.deployContract(
     'Empty',
-    [{ value: '7', gasLimit: 30000000, nonce: 99 }],
+    [{ value: '7', gasLimit: 10000000, nonce: 99 }],
     signer,
   );
   assert.equal(await deployed.getAddress(), predicted);
@@ -398,4 +408,25 @@ test('non-enumerable effective overrides cannot match an empty deployment', asyn
       assert.equal(state.builds, 3);
     });
   }
+});
+
+test('changed node energy prices cannot reuse a prediction with a different fee budget', async (t) => {
+  const {
+    runtime,
+    signers: [signer],
+    state,
+  } = await fixture(t);
+  const args = [{ gasLimit: 1000n }];
+  const predicted = await signer.predictAddress('Empty', args);
+  state.energyPrice = 210;
+  const deployed = await runtime.ethers.deployContract('Empty', args, signer);
+  assert.notEqual(await deployed.getAddress(), predicted);
+  assert.equal(state.builds, 2);
+  assert.equal(state.broadcasts[0].raw_data.fee_limit, 210000);
+  const before = state.builds;
+  await assert.rejects(
+    signer.predictAddress('Empty', [{ gasLimit: 20000000n }]),
+    /tre.transaction.feeLimit/,
+  );
+  assert.equal(state.builds, before);
 });

@@ -86,3 +86,31 @@ share this behavior. Failed simulations and transport errors propagate;
 missing energy usage is an invalid response. Deployment estimation without a
 recipient is unsupported. These estimates describe energy, not TRX fees or
 bandwidth costs.
+
+Configure native fee budgets in `hardhat.config.ts`:
+
+```ts
+tre: {
+  transaction: {
+    feeLimit: 1_000_000_000, // Maximum budget in sun; also the default per call.
+    // energyPrice: 100, // Optional fixed sun/energy price for controlled nodes.
+  },
+}
+```
+
+A `gasLimit` override on a submitted contract transaction is an energy quantity. Sunhat multiplies it by
+the node's current `getEnergyFee`, unless `tre.transaction.energyPrice` is
+explicitly configured. Missing or invalid prices and transport failures stop
+the operation; values above the configured budget are rejected before signing.
+The default budget is a Sunhat policy, not a protocol maximum. Nodes enforce
+their own fee limits. Plain TRX transfers reject `gasLimit` because they do not
+execute a contract. Staked or sponsored energy and dynamic chain costs mean
+this fee allowance is not an exact EVM execution-gas cap.
+
+The policy applies to contract, raw, impersonated and deployment transactions.
+Native helper `feeLimit` values are already in sun and must fit the same budget.
+When `gasLimit` uses the node price, a change in the resulting fee between
+prediction and deployment changes the signed transaction identity; the earlier
+prediction is not reused. For stable predictions with a
+`gasLimit`, explicitly fix `energyPrice` for the controlled test node, or omit
+`gasLimit` to use the configured budget directly.

@@ -1,6 +1,7 @@
 import { isRecord } from '../../json.js';
 import type { CompilerBatch, TreConfig } from './types.js';
 import { tronDefaults } from './defaults.js';
+import { normalizeFeePolicy } from '../../../vendor/hardhat-tron/runtime/fees.js';
 
 function string(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -99,6 +100,7 @@ export function normalizeTre(
     ? requested
     : 'evm';
   return {
+    transaction: normalizeFeePolicy(input.transaction),
     autoStart: boolean(input.autoStart, 'tre.autoStart', false),
     autoStartOnTest: boolean(
       input.autoStartOnTest,

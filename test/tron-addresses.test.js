@@ -86,9 +86,13 @@ async function fixture(t, { caller = factoryAddress, rejected = false } = {}) {
       operations.push({ address, selector, parameters });
       return { result: { result: true }, transaction: { txID: txId } };
     };
-    client.transactionBuilder.createSmartContract = async () => {
+    client.transactionBuilder.createSmartContract = async (options) => {
       operations.push({ deploy: true });
-      return { txID: txId, contract_address: tronHex(predictedAddress) };
+      return {
+        txID: txId,
+        contract_address: tronHex(predictedAddress),
+        raw_data: { fee_limit: options.feeLimit },
+      };
     };
     client.trx.sign = async (transaction) => ({
       ...transaction,

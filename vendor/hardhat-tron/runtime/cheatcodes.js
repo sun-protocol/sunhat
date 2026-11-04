@@ -1,7 +1,8 @@
 'use strict';
 
 // Adapted from @openzeppelin/hardhat-tron 0.1.0; see ../provenance.json and LICENSE.
-module.exports = function createModule() {
+module.exports = function createModule(deps = {}) {
+  const fees = deps.fees ?? require('./fees').createFeePolicy();
   // Wrappers around the patched java-tron image's `tre_*` JSON-RPC
   // methods plus raw-HTTP helpers for transactions the ethers bridge
   // needs to issue without going through TronWeb's contract proxy
@@ -217,14 +218,7 @@ module.exports = function createModule() {
       // as the transaction's `data` field — so we don't need to
       // know the function signature to send raw calldata.
       data: dataHex,
-      // Caller-provided `feeLimit` (sun) honors `overrides.gasLimit`
-      // from chai-matchers tests that probe OOG paths; default to
-      // TRE's hard cap of 1_000_000_000 sun (≈ 10M energy @ 100
-      // sun/energy) when unset.
-      fee_limit:
-        feeLimit !== null && feeLimit !== undefined
-          ? Number(feeLimit)
-          : 1_000_000_000,
+      fee_limit: fees.feeLimit(feeLimit ?? undefined),
       call_value: valueToCallValue(value),
       visible: false,
     });

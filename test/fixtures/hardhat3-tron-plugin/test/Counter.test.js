@@ -380,6 +380,16 @@ describe('Hardhat 3 TRON plugin', function () {
     );
     assert.equal(await funded.getAddress(), fundedPrediction);
     assert.equal(await funded.initialValue(), 7n);
+    const energyPrice = (await signer.tronWeb.trx.getChainParameters()).find(
+      (entry) => entry.key === 'getEnergyFee',
+    ).value;
+    const nativeFunded = await signer.tronWeb.trx.getTransaction(
+      funded.deploymentTransaction().hash.replace(/^0x/, ''),
+    );
+    assert.equal(
+      BigInt(nativeFunded.raw_data.fee_limit),
+      1000000n * BigInt(energyPrice),
+    );
 
     const settings = { target: signer.address, amount: 1n, labels: first };
     const structPrediction = await signer.predictAddress(

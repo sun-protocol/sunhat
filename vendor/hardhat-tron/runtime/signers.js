@@ -101,7 +101,7 @@ module.exports = function createModule(runtimeDeps) {
     //      (`tronWeb.trx.sendTransaction`).
     //   3. Degenerate (no data + zero/no value) → throw, since neither
     //      TVM endpoint accepts an amount=0 transfer.
-    async function sendTransaction({ to, value, data } = {}) {
+    async function sendTransaction({ to, value, data, gasLimit } = {}) {
       const { sendCallTx, valueToCallValue } = runtimeDeps.cheatcodes;
       const recipientBase58 = toBase58(to);
       const hasDataField = typeof data === 'string';
@@ -113,8 +113,14 @@ module.exports = function createModule(runtimeDeps) {
           toBase58: recipientBase58,
           data,
           value,
+          feeLimit: await runtimeDeps.fees.resolve(tronWeb, gasLimit),
         });
       } else {
+        if (gasLimit !== undefined && gasLimit !== null) {
+          throw new Error(
+            'TRON gasLimit applies to contract execution, not plain TRX transfers',
+          );
+        }
         const amount = valueToCallValue(value);
         if (amount <= 0) {
           throw new Error(
@@ -165,6 +171,7 @@ module.exports = function createModule(runtimeDeps) {
       const deploy = runtimeDeps.deploy;
       const artifact = await bridge.loadArtifact(hre, name);
       const { cacheKey, deployOpts } = await bridge.prepareDeployment(
+        tronWeb,
         tronAddress,
         artifact,
         args,

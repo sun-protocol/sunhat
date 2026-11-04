@@ -1,3 +1,4 @@
+import type { TransactionUserConfig } from './runtime/fees.js';
 import type { ArtifactManager } from 'hardhat/types/artifacts';
 import type { TronWeb } from 'tronweb';
 import type {
@@ -40,7 +41,7 @@ export interface RuntimeContext {
   lifecycle?: Pick<Lifecycle, 'instanceId'>;
   config: {
     paths: { root: string; artifacts: string };
-    tre: { fundSigners: boolean };
+    tre: { fundSigners: boolean; transaction?: TransactionUserConfig };
   };
   network: {
     name: string;
