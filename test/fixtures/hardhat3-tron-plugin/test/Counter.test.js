@@ -202,6 +202,107 @@ describe('Hardhat 3 TRON plugin', function () {
     await expect(contract.failReason()).to.be.revertedWith('EXPECTED_REVERT');
     await expect(contract.failPanic()).to.be.revertedWithPanic(0x01);
   });
+  it('binds predicted deployments to exact constructor bytes and effective overrides', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const [signer] = await ethers.getSigners();
+    const first = ['a,S:b', 'c'];
+    const second = ['a', 'b,S:c'];
+    const predicted = await signer.predictAddress('PredictionFixture', first);
+    const different = await ethers.deployContract(
+      'PredictionFixture',
+      second,
+      signer,
+    );
+    assert.notEqual(await different.getAddress(), predicted);
+    assert.equal(await different.first(), second[0]);
+    assert.equal(await different.second(), second[1]);
+    const matching = await ethers.deployContract(
+      'PredictionFixture',
+      first,
+      signer,
+    );
+    assert.equal(await matching.getAddress(), predicted);
+    assert.equal(await matching.first(), first[0]);
+    assert.equal(await matching.second(), first[1]);
+
+    const fundedPrediction = await signer.predictAddress('PredictionFixture', [
+      ...first,
+      ethers.Typed.overrides({ value: 7n, gasLimit: 1000000n }),
+    ]);
+    const otherValue = await ethers.deployContract(
+      'PredictionFixture',
+      [...first, { value: 8n, gasLimit: 1000000n }],
+      signer,
+    );
+    assert.notEqual(await otherValue.getAddress(), fundedPrediction);
+    assert.equal(await otherValue.initialValue(), 8n);
+    const funded = await ethers.deployContract(
+      'PredictionFixture',
+      [...first, { value: '7', gasLimit: 1000000 }],
+      signer,
+    );
+    assert.equal(await funded.getAddress(), fundedPrediction);
+    assert.equal(await funded.initialValue(), 7n);
+
+    const settings = { target: signer.address, amount: 1n, labels: first };
+    const structPrediction = await signer.predictAddress(
+      'PredictionStructFixture',
+      [settings],
+    );
+    const changed = { ...settings, amount: 2n };
+    const otherStruct = await ethers.deployContract(
+      'PredictionStructFixture',
+      [changed],
+      signer,
+    );
+    assert.notEqual(await otherStruct.getAddress(), structPrediction);
+    const expectedDigest = ethers.keccak256(
+      ethers.AbiCoder.defaultAbiCoder().encode(
+        ['tuple(address target,uint256 amount,string[] labels)'],
+        [changed],
+      ),
+    );
+    assert.equal(await otherStruct.digest(), expectedDigest);
+    const structFactory = await ethers.getContractFactory(
+      'PredictionStructFixture',
+      signer,
+    );
+    const matchingStruct = await structFactory.deploy([
+      signer.address,
+      '1',
+      first,
+    ]);
+    assert.equal(await matchingStruct.getAddress(), structPrediction);
+    assert.notEqual(await matchingStruct.digest(), expectedDigest);
+    const stored = await signer.tronWeb.trx.getContract(
+      toBase58Address(matchingStruct.target),
+    );
+    const storedEntries = stored.abi.entrys.filter(
+      (entry) =>
+        entry.type.toLowerCase() === 'constructor' ||
+        entry.name === 'hashSettings',
+    );
+    assert.deepEqual(
+      storedEntries.map((entry) => entry.inputs[0].type),
+      ['(address,uint256,string[])', '(address,uint256,string[])'],
+    );
+    assert.equal(
+      await matchingStruct.hashSettings([signer.address, '1', first]),
+      await matchingStruct.digest(),
+    );
+    const emptyPrediction = await signer.predictAddress('PredictionFixture', [
+      ...second,
+      {},
+    ]);
+    const emptyFactory = await ethers.getContractFactory(
+      'PredictionFixture',
+      signer,
+    );
+    const emptyOverrides = await emptyFactory.deploy(...second, {});
+    assert.equal(await emptyOverrides.getAddress(), emptyPrediction);
+  });
   it('uses connection ethers on native TVM and preserves EVM coexistence', async function () {
     const first = await network.create('tre');
     connections.push(first);

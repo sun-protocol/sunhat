@@ -2063,12 +2063,12 @@ module.exports = function createModule(deps) {
   // `ethers.getCreateAddress({from, nonce})` — broken on TVM in two
   // places (wrong formula AND `getNonce()` is meaningless).
   //
-  // The fix: `signer.predictAddress(name, args, opts)` on the bridge's
+  // The fix: `signer.predictAddress(name, args)` on the bridge's
   // signer object builds + signs a CreateSmartContract tx via
   // TronWeb (which populates `tx.contract_address` locally before
   // broadcast — see node_modules/tronweb/lib/esm/lib/TransactionBuilder/
   // helper.js:37-43). The pre-signed tx is stashed here keyed by
-  // `(deployerBase58, name, serializedArgs)`; the next
+  // `(deployer, artifact, encoded constructor, effective overrides)`; the next
   // `ethers.deployContract(name, args, signer)` call with matching key
   // pops the cache and broadcasts the pre-signed tx byte-for-byte, so
   // the deployed address matches the prediction.
@@ -2079,35 +2079,72 @@ module.exports = function createModule(deps) {
   // negligible for the test suite.
   const _prebuildCache = new Map();
 
-  function prebuildCacheKey(deployerBase58, name, args) {
-    // BigInt + address/struct args round-trip through JSON via a tagged
-    // sentinel — same approach as the cheatcode module's BigInt-aware
-    // stringifier. We don't need to send this to TVM, just a stable
-    // string for Map keying, so the simpler form suffices.
-    const stringify = (v) => {
-      if (typeof v === 'bigint') {
-        return 'BI:' + v.toString();
-      }
-      if (v && typeof v === 'object' && typeof v.target === 'string') {
-        return 'T:' + toTronBase58(v.target);
-      }
-      if (v && typeof v === 'object' && typeof v.address === 'string') {
-        return 'A:' + toTronBase58(v.address);
-      }
-      if (Array.isArray(v)) {
-        return '[' + v.map(stringify).join(',') + ']';
-      }
-      if (typeof v === 'string') {
-        return 'S:' + v;
-      }
-      if (typeof v === 'object' && v !== null) {
-        // Stable key order for object args.
-        const keys = Object.keys(v).sort();
-        return '{' + keys.map((k) => k + '=' + stringify(v[k])).join(',') + '}';
-      }
-      return String(v);
+  async function prepareDeployment(deployerAddress, artifact, args) {
+    const iface = new ethersV6.Interface(artifact.abi);
+    const inputs = iface.deploy.inputs;
+    const { overrides, args: constructorArgs } = splitOverrides(
+      args,
+      inputs.length,
+    );
+    // Only an extra argument can be empty overrides, not a tuple value.
+    const extra = constructorArgs[inputs.length];
+    const prototype =
+      extra !== null && typeof extra === 'object'
+        ? Object.getPrototypeOf(extra)
+        : undefined;
+    const hasEmptyOverrides =
+      constructorArgs.length === inputs.length + 1 &&
+      (prototype === Object.prototype || prototype === null) &&
+      Reflect.ownKeys(extra).length === 0;
+    const ctorArgs = hasEmptyOverrides
+      ? constructorArgs.slice(0, -1)
+      : constructorArgs;
+    if (ctorArgs.length !== inputs.length) {
+      throw new Error(
+        `${artifact.contractName || 'Contract'} constructor expects ${inputs.length} argument(s), received ${ctorArgs.length}`,
+      );
+    }
+
+    // Capture effective overrides before any asynchronous work. Both the
+    // cache identity and the transaction builder consume these values.
+    const callValue = valueToCallValue(overrides.value ?? 0);
+    const deployOpts = {
+      callValue:
+        typeof callValue === 'bigint' ? callValue.toString() : callValue,
+      feeLimit:
+        overrides.gasLimit === null || overrides.gasLimit === undefined
+          ? 1_000_000_000
+          : Math.max(
+              1,
+              Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
+            ),
     };
-    return deployerBase58 + '|' + name + '|' + stringify(args);
+    const parameters = await Promise.all(
+      inputs.map((input, index) =>
+        input.walkAsync(ctorArgs[index], (type, value) => {
+          const unwrapped = ethersV6.Typed.dereference(value, type);
+          if (type === 'address') {
+            return tronToHex(toTronBase58(unwrapped));
+          }
+          if (type === 'bytes' || /^bytes[0-9]+$/.test(type)) {
+            return ethersV6.hexlify(unwrapped);
+          }
+          return unwrapped;
+        }),
+      ),
+    );
+    deployOpts.rawParameter = iface.encodeDeploy(parameters);
+    const cacheKey = JSON.stringify({
+      deployer: tronToHex(deployerAddress),
+      sourceName: artifact.sourceName ?? null,
+      name: artifact.contractName ?? 'Contract',
+      abi: iface.formatJson(),
+      bytecode: ethersV6.hexlify(artifact.bytecode),
+      parameters: deployOpts.rawParameter,
+      callValue: String(deployOpts.callValue),
+      feeLimit: deployOpts.feeLimit,
+    });
+    return { cacheKey, deployOpts };
   }
 
   // -- Deploy -------------------------------------------------------
@@ -2129,16 +2166,19 @@ module.exports = function createModule(deps) {
       );
     }
     const artifact = loadArtifact(hre, name);
-    const ctor = artifact.abi.find((a) => a.type === 'constructor');
-    const ctorInputCount = ctor ? ctor.inputs.length : 0;
+    const { cacheKey, deployOpts } = await prepareDeployment(
+      deployerAddress,
+      artifact,
+      args,
+    );
 
     // Predict-address shortcut: if a prior `signer.predictAddress(name,
-    // args)` call stashed a pre-signed tx for this (deployer, name, args)
-    // triple, broadcast it directly. Skipping the createSmartContract
-    // rebuild guarantees the deployed address equals the earlier
-    // prediction, since the unsigned raw_data (and therefore the txID
+    // args)` call stashed a pre-signed tx for the same account, artifact,
+    // constructor bytes and effective overrides, broadcast it directly.
+    // Skipping the createSmartContract rebuild guarantees the deployed
+    // address equals the earlier prediction, since the unsigned raw_data
+    // (and therefore the txID
     // that feeds into the CREATE formula) is byte-identical.
-    const cacheKey = prebuildCacheKey(deployerAddress, name, args);
     const cached = _prebuildCache.get(cacheKey);
     if (cached) {
       _prebuildCache.delete(cacheKey);
@@ -2157,62 +2197,6 @@ module.exports = function createModule(deps) {
         wait: async () => deployReceipt,
       });
       return makeFacade(artifact.abi, address, tronWeb, hre, deploymentTx);
-    }
-
-    // ethers v6 `factory.deploy(...args, overrides)` allows an optional
-    // trailing tx-options object carrying `{value, gasLimit, ...}`. Split
-    // it out — passing it through as a constructor arg either lands in
-    // TronWeb's encoder as garbage or silently disappears (the ctor
-    // typically has fewer inputs than args.length), leaving `value`
-    // unforwarded. BeaconProxy.test.js's "payable initialization" hits
-    // this: the test deploys with `{value: 100n}` and asserts the proxy
-    // ended up with 100 sun balance — without the split, value never
-    // reached `createSmartContract`.
-    const { overrides, args: ctorArgs } = splitOverrides(args, ctorInputCount);
-
-    let parameters;
-    if (ctorArgs.length > 0) {
-      if (!ctor) {
-        throw new Error(
-          `${name} has no constructor but ${ctorArgs.length} arg(s) were passed`,
-        );
-      }
-      // TronWeb's `transactionBuilder.createSmartContract` takes
-      // `parameters` as a flat array of VALUES (types are taken from the
-      // ABI constructor inputs). The `{type, value}` wrapper format used
-      // by `triggerSmartContract` does NOT apply here - passing it
-      // through fails inside TronWeb's encoder with "invalid string
-      // value". Normalize each arg (address → base58, bigint →
-      // decimal string, ethers.Typed → unwrap) and pass raw.
-      parameters = ctor.inputs.map((input, i) =>
-        normalizeArg(ctorArgs[i], input),
-      );
-    }
-
-    // 1 wei == 1 sun pass-through on the JS↔TVM boundary. For
-    // value-bearing deploys (`factory.deploy(..., {value: 100n})`),
-    // forward `value` to TronWeb's `createSmartContract` as `callValue`.
-    // BeaconProxy's payable-init test (and similar in ERC1967/UUPS) rely
-    // on this — value sent during construction is what funds the proxy.
-    const deployOpts = { parameters };
-    if (overrides.value !== null && overrides.value !== undefined) {
-      const { valueToCallValue } = deps.cheatcodes;
-      // TronWeb's `transactionBuilder.createSmartContract` JSON.stringify's
-      // its params internally and chokes on BigInt — convert to a
-      // decimal string here. Deploy values in the OZ test surface stay
-      // well under 2^53 (proxy initialization is ~1e5 sun) so the round
-      // trip through string→Number on the Java side is fine.
-      const cv = valueToCallValue(overrides.value);
-      deployOpts.callValue = typeof cv === 'bigint' ? cv.toString() : cv;
-    }
-    if (overrides.gasLimit !== null && overrides.gasLimit !== undefined) {
-      // Same `gasLimit → feeLimit` mapping as makeMethod.invoke: TRE's
-      // energy price is ~100 sun/energy, clamped to the [1, 1e9 sun]
-      // range java-tron accepts.
-      deployOpts.feeLimit = Math.max(
-        1,
-        Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
-      );
     }
 
     const { address, txId, info } = await hre.tre.deployContract(
@@ -2890,10 +2874,9 @@ module.exports = function createModule(deps) {
     // verbatim. Lazy-required from signers.js to avoid the
     // bridge ↔ signers module-load cycle.
     _prebuildCache,
-    prebuildCacheKey,
+    prepareDeployment,
 
-    // Artifact + arg helpers surfaced for signers' `predictAddress`.
+    // Artifact loader for signers' `predictAddress`.
     loadArtifact,
-    normalizeArg,
   };
 };

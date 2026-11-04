@@ -207,49 +207,11 @@ module.exports = function createModule(runtimeDeps) {
       const bridge = runtimeDeps.bridge;
       const deploy = runtimeDeps.deploy;
       const artifact = bridge.loadArtifact(hre, name);
-      const ctor = artifact.abi.find((a) => a.type === 'constructor');
-      const ctorInputCount = ctor ? ctor.inputs.length : 0;
-
-      // Mirror the bridge's overrides-splitting so the cache key and
-      // the eventual broadcast see the same ctor-arg shape.
-      const trailing = args[args.length - 1];
-      const overrideKeys = [
-        'value',
-        'gasLimit',
-        'gasPrice',
-        'nonce',
-        'from',
-        'maxFeePerGas',
-        'maxPriorityFeePerGas',
-      ];
-      const hasOverrides =
-        trailing &&
-        typeof trailing === 'object' &&
-        !Array.isArray(trailing) &&
-        overrideKeys.some((k) => k in trailing) &&
-        args.length > ctorInputCount;
-      const overrides = hasOverrides ? trailing : {};
-      const ctorArgs = hasOverrides ? args.slice(0, -1) : args;
-
-      let parameters;
-      if (ctorArgs.length > 0 && ctor) {
-        parameters = ctor.inputs.map((input, i) =>
-          bridge.normalizeArg(ctorArgs[i], input),
-        );
-      }
-
-      const deployOpts = { parameters };
-      if (overrides.value !== null && overrides.value !== undefined) {
-        const { valueToCallValue } = runtimeDeps.cheatcodes;
-        const cv = valueToCallValue(overrides.value);
-        deployOpts.callValue = typeof cv === 'bigint' ? cv.toString() : cv;
-      }
-      if (overrides.gasLimit !== null && overrides.gasLimit !== undefined) {
-        deployOpts.feeLimit = Math.max(
-          1,
-          Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
-        );
-      }
+      const { cacheKey, deployOpts } = await bridge.prepareDeployment(
+        tronAddress,
+        artifact,
+        args,
+      );
 
       const { signedTx, predictedAddressTron } = await deploy.prebuildDeploy(
         tronWeb,
@@ -257,10 +219,7 @@ module.exports = function createModule(runtimeDeps) {
         artifact,
         deployOpts,
       );
-      bridge._prebuildCache.set(
-        bridge.prebuildCacheKey(tronAddress, name, args),
-        { signedTx },
-      );
+      bridge._prebuildCache.set(cacheKey, { signedTx });
       // TVM stores `contract_address` as `0x41 + 20 hex`. Strip the
       // prefix and EIP-55 checksum so it compares cleanly against
       // ethers' equally-checksummed read paths.

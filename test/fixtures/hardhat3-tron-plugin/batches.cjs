@@ -5,4 +5,5 @@ module.exports = [
   },
   { name: 'token', extraLeaves: ['TokenFixture'] },
   { name: 'reverts', include: ['contracts/RevertFixture.sol'] },
+  { name: 'predictions', include: ['contracts/PredictionFixture.sol'] },
 ];

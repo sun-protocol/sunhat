@@ -79,6 +79,8 @@ module.exports = function createModule(deps) {
       // no effect on bytecode/behavior, so truncating is safe.
       name: (opts.name ?? artifact.contractName ?? 'Contract').slice(0, 32),
       parameters: opts.parameters,
+      // Facade deployments use the exact ABI bytes used in prediction keys.
+      rawParameter: opts.rawParameter,
     };
     const unsigned = await tronWeb.transactionBuilder.createSmartContract(
       params,
