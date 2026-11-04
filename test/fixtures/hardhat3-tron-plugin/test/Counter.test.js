@@ -107,6 +107,69 @@ describe('Hardhat 3 TRON plugin', function () {
       assert.throws(() => seed.connect(invalid), /native TRON signer/);
     }
   });
+  it('keeps ordinary recipients after internal CREATE and preserves explicit prediction', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const [sender, recipient] = await ethers.getSigners();
+    const owner = await recipient.getAddress();
+    const factory = await ethers.deployContract('AddressFactoryFixture', [
+      owner,
+    ]);
+    const token = await ethers.deployContract('TokenFixture');
+    assert.equal(await factory.owner(), owner);
+    const receipt = await (await factory.createChild()).wait();
+    const child = receipt.logs.find(
+      (log) => log.fragment?.name === 'ChildCreated',
+    ).args[0];
+    const creates = receipt.nativeTransactionInfo.internal_transactions;
+    assert.ok(
+      creates?.some(
+        (entry) =>
+          entry.note === '637265617465' &&
+          !entry.rejected &&
+          toEvmAddress(entry.caller_address) === toEvmAddress(factory.target) &&
+          toEvmAddress(entry.transferTo_address) === toEvmAddress(child),
+      ),
+      'CREATE receipt must exercise the address-pairing trigger',
+    );
+    await expect(token.transfer(owner, 7n)).to.changeTokenBalance(
+      token,
+      owner,
+      7n,
+    );
+    await (await token.approve(owner, 11n)).wait();
+    assert.equal(await token.balanceOf(owner), 7n);
+    assert.equal(await token.balanceOf(child), 0n);
+    assert.equal(await token.allowance(sender.address, owner), 11n);
+    assert.equal(await token.allowance(sender.address, child), 0n);
+    const attached = await ethers.getContractAt('Counter', child);
+    await (await attached.increment()).wait();
+    assert.equal(await attached.number(), 1n);
+
+    const predicted = await sender.predictAddress('Counter');
+    const deployed = await ethers.deployContract('Counter', [], sender);
+    assert.equal(await deployed.getAddress(), predicted);
+    await (await deployed.increment()).wait();
+    assert.equal(await deployed.number(), 1n);
+    const counterFactory = await ethers.getContractFactory('Counter');
+    const salt = ethers.id('explicit CREATE2 prediction');
+    const deterministic = ethers.getCreate2Address(
+      factory.target,
+      salt,
+      ethers.keccak256(counterFactory.bytecode),
+    );
+    const deterministicReceipt = await (
+      await factory.createDeterministicChild(salt)
+    ).wait();
+    const actual = deterministicReceipt.logs.find(
+      (log) => log.fragment?.name === 'ChildCreated',
+    ).args[0];
+    assert.equal(actual, deterministic);
+    const deterministicChild = await ethers.getContractAt('Counter', actual);
+    await (await deterministicChild.increment()).wait();
+    assert.equal(await deterministicChild.number(), 1n);
+  });
   it('uses connection ethers on native TVM and preserves EVM coexistence', async function () {
     const first = await network.create('tre');
     connections.push(first);

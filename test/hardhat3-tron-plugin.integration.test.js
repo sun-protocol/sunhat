@@ -279,6 +279,14 @@ test(
               ),
             ),
           );
+          assert.ok(
+            existsSync(
+              resolve(
+                project,
+                'artifacts-batches-tron/contracts/AddressFactoryFixture.sol/AddressFactoryFixture.json',
+              ),
+            ),
+          );
           run(
             process.execPath,
             [resolve(project, 'node_modules/typescript/bin/tsc'), '--noEmit'],
@@ -289,7 +297,7 @@ test(
             [hardhat, 'test', 'mocha', '--no-compile'],
             options,
           );
-          assert.match(tested.stdout, /2 passing/);
+          assert.match(tested.stdout, /3 passing/);
           assert.match(tested.stdout, /TRON_PLUGIN_RESULT/);
           subtest.diagnostic(
             `image=${image}; patchedJarSha256=${patched ? jarDigest : 'none'}; ${tested.stdout.match(/TRON_PLUGIN_RESULT .*/)?.[0]}`,
@@ -356,7 +364,7 @@ test(
               [hardhat, 'test', 'mocha', '--no-compile'],
               options,
             );
-            assert.match(tested.stdout, /2 passing/);
+            assert.match(tested.stdout, /3 passing/);
           }
           const state = spawnSync(
             'docker',

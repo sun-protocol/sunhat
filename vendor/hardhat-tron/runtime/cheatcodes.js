@@ -218,15 +218,6 @@ module.exports = function createModule() {
     tronWeb,
     { fromBase58, toBase58, data, value = 0n, multisig = false, feeLimit },
   ) {
-    // EVM-predicted → TVM-actual rewrite. If `toBase58` is the EVM-simulator
-    // address that a prior staticCall returned (e.g. from
-    // `factory.$clone.staticCall(impl)`), route the broadcast to the actual
-    // TVM-deployed address instead. See `_evmToTvm` above.
-    const remapped = lookupTvmActualBase58(toBase58);
-    if (remapped) {
-      toBase58 = remapped;
-    }
-
     const base = tronWeb.fullNode.host.replace(/\/$/, '');
     const dataHex =
       typeof data === 'string' && data.startsWith('0x')
@@ -319,11 +310,6 @@ module.exports = function createModule() {
     tronWeb,
     { fromBase58, toBase58, value, multisig = false },
   ) {
-    const remapped = lookupTvmActualBase58(toBase58);
-    if (remapped) {
-      toBase58 = remapped;
-    }
-
     const base = tronWeb.fullNode.host.replace(/\/$/, '');
     const amount = valueToCallValue(value);
     if (amount <= 0) {
@@ -367,219 +353,6 @@ module.exports = function createModule() {
       );
     }
     return signed.txID || broadcastJson.txid;
-  }
-
-  // -- EVM-predicted → TVM-actual address mapping ---------------------
-  //
-  // Java-tron's triggerconstantcontract simulator computes CREATE/CREATE2
-  // result addresses using EVM rules (keccak256(rlp(sender, nonce)) for
-  // CREATE, keccak256(0xff || sender || salt || initcodehash) for CREATE2
-  // -- which we patch in OZ Solidity to 0x41 but the simulator still uses
-  // 0xff). The actual broadcast through TriggerSmartContract uses TVM
-  // rules: CREATE address is keccak256(tx_root_id || sender_address) and
-  // CREATE2 uses 0x41.
-  //
-  // This mismatch breaks the common test pattern:
-  //     const addr = await factory.$clone.staticCall(impl);   // EVM-predicted
-  //     await factory.$clone(impl);                           // TVM-actual deploy
-  //     await signer.sendTransaction({ to: addr, ... });      // FAILS — addr doesn't exist
-  //
-  // We close the gap by tracking every CREATE in actual-broadcast
-  // receipts. For each one we know `caller_address` + the actual deployed
-  // address from the internal_transactions array. The simulator's
-  // EVM-style prediction is whatever address it just returned to a prior
-  // staticCall on the same caller; we queue those and pair by sequence —
-  // the K-th staticCall return from a given contract is the simulator
-  // prediction for the K-th broadcast CREATE from that contract. Once
-  // we've mapped EVM-pred → TVM-actual, every subsequent send/staticCall
-  // that targets the EVM-predicted address gets transparently rewritten.
-  //
-  // (Solidity-side OZ Clones is already patched to use 0x41 inside the
-  // contracts; this map covers the off-chain staticCall-return path that
-  // EVM rules govern in java-tron's simulator.)
-
-  const _evmToTvm = new Map(); // lowercased 0x-hex EVM-pred → lowercased 0x-hex TVM-actual
-
-  // Queue of recent simulator-returned addresses awaiting pairing with a
-  // real CREATE from a receipt. Each entry is { callerTronHex,
-  // returnedEvmHex }. Bounded so a long run can't grow this unboundedly.
-  const _pendingStaticReturns = [];
-  const _PENDING_LIMIT = 256;
-
-  function recordStaticReturnAddress(callerTronBase58OrHex, returnedAddress) {
-    if (!returnedAddress) {
-      return;
-    }
-    const callerTronHex = (() => {
-      const s = String(callerTronBase58OrHex || '');
-      if (/^41[0-9a-f]{40}$/i.test(s)) {
-        return s.toLowerCase();
-      }
-      if (/^0x41[0-9a-f]{40}$/i.test(s)) {
-        return s.slice(2).toLowerCase();
-      }
-      if (s.startsWith('T') && s.length === 34) {
-        try {
-          return TronWeb.address.toHex(s).toLowerCase();
-        } catch {
-          return '';
-        }
-      }
-      return '';
-    })();
-    if (!callerTronHex) {
-      return;
-    }
-
-    let returnedEvmHex;
-    if (typeof returnedAddress === 'string') {
-      if (/^0x[0-9a-f]{40}$/i.test(returnedAddress)) {
-        returnedEvmHex = returnedAddress.toLowerCase();
-      } else if (
-        returnedAddress.startsWith('T') &&
-        returnedAddress.length === 34
-      ) {
-        try {
-          returnedEvmHex =
-            '0x' +
-            TronWeb.address.toHex(returnedAddress).slice(2).toLowerCase();
-        } catch {
-          return;
-        }
-      }
-    } else if (returnedAddress && typeof returnedAddress === 'object') {
-      const t = returnedAddress.target || returnedAddress.address;
-      if (typeof t === 'string') {
-        return recordStaticReturnAddress(callerTronBase58OrHex, t);
-      }
-    }
-    if (!returnedEvmHex) {
-      return;
-    }
-
-    _pendingStaticReturns.push({ callerTronHex, returnedEvmHex });
-    if (_pendingStaticReturns.length > _PENDING_LIMIT) {
-      _pendingStaticReturns.shift();
-    }
-  }
-
-  function _normalizeAddrToEvmHex(any) {
-    if (!any) {
-      return '';
-    }
-    // Unwrap ethers Contract / signer / addressable objects.
-    if (typeof any === 'object') {
-      if (typeof any.target === 'string') {
-        return _normalizeAddrToEvmHex(any.target);
-      }
-      if (typeof any.tronAddress === 'string') {
-        return _normalizeAddrToEvmHex(any.tronAddress);
-      }
-      if (typeof any.address === 'string') {
-        return _normalizeAddrToEvmHex(any.address);
-      }
-      return '';
-    }
-    if (typeof any !== 'string') {
-      return '';
-    }
-    const s = any;
-    if (/^41[0-9a-f]{40}$/i.test(s)) {
-      return '0x' + s.slice(2).toLowerCase();
-    }
-    if (/^0x41[0-9a-f]{40}$/i.test(s)) {
-      return '0x' + s.slice(4).toLowerCase();
-    }
-    if (/^0x[0-9a-f]{40}$/i.test(s)) {
-      return s.toLowerCase();
-    }
-    if (s.startsWith('T') && s.length === 34) {
-      try {
-        return '0x' + TronWeb.address.toHex(s).slice(2).toLowerCase();
-      } catch {
-        return '';
-      }
-    }
-    return '';
-  }
-
-  // Public lookup: given any address form, return the TVM-actual base58
-  // form if a mapping exists; else null. Used by the bridge / signers /
-  // chai-matchers to rewrite EVM-predicted addresses before they hit the
-  // chain.
-  function lookupTvmActualBase58(any) {
-    const k = _normalizeAddrToEvmHex(any);
-    if (!k) {
-      return null;
-    }
-    const actualEvmHex = _evmToTvm.get(k);
-    if (!actualEvmHex) {
-      return null;
-    }
-    try {
-      return TronWeb.address.fromHex('41' + actualEvmHex.slice(2));
-    } catch {
-      return null;
-    }
-  }
-
-  // Register every CREATE internal_tx from a receipt. Called by the bridge
-  // after a successful broadcast that may have CREATE'd children.
-  function registerCreateMappingsFromReceipt(info) {
-    if (!info) {
-      return;
-    }
-    const itxs = info.internal_transactions || info.internalTransactions;
-    if (!Array.isArray(itxs) || itxs.length === 0) {
-      return;
-    }
-    for (const itx of itxs) {
-      // java-tron emits the note as hex-encoded UTF-8. "create" = 637265617465.
-      const note = (itx.note || '').toString().toLowerCase();
-      if (note !== '637265617465') {
-        continue;
-      }
-      const callerHex = itx.caller_address && itx.caller_address.toLowerCase();
-      const actualHex =
-        itx.transferTo_address && itx.transferTo_address.toLowerCase();
-      if (!callerHex || !actualHex) {
-        continue;
-      }
-
-      const actualEvm = '0x' + actualHex.slice(2);
-
-      // Pair by sequence (LIFO): the most recent pending static-return from
-      // this caller is the simulator-prediction for this broadcast CREATE.
-      // LIFO survives test failures between staticCall and the subsequent
-      // broadcast — stale entries get pushed deeper rather than shifting
-      // later pairings off by one. After a successful pairing, sweep older
-      // same-caller entries (their broadcasts never landed).
-      let paired = null;
-      let pairedIdx = -1;
-      for (let i = _pendingStaticReturns.length - 1; i >= 0; i--) {
-        if (_pendingStaticReturns[i].callerTronHex === callerHex) {
-          paired = _pendingStaticReturns[i];
-          pairedIdx = i;
-          break;
-        }
-      }
-      if (paired) {
-        _pendingStaticReturns.splice(pairedIdx, 1);
-        for (let i = pairedIdx - 1; i >= 0; i--) {
-          if (_pendingStaticReturns[i].callerTronHex === callerHex) {
-            _pendingStaticReturns.splice(i, 1);
-          }
-        }
-        _evmToTvm.set(paired.returnedEvmHex, actualEvm.toLowerCase());
-      }
-    }
-  }
-
-  // One-time access to ethers so this module doesn't take a hard dep on
-  // it (sibling-chain spikes load cheatcodes without ethers).
-
-  function setEthers(e) {
-    void e;
   }
 
   // -- CONTRACT_VALIDATE_ERROR auto-recovery --------------------------
@@ -673,10 +446,5 @@ module.exports = function createModule() {
     jsonStringifyWithBigInts,
     sendCallTx,
     sendTransferTx,
-    // EVM-pred → TVM-actual mapping (see _evmToTvm comment block).
-    lookupTvmActualBase58,
-    recordStaticReturnAddress,
-    registerCreateMappingsFromReceipt,
-    setEthers,
   };
 };

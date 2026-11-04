@@ -39,16 +39,7 @@ module.exports = function createModule(deps) {
     sendTransferTx,
     jsonStringifyWithBigInts,
     valueToCallValue,
-    lookupTvmActualBase58,
-    recordStaticReturnAddress,
-    registerCreateMappingsFromReceipt,
-    setEthers: cheatcodesSetEthers,
   } = deps.cheatcodes;
-
-  // Inject ethers into cheatcodes so its address-mapping helpers can use
-  // the same instance the bridge uses (avoids a hard `require('ethers')`
-  // at cheatcodes top level — sibling-chain spikes load it without ethers).
-  cheatcodesSetEthers(ethersV6);
 
   // -- Receipt registry + stub provider --------------------------------
   //
@@ -156,11 +147,7 @@ module.exports = function createModule(deps) {
       if (!tw) {
         return '0x';
       }
-      // EVM-pred → TVM-actual rewrite so `provider.getCode(clone.target)`
-      // for a Clones-style proxy queries the address TVM actually deployed
-      // to. See cheatcodes.js `_evmToTvm`.
-      const remapped = lookupTvmActualBase58(address);
-      const addr = remapped || signersMod.toBase58(address);
+      const addr = signersMod.toBase58(address);
       try {
         const info = await tw.trx.getContract(addr);
         if (info && info.bytecode) {
@@ -204,8 +191,7 @@ module.exports = function createModule(deps) {
       if (!tw) {
         return 0n;
       }
-      const remapped = lookupTvmActualBase58(address);
-      const addr = remapped || signersMod.toBase58(address);
+      const addr = signersMod.toBase58(address);
       // Read the balance BigInt-safely. TronWeb's `trx.getBalance` parses the
       // account JSON with lossy `JSON.parse`, quantizing any balance above 2^53 to
       // the nearest IEEE-754 double (~1024-sun ULP at a ~5e18 balance) — so a small
@@ -338,10 +324,8 @@ module.exports = function createModule(deps) {
       // — the FIRST slot the node yields, NOT the requested one (java-tron's
       // storageRangeAt does not filter to the key) — so ERC-1967 slot reads
       // (proxy implementation/admin) came back as slot 0 (the impl's `value`).
-      // `eth_getStorageAt` is exact. Also apply the EVM-pred → TVM-actual remap
-      // (matches getCode/getBalance) for predicted-address reads (clones, etc.).
-      const remapped = lookupTvmActualBase58(address);
-      const addr = remapped || signersMod.toBase58(address);
+      // `eth_getStorageAt` is exact.
+      const addr = signersMod.toBase58(address);
       const slotHex = ethersV6.toBeHex(slot, 32);
       const base = tw.fullNode.host.replace(/\/$/, '');
       const hexAddr = '0x' + TronWeb.address.toHex(addr).slice(2);
@@ -374,10 +358,8 @@ module.exports = function createModule(deps) {
       if (!tw) {
         return '0x';
       }
-      const toAddr = lookupTvmActualBase58(tx.to) || signersMod.toBase58(tx.to);
-      const fromAddr = tx.from
-        ? lookupTvmActualBase58(tx.from) || signersMod.toBase58(tx.from)
-        : toAddr;
+      const toAddr = signersMod.toBase58(tx.to);
+      const fromAddr = tx.from ? signersMod.toBase58(tx.from) : toAddr;
       const data =
         typeof tx.data === 'string' && tx.data.startsWith('0x')
           ? tx.data.slice(2)
@@ -638,26 +620,21 @@ module.exports = function createModule(deps) {
       return normalizeArg(value.value, input, nested);
     }
     if (input.type === 'address') {
-      // EVM-pred → TVM-actual rewrite. Extract the address string first,
-      // then look up the mapping. The value may be a contract proxy
-      // ({target: '0x…'}) or a signer ({address: 'T…'}) — both flow
-      // through asAddressString. See cheatcodes.js `_evmToTvm`.
+      // Normalize representation only; ordinary addresses must retain identity.
       const addrStr = asAddressString(value);
-      const remapped = lookupTvmActualBase58(addrStr);
-      const finalStr = remapped || addrStr;
       if (nested) {
         // Hex for TronWeb's struct-internal ABI encoding (which uses
         // bundled ethers; ethers AbiCoder rejects T... base58).
         if (
-          typeof finalStr === 'string' &&
-          finalStr.startsWith('T') &&
-          finalStr.length === 34
+          typeof addrStr === 'string' &&
+          addrStr.startsWith('T') &&
+          addrStr.length === 34
         ) {
-          return '0x' + TronWeb.address.toHex(finalStr).slice(2);
+          return '0x' + TronWeb.address.toHex(addrStr).slice(2);
         }
-        return finalStr;
+        return addrStr;
       }
-      return toTronBase58(finalStr);
+      return toTronBase58(addrStr);
     }
     if (input.type === 'address[]') {
       if (!Array.isArray(value)) {
@@ -666,21 +643,19 @@ module.exports = function createModule(deps) {
       if (nested) {
         return value.map((v) => {
           const addrStr = asAddressString(v);
-          const remapped = lookupTvmActualBase58(addrStr);
-          const finalStr = remapped || addrStr;
           if (
-            typeof finalStr === 'string' &&
-            finalStr.startsWith('T') &&
-            finalStr.length === 34
+            typeof addrStr === 'string' &&
+            addrStr.startsWith('T') &&
+            addrStr.length === 34
           ) {
-            return '0x' + TronWeb.address.toHex(finalStr).slice(2);
+            return '0x' + TronWeb.address.toHex(addrStr).slice(2);
           }
-          return finalStr;
+          return addrStr;
         });
       }
       return value.map((v) => {
         const addrStr = asAddressString(v);
-        return toTronBase58(lookupTvmActualBase58(addrStr) || addrStr);
+        return toTronBase58(addrStr);
       });
     }
     // Tuple / struct — recurse into components. Anything inside a tuple
@@ -1058,19 +1033,12 @@ module.exports = function createModule(deps) {
     // address when no override is set.
     const ownerBase58 =
       tronWeb._impersonatedFrom || tronWeb.defaultAddress.base58;
-    // EVM-pred → TVM-actual rewrite for the called contract. An ethers
-    // contract proxy that bound to a staticCall-returned address (the
-    // simulator's EVM-style prediction) targets a TVM address that may
-    // not exist. Rewrite to the TVM-actual one if we've seen the CREATE
-    // happen since. See cheatcodes.js `_evmToTvm`.
-    const contractAddrForCall =
-      lookupTvmActualBase58(tronContract.address) || tronContract.address;
     const url =
       tronWeb.fullNode.host.replace(/\/$/, '') +
       '/wallet/triggerconstantcontract';
     const body = {
       owner_address: TronWeb.address.toHex(ownerBase58),
-      contract_address: TronWeb.address.toHex(contractAddrForCall),
+      contract_address: TronWeb.address.toHex(tronContract.address),
       function_selector: sig,
       parameter,
       visible: false,
@@ -1096,30 +1064,7 @@ module.exports = function createModule(deps) {
         return undefined;
       }
       const decoded = iface.decodeFunctionResult(ifaceFragment, raw);
-      const finalDecoded = decodeReturn(decoded, fnAbi.outputs);
-      // If this function returned an address-typed value (e.g. `clone()`
-      // or `cloneDeterministic()` returning the new contract address),
-      // queue it as a "pending simulator-returned address" keyed by the
-      // caller contract. The next CREATE in an actual broadcast from this
-      // caller pairs with it via registerCreateMappingsFromReceipt
-      // (sequence-based), giving us a simulator-addr → broadcast-addr
-      // mapping without reverse-engineering java-tron's CREATE derivation.
-      try {
-        if (fnAbi.outputs.length === 1 && fnAbi.outputs[0].type === 'address') {
-          const addr =
-            finalDecoded && typeof finalDecoded === 'string'
-              ? finalDecoded
-              : Array.isArray(finalDecoded)
-                ? finalDecoded[0]
-                : undefined;
-          if (addr) {
-            recordStaticReturnAddress(contractAddrForCall, addr);
-          }
-        }
-      } catch {
-        /* */
-      }
-      return finalDecoded;
+      return decodeReturn(decoded, fnAbi.outputs);
     }
 
     // TVM precompile-mismatch recovery. Java-tron only supports the
@@ -1164,7 +1109,7 @@ module.exports = function createModule(deps) {
           ? '0xb06ebf3d' // FailedDeployment()
           : '0xd6bda275'; // FailedCall()
       try {
-        const codeInfo = await tronWeb.trx.getContract(contractAddrForCall);
+        const codeInfo = await tronWeb.trx.getContract(tronContract.address);
         const code =
           codeInfo && codeInfo.bytecode
             ? '0x' + codeInfo.bytecode.toLowerCase()
@@ -1311,11 +1256,6 @@ module.exports = function createModule(deps) {
     deployerTronWeb,
     overrides = {},
   ) {
-    // EVM-pred → TVM-actual rewrite. See cheatcodes.js `_evmToTvm`.
-    const remappedContract = lookupTvmActualBase58(contractTronBase58);
-    if (remappedContract) {
-      contractTronBase58 = remappedContract;
-    }
     const { fragment: ifaceFragment, iface } = getFragmentAndIface(fnAbi);
     const sig = canonicalSig(fnAbi);
     const calldata = iface.encodeFunctionData(
@@ -1538,7 +1478,6 @@ module.exports = function createModule(deps) {
           { ...overrides, feeLimit: _gasLimitSun },
         );
         const info = await hre.tre.waitForReceipt(deployerTronWeb, txId);
-        registerCreateMappingsFromReceipt(info);
         if (!(info && info.receipt && info.receipt.result === 'SUCCESS')) {
           throw await buildRevertErrorWithSim(
             txId,
@@ -1613,7 +1552,6 @@ module.exports = function createModule(deps) {
           feeLimit: _gasLimitSun,
         });
         const info = await hre.tre.waitForReceipt(tronWeb, txId);
-        registerCreateMappingsFromReceipt(info);
         if (!(info && info.receipt && info.receipt.result === 'SUCCESS')) {
           throw await buildRevertErrorWithSim(
             txId,
@@ -1713,7 +1651,6 @@ module.exports = function createModule(deps) {
         throw sendErr;
       }
       const info = await hre.tre.waitForReceipt(tronWeb, txId);
-      registerCreateMappingsFromReceipt(info);
       if (!(info && info.receipt && info.receipt.result === 'SUCCESS')) {
         throw await buildRevertErrorWithSim(
           txId,
@@ -2404,7 +2341,6 @@ module.exports = function createModule(deps) {
         tronWeb,
         cached.signedTx,
       );
-      registerCreateMappingsFromReceipt(info);
       const iface = new ethersV6.Interface(artifact.abi);
       const deployReceipt = translateReceipt(txId, info, iface);
       rememberReceipt('0x' + txId, deployReceipt);
@@ -2480,7 +2416,6 @@ module.exports = function createModule(deps) {
       artifact,
       deployOpts,
     );
-    registerCreateMappingsFromReceipt(info);
 
     // Build a TransactionResponse for `contract.deploymentTransaction()`.
     // `translateReceipt` decodes logs against the deployed contract's
@@ -2631,7 +2566,6 @@ module.exports = function createModule(deps) {
         const info = await hre.tre.waitForReceipt(deployerTronWeb, txId, {
           executionReceipt: hasDataField,
         });
-        registerCreateMappingsFromReceipt(info);
         const succeeded = hasDataField
           ? info && info.receipt && info.receipt.result === 'SUCCESS'
           : info.result !== 'FAILED';

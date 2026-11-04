@@ -138,13 +138,6 @@ module.exports = function createModule(runtimeDeps) {
       const info = await waitForReceipt(tronWeb, txId, {
         executionReceipt: hasDataField,
       });
-      // Hook for EVM-pred → TVM-actual address mapping: record any CREATE
-      // internal_txs from this receipt so subsequent `to:` lookups can rewrite.
-      try {
-        runtimeDeps.cheatcodes.registerCreateMappingsFromReceipt(info);
-      } catch {
-        /* */
-      }
       // Receipt-result semantics differ between TransferContract (plain
       // TRX) and TriggerSmartContract (any `data` field, even '0x'):
       // only the latter populates `info.receipt.result`. Falling back

@@ -6,8 +6,10 @@ contract TokenFixture {
     error InsufficientBalance();
 
     mapping(address account => uint256 balance) public balanceOf;
+    mapping(address account => mapping(address spender => uint256 amount)) public allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
 
     constructor() {
         balanceOf[msg.sender] = 100;
@@ -20,6 +22,12 @@ contract TokenFixture {
         balanceOf[msg.sender] = balance - amount;
         balanceOf[recipient] += amount;
         emit Transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        emit Approval(msg.sender, spender, amount);
         return true;
     }
 }
