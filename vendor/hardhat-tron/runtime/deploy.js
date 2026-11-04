@@ -7,45 +7,25 @@ module.exports = function createModule(deps) {
   // receipt-poll discipline from wait.js with TronWeb's smart-contract
   // creation path.
 
-  // Recursively expand tuple types in an ABI input descriptor. TronWeb's
-  // bundled ethers v6 AbiCoder rejects the literal `"tuple"` /
-  // `"tuple[]"` type strings (it only handles full canonical forms like
-  // `"(address,uint256)"` / `"(address,uint256)[]"`). The artifact's
-  // stored ABI uses the literal form (matching solc's JSON output) plus
-  // a `components` array describing the tuple's fields — we collapse
-  // the two into one canonical string here.
-  //
-  // Symptom without this: `tronWeb.transactionBuilder.createSmartContract`
-  // throws `TypeError: invalid param type (argument="obj",
-  // value="tuple[]", code=INVALID_ARGUMENT)` for any contract whose
-  // constructor takes a `tuple[]`.
-  function expandTupleTypes(input) {
-    if (!input) {
-      return input;
-    }
-    if (input.type === 'tuple' && Array.isArray(input.components)) {
-      return {
-        ...input,
-        type: `(${input.components.map((c) => expandTupleTypes(c).type).join(',')})`,
-      };
-    }
-    const m = input.type && input.type.match(/^tuple(\[[^\]]*\])$/);
-    if (m && Array.isArray(input.components)) {
-      return {
-        ...input,
-        type: `(${input.components.map((c) => expandTupleTypes(c).type).join(',')})${m[1]}`,
-      };
-    }
-    return input;
-  }
+  const { Interface, ParamType } = require('ethers');
+  const { normalizeArguments } = require('./abi');
 
+  // The node's protobuf ABI omits tuple components. Preserve their canonical
+  // types in the stored ABI while encoding arguments against the original ABI.
   function expandAbiForTronWeb(abi) {
-    return abi.map((item) => {
-      if (!Array.isArray(item.inputs)) {
-        return item;
-      }
-      return { ...item, inputs: item.inputs.map(expandTupleTypes) };
-    });
+    return abi.map((item) =>
+      !Array.isArray(item.inputs)
+        ? item
+        : {
+            ...item,
+            inputs: item.inputs.map((input) => ({
+              ...input,
+              type: ParamType.from(input, item.type === 'event').format(
+                'sighash',
+              ),
+            })),
+          },
+    );
   }
 
   // Build + sign a CreateSmartContract tx WITHOUT broadcasting. Returns
@@ -63,6 +43,12 @@ module.exports = function createModule(deps) {
   //     under TRE instamine (1 block/broadcast) that's well over a
   //     thousand intervening txs of headroom.
   async function prebuildDeploy(tronWeb, deployerAddress, artifact, opts = {}) {
+    const iface = new Interface(artifact.abi);
+    const rawParameter =
+      opts.rawParameter ??
+      iface.encodeDeploy(
+        await normalizeArguments(iface.deploy.inputs, opts.parameters ?? []),
+      );
     const params = {
       abi: expandAbiForTronWeb(artifact.abi),
       bytecode: artifact.bytecode,
@@ -78,9 +64,7 @@ module.exports = function createModule(deps) {
       // greater than 32"). The name field is for display only and has
       // no effect on bytecode/behavior, so truncating is safe.
       name: (opts.name ?? artifact.contractName ?? 'Contract').slice(0, 32),
-      parameters: opts.parameters,
-      // Facade deployments use the exact ABI bytes used in prediction keys.
-      rawParameter: opts.rawParameter,
+      rawParameter,
     };
     const unsigned = await tronWeb.transactionBuilder.createSmartContract(
       params,

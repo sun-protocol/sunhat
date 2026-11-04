@@ -3,6 +3,11 @@
 // Adapted from @openzeppelin/hardhat-tron 0.1.0; see ../provenance.json and LICENSE.
 module.exports = function createModule(deps) {
   const { requestJson } = require('./transport');
+  const {
+    normalizeArguments,
+    normalizeCallArguments,
+    splitOverrides,
+  } = require('./abi');
   // Replaces the network-touching surface of `hre.ethers` with a
   // TronWeb-backed equivalent so unmodified tests can run against the
   // local TRE container.
@@ -549,299 +554,6 @@ module.exports = function createModule(deps) {
     return value;
   }
 
-  // Detect a trailing tx-options object on a contract-method call. ethers
-  // v6 accepts these forms:
-  //   contract.method(arg1, arg2, { value, gasLimit, ... })
-  //   contract.method(ethers.Typed.foo(arg1), ethers.Typed.overrides({ value }))
-  // Both must NOT be counted as ABI inputs for overload resolution, and
-  // `{ value }` needs to be forwarded as msg.value on the resulting tx.
-  //
-  // `expectedInputCount` (when known) gates the duck-typed overrides
-  // detection: we only treat a plain `{value, ...}` object as overrides
-  // when `args.length === expectedInputCount + 1`. Otherwise it's a
-  // struct argument that happens to share field names with tx options
-  // (e.g. ForwardRequest = {from, to, value, gas, deadline, data,
-  // signature}) — stripping it would break encoding. When the count is
-  // unknown (overload picker), we ONLY accept the explicit
-  // `ethers.Typed.overrides(...)` form, never duck-typed.
-  //
-  // Returns { overrides, args } where `args` excludes the trailing
-  // options (if any). overrides defaults to `{}`.
-  function splitOverrides(args, expectedInputCount = null) {
-    if (args.length === 0) {
-      return { overrides: {}, args };
-    }
-    const last = args[args.length - 1];
-    if (last && typeof last === 'object') {
-      // Typed.overrides → ethers.Typed wrapper whose `type` is 'overrides'.
-      // Always honoured regardless of expectedInputCount because the
-      // wrapper is unambiguous.
-      if (
-        typeof last.type === 'string' &&
-        '_typedSymbol' in last &&
-        last.type === 'overrides'
-      ) {
-        return { overrides: last.value || {}, args: args.slice(0, -1) };
-      }
-      // Plain duck-typed overrides — only safe to strip when we KNOW
-      // the input count and the trailing arg is the extra one.
-      if (
-        expectedInputCount !== null &&
-        expectedInputCount !== undefined &&
-        args.length === expectedInputCount + 1 &&
-        !('_typedSymbol' in last)
-      ) {
-        const overrideKeys = [
-          'value',
-          'gasLimit',
-          'gasPrice',
-          'nonce',
-          'from',
-          'maxFeePerGas',
-          'maxPriorityFeePerGas',
-        ];
-        if (overrideKeys.some((k) => k in last)) {
-          return { overrides: last, args: args.slice(0, -1) };
-        }
-      }
-    }
-    return { overrides: {}, args };
-  }
-
-  // `nested` flag distinguishes TOP-LEVEL args (which go to TronWeb's
-  // contract proxy directly — TronWeb expects base58) from STRUCT-NESTED
-  // args (which TronWeb internally re-encodes via its bundled ethers
-  // AbiCoder — ethers wants hex, and chokes on base58 with "cannot
-  // encode object for signature with missing names").
-  //
-  // Concretely: in `forwarder.executeBatch(requests)` where requests is
-  // `ForwardRequestData[]`, top-level `requests` goes through TronWeb
-  // (which fans out to ethers for each struct). The struct fields
-  // `from`/`to` must be 0x-hex; the top-level call still takes base58
-  // from the bridge's perspective (it never enters TronWeb's address
-  // argument path — only the struct fields do).
-  function normalizeArg(value, input, nested = false) {
-    if (!input) {
-      return value;
-    }
-    // ethers.Typed wrapper — unwrap before any other normalization so
-    // `ethers.Typed.bytes('0x...')` / `ethers.Typed.string('...')` etc.
-    // flow through the regular path. Tests use Typed.* for overload
-    // disambiguation and the value field carries the actual payload.
-    if (
-      value &&
-      typeof value === 'object' &&
-      typeof value.type === 'string' &&
-      '_typedSymbol' in value
-    ) {
-      return normalizeArg(value.value, input, nested);
-    }
-    if (input.type === 'address') {
-      // Normalize representation only; ordinary addresses must retain identity.
-      const addrStr = asAddressString(value);
-      if (nested) {
-        // Hex for TronWeb's struct-internal ABI encoding (which uses
-        // bundled ethers; ethers AbiCoder rejects T... base58).
-        if (
-          typeof addrStr === 'string' &&
-          addrStr.startsWith('T') &&
-          addrStr.length === 34
-        ) {
-          return '0x' + TronWeb.address.toHex(addrStr).slice(2);
-        }
-        return addrStr;
-      }
-      return toTronBase58(addrStr);
-    }
-    if (input.type === 'address[]') {
-      if (!Array.isArray(value)) {
-        return value;
-      }
-      if (nested) {
-        return value.map((v) => {
-          const addrStr = asAddressString(v);
-          if (
-            typeof addrStr === 'string' &&
-            addrStr.startsWith('T') &&
-            addrStr.length === 34
-          ) {
-            return '0x' + TronWeb.address.toHex(addrStr).slice(2);
-          }
-          return addrStr;
-        });
-      }
-      return value.map((v) => {
-        const addrStr = asAddressString(v);
-        return toTronBase58(addrStr);
-      });
-    }
-    // Tuple / struct — recurse into components. Anything inside a tuple
-    // is `nested` from TronWeb's perspective. Accept both object form
-    // (`{target, value, data}`) and tuple form (`[target, value, data]`).
-    if (input.type === 'tuple' && Array.isArray(input.components)) {
-      if (Array.isArray(value)) {
-        return value.map((v, i) => normalizeArg(v, input.components[i], true));
-      }
-      if (value && typeof value === 'object') {
-        const out = {};
-        for (const comp of input.components) {
-          if (comp.name && comp.name in value) {
-            out[comp.name] = normalizeArg(value[comp.name], comp, true);
-          }
-        }
-        return out;
-      }
-    }
-    // Tuple-array — `tuple[]` or `tuple[N]`. Map each element through
-    // the tuple component types.
-    if (/^tuple\[/.test(input.type) && Array.isArray(input.components)) {
-      if (!Array.isArray(value)) {
-        return value;
-      }
-      const inner = { type: 'tuple', components: input.components };
-      return value.map((v) => normalizeArg(v, inner, true));
-    }
-    if (typeof value === 'bigint') {
-      return value.toString();
-    }
-    return value;
-  }
-
-  function decodeOne(value, output) {
-    if (value === null || value === undefined) {
-      return value;
-    }
-    // Struct-typed return: ABI exposes `{type: 'tuple', components: [...]}`.
-    // TronWeb returns the tuple as an array of component values. We
-    // mirror ethers v6's Result by mapping each component through
-    // decodeOne and attaching named accessors when components have names
-    // (so `result._key` / `result._value` work alongside `result[0]` /
-    // `result[1]`). chai's `.deep.equal([a, b])` still passes because
-    // the underlying object IS an array.
-    if (output && output.type === 'tuple' && Array.isArray(output.components)) {
-      if (!Array.isArray(value)) {
-        return value;
-      }
-      // TronWeb has a quirk: when a function's SINGLE output is a named
-      // struct (e.g. `Checkpoints.at(...) returns (Checkpoint memory ret)`)
-      // it wraps the struct values in an extra single-element array —
-      // `[[key, value]]` instead of `[key, value]`. Without unwrapping
-      // we hand `[key, value]` to decodeOne for component[0] (a scalar
-      // uint), which falls through to `BigInt(arr.toString())` =
-      // `BigInt("2,17")` and throws. Detect by: outer-array has exactly
-      // 1 element, and that element's array length matches the tuple
-      // component count.
-      let v = value;
-      if (
-        output.components.length > 1 &&
-        v.length === 1 &&
-        Array.isArray(v[0]) &&
-        v[0].length === output.components.length
-      ) {
-        v = v[0];
-      }
-      const decoded = v.map((vi, i) => decodeOne(vi, output.components[i]));
-      for (let i = 0; i < output.components.length; i++) {
-        const name = output.components[i] && output.components[i].name;
-        if (name && !(name in decoded)) {
-          Object.defineProperty(decoded, name, {
-            value: decoded[i],
-            enumerable: false,
-          });
-        }
-      }
-      return decoded;
-    }
-    if (output && output.type === 'address') {
-      // ethers v6 returns EIP-55-checksummed addresses; tests compare with
-      // strict equality against `ethers.getCreate2Address(...)` etc which
-      // also returns checksummed. tronToHex returns lowercase, so route
-      // through ethers.getAddress to apply the checksum.
-      return ethersV6.getAddress(tronToHex(value));
-    }
-    if (output && /^address\[/.test(output.type)) {
-      return Array.isArray(value)
-        ? value.map((v) => ethersV6.getAddress(tronToHex(v)))
-        : value;
-    }
-    // Generic array types (uint256[], bytes32[], etc). TronWeb sometimes
-    // returns the scalar "0" for an empty dynamic array instead of `[]` —
-    // normalize to a real array so callers' `.length` / `.map` work.
-    if (output && /\[/.test(output.type)) {
-      if (!Array.isArray(value)) {
-        return value === '0' || value === null || value === undefined
-          ? []
-          : [value];
-      }
-      const innerType = output.type.replace(/\[[^\]]*\]$/, '');
-      return value.map((v) => decodeOne(v, { type: innerType }));
-    }
-    if (output && /^uint|^int/.test(output.type)) {
-      if (typeof value === 'bigint') {
-        return value;
-      }
-      if (typeof value === 'number') {
-        return BigInt(value);
-      }
-      if (typeof value === 'string') {
-        return BigInt(value);
-      }
-      // Reject arrays from the toString fallback — `Array.prototype.
-      // toString()` joins with `,`, and `BigInt("2,17")` throws. This
-      // happens when an unwrapped tuple sneaks through (e.g. the
-      // Checkpoints quirk above). Pass through unchanged so the caller
-      // sees a useful assertion error instead of a SyntaxError.
-      if (
-        value &&
-        !Array.isArray(value) &&
-        typeof value.toString === 'function'
-      ) {
-        return BigInt(value.toString());
-      }
-    }
-    return value;
-  }
-
-  function decodeReturn(value, outputs) {
-    if (!Array.isArray(outputs) || outputs.length === 0) {
-      return value;
-    }
-    if (outputs.length === 1) {
-      // Special-case: single output of type tuple should be decoded as
-      // a tuple (array of component values), NOT unwrapped. TronWeb
-      // returns it already as an array, so pass straight through.
-      if (outputs[0].type === 'tuple') {
-        return decodeOne(value, outputs[0]);
-      }
-      // TronWeb wraps NAMED single returns in a single-element array
-      // (e.g. `returns (address ret0)` → `["41ab..."]`); unnamed
-      // single returns come back as a scalar. Unwrap so decodeOne
-      // sees the same value either way.
-      const v = Array.isArray(value) ? value[0] : value;
-      return decodeOne(v, outputs[0]);
-    }
-    // Multi-output: ethers v6 returns a Result that supports BOTH
-    // positional (`result[0]`) AND named (`result.fields`) access.
-    // TronWeb returns a plain array. Build a Result-shaped value by
-    // attaching named properties for each output that has a `name` in
-    // the ABI, while keeping array semantics intact.
-    const decoded = Array.isArray(value)
-      ? value.map((v, i) => decodeOne(v, outputs[i]))
-      : value;
-    if (Array.isArray(decoded)) {
-      for (let i = 0; i < outputs.length; i++) {
-        const name = outputs[i] && outputs[i].name;
-        if (name && !(name in decoded)) {
-          Object.defineProperty(decoded, name, {
-            value: decoded[i],
-            enumerable: false,
-          });
-        }
-      }
-    }
-    return decoded;
-  }
-
   // -- Receipt translation --------------------------------------------
 
   // `iface` is an ethers v6 Interface for the contract that emitted the
@@ -991,31 +703,8 @@ module.exports = function createModule(deps) {
 
   // -- Method invocation ----------------------------------------------
 
-  // View-call path that preserves revert data. TronWeb's high-level
-  // Canonical Solidity function-signature serialization. The naive
-  // `inputs.map(i => i.type).join(',')` collapses tuple-typed inputs to
-  // the literal string `"tuple"`, which is what TronWeb's
-  // `function_selector` rejects with "OTHER_ERROR" or the call
-  // silently reverts with `data=0x` — TVM resolves selectors by hashing
-  // the canonical signature, and `verify(tuple)` hashes to a different
-  // 4-byte than the actual on-chain `verify((address,address,...))`.
-  //
-  // Used by:
-  //   * `function_selector` body of /wallet/triggerconstantcontract
-  //   * /wallet/triggersmartcontract (impersonated + non-impersonated)
-  //   * overload bookkeeping in `overloadsByName`
-  function canonicalType(input) {
-    if (input.type === 'tuple' && Array.isArray(input.components)) {
-      return `(${input.components.map(canonicalType).join(',')})`;
-    }
-    const m = input.type && input.type.match(/^tuple(\[[^\]]*\])$/);
-    if (m && Array.isArray(input.components)) {
-      return `(${input.components.map(canonicalType).join(',')})${m[1]}`;
-    }
-    return input.type;
-  }
   function canonicalSig(fnAbi) {
-    return `${fnAbi.name}(${fnAbi.inputs.map(canonicalType).join(',')})`;
+    return ethersV6.FunctionFragment.from(fnAbi).format('sighash');
   }
 
   // `triggerConstantContract` throws `Error("REVERT opcode executed")`
@@ -1030,6 +719,7 @@ module.exports = function createModule(deps) {
     tronContract,
     tronWeb,
     normalized,
+    overrides = {},
   ) {
     const { fragment: ifaceFragment, iface } = getFragmentAndIface(fnAbi);
     const sig = canonicalSig(fnAbi);
@@ -1037,10 +727,7 @@ module.exports = function createModule(deps) {
     // Encode args via ethers (handles addresses, tuples, dynamic types
     // correctly) — then strip the 4-byte selector to get just the
     // parameter bytes that triggerconstantcontract expects.
-    const calldata = iface.encodeFunctionData(
-      ifaceFragment,
-      normalized.map((v, i) => coerceForEthers(v, fnAbi.inputs[i])),
-    );
+    const calldata = iface.encodeFunctionData(ifaceFragment, normalized);
     const parameter = calldata.slice(10); // strip 0x + selector
 
     // Owner-address override for impersonated callers — view calls
@@ -1055,6 +742,7 @@ module.exports = function createModule(deps) {
       contract_address: TronWeb.address.toHex(tronContract.address),
       function_selector: sig,
       parameter,
+      call_value: valueToCallValue(overrides.value ?? 0),
       visible: false,
     };
     const res = await requestJson(tronWeb, '/wallet/triggerconstantcontract', {
@@ -1075,11 +763,8 @@ module.exports = function createModule(deps) {
         : '0x';
 
     if (!reverted) {
-      if (raw === '0x' && fnAbi.outputs.length === 0) {
-        return undefined;
-      }
       const decoded = iface.decodeFunctionResult(ifaceFragment, raw);
-      return decodeReturn(decoded, fnAbi.outputs);
+      return decoded.length === 1 ? decoded[0] : decoded;
     }
 
     // Decode only the bytes returned by this execution. Bytecode and
@@ -1089,58 +774,6 @@ module.exports = function createModule(deps) {
       from: tronToHex(ownerBase58),
       data: calldata,
     });
-  }
-
-  // ethers Interface encoders expect 0x-hex addresses, not Tron base58.
-  // Our `normalizeArg` had converted addresses to base58 for TronWeb's
-  // flow - undo that for the ethers encoder.
-  //
-  // Mirror normalizeArg's tuple/tuple[] recursion: ForwardRequest in
-  // ERC2771Forwarder.verify(...) is a `tuple` whose `from` and `to`
-  // fields are addresses; without recursing, the base58 strings flow
-  // through to ethers' AbiCoder which throws "cannot encode object for
-  // signature with missing names (argument='values')". Same shape for
-  // any struct with embedded address fields.
-  function coerceForEthers(value, input) {
-    if (!input) {
-      return value;
-    }
-    if (input.type === 'address') {
-      if (
-        typeof value === 'string' &&
-        value.startsWith('T') &&
-        value.length === 34
-      ) {
-        return '0x' + TronWeb.address.toHex(value).slice(2);
-      }
-      return value;
-    }
-    if (input.type === 'address[]' && Array.isArray(value)) {
-      return value.map((v) => coerceForEthers(v, { type: 'address' }));
-    }
-    if (input.type === 'tuple' && Array.isArray(input.components)) {
-      if (Array.isArray(value)) {
-        return value.map((v, i) => coerceForEthers(v, input.components[i]));
-      }
-      if (value && typeof value === 'object') {
-        const out = {};
-        for (const comp of input.components) {
-          if (comp.name && comp.name in value) {
-            out[comp.name] = coerceForEthers(value[comp.name], comp);
-          }
-        }
-        return out;
-      }
-    }
-    if (
-      /^tuple\[/.test(input.type) &&
-      Array.isArray(input.components) &&
-      Array.isArray(value)
-    ) {
-      const inner = { type: 'tuple', components: input.components };
-      return value.map((v) => coerceForEthers(v, inner));
-    }
-    return value;
   }
 
   // State-changing call from an impersonated owner_address.
@@ -1169,10 +802,7 @@ module.exports = function createModule(deps) {
   ) {
     const { fragment: ifaceFragment, iface } = getFragmentAndIface(fnAbi);
     const sig = canonicalSig(fnAbi);
-    const calldata = iface.encodeFunctionData(
-      ifaceFragment,
-      normalized.map((v, i) => coerceForEthers(v, fnAbi.inputs[i])),
-    );
+    const calldata = iface.encodeFunctionData(ifaceFragment, normalized);
     const parameter = calldata.slice(10);
 
     // msg.value override. 1 wei == 1 sun pass-through on the JS↔TVM
@@ -1266,6 +896,7 @@ module.exports = function createModule(deps) {
     tronContract,
     tronWeb,
     normalized,
+    overrides,
   ) {
     const err = buildRevertError(txId, info);
     if (err.data && err.data !== '0x') {
@@ -1273,7 +904,13 @@ module.exports = function createModule(deps) {
     }
     let simErr;
     try {
-      await staticCallWithRevertData(fnAbi, tronContract, tronWeb, normalized);
+      await staticCallWithRevertData(
+        fnAbi,
+        tronContract,
+        tronWeb,
+        normalized,
+        overrides,
+      );
     } catch (e) {
       simErr = e;
     }
@@ -1291,43 +928,31 @@ module.exports = function createModule(deps) {
     const isView =
       fnAbi.stateMutability === 'view' || fnAbi.stateMutability === 'pure';
 
-    async function invoke(...rawArgs) {
-      // Strip the trailing tx-options object (`{value, gasLimit, ...}`
-      // or `ethers.Typed.overrides({...})`) before normalizing — it's
-      // not an ABI input. Passing the ABI input count gates the
-      // duck-typed detection so struct args like ForwardRequest
-      // (which has `from`, `value`, …) aren't misclassified.
+    async function prepareCall(rawArgs) {
       const { overrides, args } = splitOverrides(rawArgs, fnAbi.inputs.length);
-      const normalized = args.map((a, i) => normalizeArg(a, fnAbi.inputs[i]));
+      const effective = {
+        value: valueToCallValue(overrides.value ?? 0),
+        gasLimit: overrides.gasLimit,
+      };
+      const normalized = await normalizeCallArguments(fnAbi.inputs, args);
+      return { overrides: effective, normalized };
+    }
+
+    async function invoke(...rawArgs) {
+      const { overrides, normalized } = await prepareCall(rawArgs);
       if (!isView && !tronWeb.defaultPrivateKey) {
         throw new Error(
           'TRON state changes require a configured local signing account',
         );
       }
       if (isView) {
-        // Use the low-level path: gives us revert data for
-        // chai-matchers' `revertedWithCustomError`, and decodes tuples
-        // (Checkpoint structs, eip712Domain etc) via ethers v6's
-        // Interface so destructure-by-name and array-index access both
-        // work. Falls back to TronWeb's high-level decoder if a fragment
-        // resolution issue surfaces.
-        try {
-          return await staticCallWithRevertData(
-            fnAbi,
-            tronContract,
-            tronWeb,
-            normalized,
-          );
-        } catch (e) {
-          // Re-throw revert errors directly so chai-matchers sees `.data`.
-          if (e && typeof e.data === 'string') {
-            throw e;
-          }
-          // Other errors: fall through to the legacy decoder path so we
-          // don't lose tests that pass today.
-          const raw = await tronContract[fnAbi.name](...normalized).call();
-          return decodeReturn(raw, fnAbi.outputs);
-        }
+        return staticCallWithRevertData(
+          fnAbi,
+          tronContract,
+          tronWeb,
+          normalized,
+          overrides,
+        );
       }
       // Honor `overrides.gasLimit` by mapping to TVM's `feeLimit` via
       // TRE's energy price (~100 sun/energy — see the feeLimit comment
@@ -1367,6 +992,7 @@ module.exports = function createModule(deps) {
             tronContract,
             tronWeb,
             normalized,
+            overrides,
           );
         }
         // Outer-call value for chai-matchers' ether-balance accounting.
@@ -1415,10 +1041,7 @@ module.exports = function createModule(deps) {
       );
       if (hasTupleInput) {
         const { fragment: ifaceFragment, iface } = getFragmentAndIface(fnAbi);
-        const calldata = iface.encodeFunctionData(
-          ifaceFragment,
-          normalized.map((v, i) => coerceForEthers(v, fnAbi.inputs[i])),
-        );
+        const calldata = iface.encodeFunctionData(ifaceFragment, normalized);
         const fromBase58 =
           tronWeb.defaultAddress && tronWeb.defaultAddress.base58;
         const txId = await sendCallTx(tronWeb, {
@@ -1441,6 +1064,7 @@ module.exports = function createModule(deps) {
             tronContract,
             tronWeb,
             normalized,
+            overrides,
           );
         }
         return makeTxResponse(txId, info, tronContract._iface || null, {
@@ -1476,6 +1100,7 @@ module.exports = function createModule(deps) {
               tronContract,
               tronWeb,
               normalized,
+              overrides,
             );
           } catch (e) {
             simErr = e;
@@ -1501,6 +1126,7 @@ module.exports = function createModule(deps) {
           tronContract,
           tronWeb,
           normalized,
+          overrides,
         );
       }
       return makeTxResponse(txId, info, tronContract._iface || null, {
@@ -1510,54 +1136,29 @@ module.exports = function createModule(deps) {
       });
     }
 
-    // ethers v6 exposes `contract.fn.estimateGas(...)` and chai-matchers
-    // uses it to check whether a view-style call will revert (the gas
-    // estimate fails for reverts). We synthesize the same surface by
-    // routing through the same static-call path as `invoke` (which now
-    // returns proper revert data), and returning a constant gas estimate
-    // when the call succeeds. Tests check `.estimateGas` for the
-    // success/revert *outcome*, not a precise gas number, so a sentinel
-    // suffices.
-    invoke.estimateGas = async (...args) => {
-      const normalized = args.map((a, i) => normalizeArg(a, fnAbi.inputs[i]));
-      if (isView) {
-        // re-uses the revert-extracting static-call path → throws with
-        // `.data` on revert
-        await staticCallWithRevertData(
-          fnAbi,
-          tronContract,
-          tronWeb,
-          normalized,
-        );
-        return 21000n;
-      }
-      // For non-view, simulate via triggerConstantContract too — the
-      // chain will execute and revert/succeed without actually
-      // committing. Gas number is a fabricated constant.
-      await staticCallWithRevertData(fnAbi, tronContract, tronWeb, normalized);
-      return 50000n;
+    invoke.estimateGas = async (...rawArgs) => {
+      const { normalized, overrides } = await prepareCall(rawArgs);
+      await staticCallWithRevertData(
+        fnAbi,
+        tronContract,
+        tronWeb,
+        normalized,
+        overrides,
+      );
+      return isView ? 21000n : 50000n;
     };
 
     invoke.staticCall = async (...rawArgs) => {
-      // Strip trailing overrides — chai-matchers pass `{blockTag, value,
-      // ...}` here too. blockTag is a no-op on TVM (no historical
-      // state) so we just ignore it.
-      const { args } = splitOverrides(rawArgs, fnAbi.inputs.length);
-      const normalized = args.map((a, i) => normalizeArg(a, fnAbi.inputs[i]));
-      // Preserve revert bytes for views and payable simulations. Retain
-      // TronWeb's nonpayable simulation path for internal CREATE calls.
-      if (isView || fnAbi.stateMutability === 'payable') {
-        return staticCallWithRevertData(
-          fnAbi,
-          tronContract,
-          tronWeb,
-          normalized,
-        );
-      }
-      const raw = await tronContract[fnAbi.name](...normalized).call();
-      return decodeReturn(raw, fnAbi.outputs);
+      const { normalized, overrides } = await prepareCall(rawArgs);
+      return staticCallWithRevertData(
+        fnAbi,
+        tronContract,
+        tronWeb,
+        normalized,
+        overrides,
+      );
     };
-    invoke.fragment = fnAbi;
+    invoke.fragment = getFragmentAndIface(fnAbi).fragment;
     // ethers v6 contract methods expose `.getFragment(...args)` for
     // overload resolution. Used by upstream OZ tests via
     // `this.target.fnRestricted.getFragment().selector` to grab the
@@ -1605,12 +1206,8 @@ module.exports = function createModule(deps) {
   // `factory.connect(signer)` rebuilds the facade with the SIGNER's
   // TronWeb so writes are signed by them.
   function makeFacade(abi, tronAddress, tronWeb, hre, deploymentTx = null) {
-    // Group functions by name (a list of overloads per name) AND by
-    // full signature. When the test calls `factory.$computeAddress(...)`
-    // with 2 args, we look at the overload list and pick the one whose
-    // input count matches; with 3 args we pick the 3-arg variant.
-    // Tests that disambiguate explicitly via `factory['name(type,type)']`
-    // hit the signature map directly.
+    // Index exact signatures and selectors. Bare overloaded names delegate
+    // argument and Typed disambiguation to the installed ethers Interface.
     const overloadsByName = new Map();
     const fnsBySignature = new Map();
     // Selector → ABI function. OZ tests use
@@ -1655,7 +1252,7 @@ module.exports = function createModule(deps) {
       }
       try {
         const frag = ethersV6.FunctionFragment.from(prop);
-        const canonical = `${frag.name}(${frag.inputs.map((i) => i.type).join(',')})`;
+        const canonical = frag.format('sighash');
         return fnsBySignature.get(canonical) || null;
       } catch {
         return null;
@@ -1731,7 +1328,7 @@ module.exports = function createModule(deps) {
 
     return deps.context.registerSubject(
       new Proxy(target, {
-        get(t, prop) {
+        get(t, prop, receiver) {
           if (prop in t) {
             return t[prop];
           }
@@ -1789,7 +1386,7 @@ module.exports = function createModule(deps) {
             return (addr) => makeFacade(abi, toTronBase58(addr), tronWeb, hre);
           }
           if (prop === 'waitForDeployment') {
-            return async () => target;
+            return async () => receiver;
           }
           if (prop === 'deploymentTransaction') {
             // chai-matchers' `.to.emit(contract, ...)` against a
@@ -1816,7 +1413,7 @@ module.exports = function createModule(deps) {
           }
 
           // Match on full signature first (for explicit disambiguation),
-          // then fall back to name-with-overload-by-arity dispatch.
+          // then resolve bare names with ethers argument and Typed rules.
           // `lookupBySignature` accepts both the canonical form
           // `name(type,type)` and the named-parameter form
           // `name(type name1, type name2)` — Arrays.test.js dispatches
@@ -1834,9 +1431,7 @@ module.exports = function createModule(deps) {
           if (overloads.length === 1) {
             return methodFor(overloads[0]);
           }
-          // Multiple overloads — return a dispatcher that picks by arg
-          // count at call time. This is what ethers v6's Contract Proxy
-          // does for overloaded methods.
+          // Resolve at invocation time so ambiguity remains an error.
           return makeOverloadDispatcher(
             overloads,
             tronAddress,
@@ -1891,51 +1486,13 @@ module.exports = function createModule(deps) {
     }
 
     function pickOverload(rawArgs) {
-      // ethers v6 accepts an optional trailing tx-options object —
-      // don't count it as an ABI input when picking the overload. The
-      // unwrapped args (without overrides) are also what makeMethod
-      // will normalize, so we forward them in the same shape.
-      const { args } = splitOverrides(rawArgs);
-      const candidates = overloads.filter(
-        (o) => o.inputs.length === args.length,
+      const fragment = ethersInterface.getFunction(overloads[0].name, rawArgs);
+      if (!fragment) {
+        throw new Error(`No matching overload for ${overloads[0].name}`);
+      }
+      return overloads.find(
+        (entry) => canonicalSig(entry) === fragment.format('sighash'),
       );
-      if (candidates.length === 0) {
-        throw new Error(
-          `No overload of \`${overloads[0].name}\` matches argument count ${args.length}. ` +
-            `Available: ${overloads.map((o) => `(${o.inputs.map((i) => i.type).join(',')})`).join(', ')}`,
-        );
-      }
-      if (candidates.length === 1) {
-        return candidates[0];
-      }
-      // Same-arity overloads — use `ethers.Typed.X(value)` wrappers to
-      // disambiguate. Each Typed value carries `.type` (e.g. 'bytes32'
-      // vs 'bytes'); score each candidate by how many of its input
-      // types match the corresponding Typed hint. Required for
-      // test/utils/cryptography/RSA.test.js which calls
-      // `$pkcs1Sha256(Typed.bytes32(digest), sig, exp, mod)` vs
-      // `$pkcs1Sha256(Typed.bytes(data), sig, exp, mod)` — both 4-arg.
-      const scored = candidates.map((o) => {
-        let score = 0;
-        for (let i = 0; i < args.length; i++) {
-          const a = args[i];
-          if (
-            a &&
-            typeof a === 'object' &&
-            '_typedSymbol' in a &&
-            typeof a.type === 'string'
-          ) {
-            if (a.type === o.inputs[i].type) {
-              score += 2;
-            } else {
-              score -= 1;
-            }
-          }
-        }
-        return { o, score };
-      });
-      scored.sort((a, b) => b.score - a.score);
-      return scored[0].o;
     }
 
     async function invoke(...args) {
@@ -1946,6 +1503,10 @@ module.exports = function createModule(deps) {
       const match = pickOverload(args);
       return handleFor(match).staticCall(...args);
     };
+    invoke.estimateGas = async (...args) =>
+      handleFor(pickOverload(args)).estimateGas(...args);
+    invoke.getFragment = (...args) =>
+      ethersInterface.getFunction(overloads[0].name, args);
     return invoke;
   }
 
@@ -2102,19 +1663,7 @@ module.exports = function createModule(deps) {
       args,
       inputs.length,
     );
-    // Only an extra argument can be empty overrides, not a tuple value.
-    const extra = constructorArgs[inputs.length];
-    const prototype =
-      extra !== null && typeof extra === 'object'
-        ? Object.getPrototypeOf(extra)
-        : undefined;
-    const hasEmptyOverrides =
-      constructorArgs.length === inputs.length + 1 &&
-      (prototype === Object.prototype || prototype === null) &&
-      Reflect.ownKeys(extra).length === 0;
-    const ctorArgs = hasEmptyOverrides
-      ? constructorArgs.slice(0, -1)
-      : constructorArgs;
+    const ctorArgs = constructorArgs;
     if (ctorArgs.length !== inputs.length) {
       throw new Error(
         `${artifact.contractName || 'Contract'} constructor expects ${inputs.length} argument(s), received ${ctorArgs.length}`,
@@ -2135,20 +1684,7 @@ module.exports = function createModule(deps) {
               Math.min(1_000_000_000, Number(BigInt(overrides.gasLimit)) * 100),
             ),
     };
-    const parameters = await Promise.all(
-      inputs.map((input, index) =>
-        input.walkAsync(ctorArgs[index], (type, value) => {
-          const unwrapped = ethersV6.Typed.dereference(value, type);
-          if (type === 'address') {
-            return tronToHex(toTronBase58(unwrapped));
-          }
-          if (type === 'bytes' || /^bytes[0-9]+$/.test(type)) {
-            return ethersV6.hexlify(unwrapped);
-          }
-          return unwrapped;
-        }),
-      ),
-    );
+    const parameters = await normalizeArguments(inputs, ctorArgs);
     deployOpts.rawParameter = iface.encodeDeploy(parameters);
     const cacheKey = JSON.stringify({
       deployer: tronToHex(deployerAddress),

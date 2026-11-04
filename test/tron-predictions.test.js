@@ -333,6 +333,29 @@ test('empty constructor overrides remain equivalent to omitted overrides', async
   }
 });
 
+test('deployment parameters retain the runtime codec address representations', async (t) => {
+  const {
+    runtime,
+    signers: [signer],
+    state,
+  } = await fixture(t);
+  for (const address of ['0x41' + recipient.slice(2), recipient.slice(2)]) {
+    const predicted = await signer.predictAddress('Values', [
+      7n,
+      address,
+      '0x',
+    ]);
+    const deployed = await runtime.ethers.deployContract(
+      'Values',
+      [7n, recipient, '0x'],
+      signer,
+    );
+    assert.equal(await deployed.getAddress(), predicted);
+    assertPayload(state.broadcasts.at(-1), 'Values', [7n, recipient, '0x']);
+  }
+  assert.equal(state.builds, 2);
+});
+
 test('non-enumerable effective overrides cannot match an empty deployment', async (t) => {
   for (const [name, value] of [
     ['value', 7n],

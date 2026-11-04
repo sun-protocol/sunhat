@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { expect } from 'chai';
 import { network } from 'hardhat';
-import { Contract } from 'ethers';
+import { Contract, Typed, AbiCoder, keccak256 } from 'ethers';
 import { describe, it, afterEach } from 'mocha';
 import {
   toBase58Address,
@@ -27,6 +27,89 @@ describe('Hardhat 3 TRON plugin', function () {
         'Failed to close TRON test connections',
       );
     }
+  });
+  it('matches standard ABI resolution, nested returns and payable simulation', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const [signer] = await connection.ethers.getSigners();
+    const owner = await signer.getAddress();
+    const row = { owner, value: 9n };
+    const rows = [[row], []];
+    const abi = await connection.ethers.deployContract('AbiFixture', [rows]);
+    assert.equal(await abi.waitForDeployment(), abi);
+    const factory = await connection.ethers.getContractFactory('AbiFixture');
+    const { tronWeb, address } = connection.tre.makeTronWeb();
+    const native = await connection.tre.deployContract(
+      tronWeb,
+      address,
+      { abi: factory.abi, bytecode: factory.bytecode },
+      { parameters: [rows] },
+    );
+    const nativeFacade = await connection.ethers.getContractAt(
+      'AbiFixture',
+      native.address,
+    );
+    assert.equal(await nativeFacade.initialDigest(), await abi.initialDigest());
+    assert.equal(
+      await abi.initialDigest(),
+      keccak256(
+        AbiCoder.defaultAbiCoder().encode(
+          ['tuple(address owner,uint256 value)[][]'],
+          [rows],
+        ),
+      ),
+    );
+    assert.equal(await abi.valueSeen.staticCall({ value: 7n }), 7n);
+    assert.equal(
+      await abi.valueSeen.staticCall(Typed.overrides({ value: 11n })),
+      11n,
+    );
+    assert.equal(
+      await abi.pick.staticCall(3n, Typed.overrides({ value: 4n })),
+      7n,
+    );
+    assert.equal(await abi.pick.staticCall(3n, 4n, { value: 5n }), 12n);
+    await assert.rejects(abi.ambiguous(1n), /ambiguous function/);
+    assert.equal(await abi.ambiguous(Typed.uint256(8n)), 8n);
+    assert.equal(await abi.ambiguous(Typed.address(owner)), BigInt(owner));
+    for (const [name, input] of [
+      ['grid', rows],
+      ['fixedRows', [[row], [row]]],
+      ['fixedOuter', rows],
+    ]) {
+      const output = await abi[name](input);
+      assert.equal(output[0][0].owner, owner);
+      assert.equal(output[0][0].value, 9n);
+      assert.deepEqual(
+        (await abi[name](output)).toArray(true),
+        output.toArray(true),
+      );
+      assert.deepEqual(
+        output.toArray(true),
+        input.map((group) => group.map((entry) => [entry.owner, entry.value])),
+      );
+    }
+    const returnedRows = await abi.grid(rows);
+    const roundtrip = await connection.ethers.deployContract('AbiFixture', [
+      returnedRows,
+    ]);
+    assert.equal(await roundtrip.initialDigest(), await abi.initialDigest());
+    assert.equal((await abi.single()).value, 9n);
+    assert.equal((await abi.nested()).child.value, 9n);
+    const multi = await abi.multiple();
+    assert.equal(multi.count, 2n);
+    assert.equal(multi.row.value, 9n);
+    assert.equal(await abi.mutate.staticCall(), 1n);
+    assert.equal(await abi.counter(), 0n);
+    await (await abi.mutate()).wait();
+    assert.equal(await abi.counter(), 1n);
+    const simulated = await abi.createChild.staticCall();
+    assert.match(simulated, /^0x[0-9a-fA-F]{40}$/);
+    const receipt = await (await abi.createChild()).wait();
+    const actual = receipt.logs.find((log) => log.eventName === 'ChildCreated')
+      .args.child;
+    const child = await connection.ethers.getContractAt('AbiChild', actual);
+    assert.equal(await child.owner(), await abi.getAddress());
   });
   it('honors native signers for factory deployment and contract attachment', async function () {
     const connection = await network.create('tre');
