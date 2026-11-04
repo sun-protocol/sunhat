@@ -135,10 +135,34 @@ module.exports = function createModule(deps) {
       if (cached) {
         return cached;
       }
+      const started = Date.now();
       const info = await deps.context.tre.waitForReceipt(this._tw(), txId, {
         timeout,
+        executionReceipt: false,
       });
-      const receipt = translateReceipt(txId, info);
+      let executionReceipt = true;
+      if (typeof info?.receipt?.result !== 'string') {
+        const transaction = await requestJson(
+          this._tw(),
+          '/wallet/gettransactionbyid',
+          {
+            body: JSON.stringify({ value: txId }),
+            signal: AbortSignal.timeout(
+              Math.max(1, timeout - (Date.now() - started)),
+            ),
+          },
+        );
+        const contracts = transaction?.raw_data?.contract;
+        if (
+          !Array.isArray(contracts) ||
+          contracts.length !== 1 ||
+          typeof contracts[0]?.type !== 'string'
+        ) {
+          throw new Error(`Missing native transaction type for ${txId}`);
+        }
+        executionReceipt = contracts[0].type !== 'TransferContract';
+      }
+      const receipt = translateReceipt(txId, info, null, executionReceipt);
       rememberReceipt('0x' + txId, receipt);
       return receipt;
     },
@@ -562,7 +586,7 @@ module.exports = function createModule(deps) {
   // and `event.args[0]`. If a log's topic0 isn't in `iface` (e.g. logs
   // from a different contract called during the tx), the log is left
   // without a fragment but still has raw topics/data.
-  function translateReceipt(txId, info, iface = null) {
+  function translateReceipt(txId, info, iface = null, executionReceipt = true) {
     // Total TVM fee = energy_fee + net_fee (both sun). Used by the
     // ether-balance chai matcher to back out gas cost from the
     // sender's notional balance change. info.fee is the precomputed
@@ -599,7 +623,14 @@ module.exports = function createModule(deps) {
       nativeTransactionInfo: info,
       hash: '0x' + txId,
       transactionHash: '0x' + txId,
-      status: info && info.receipt && info.receipt.result === 'SUCCESS' ? 1 : 0,
+      // Plain TransferContract inclusion has no execution receipt.
+      status: (
+        executionReceipt
+          ? info?.receipt?.result === 'SUCCESS'
+          : info?.result !== 'FAILED'
+      )
+        ? 1
+        : 0,
       blockNumber: info ? info.blockNumber : undefined,
       gasUsed: energyUsed,
       cumulativeGasUsed: energyUsed,
@@ -1170,7 +1201,12 @@ module.exports = function createModule(deps) {
   }
 
   function makeTxResponse(txId, info, iface = null, meta = {}) {
-    const receipt = translateReceipt(txId, info, iface);
+    const receipt = translateReceipt(
+      txId,
+      info,
+      iface,
+      meta.executionReceipt ?? true,
+    );
     rememberReceipt('0x' + txId, receipt);
     // Outer-call metadata so the TVM-aware chai matchers (plugin/
     // chai-matchers-tvm.js) can account for the user→contract value
@@ -1787,16 +1823,10 @@ module.exports = function createModule(deps) {
 
   // -- Signers -------------------------------------------------------
 
-  // Materialize (or return cached) the bridge's signer set. Hands the
-  // signers module the bridge-side deps it needs to integrate cleanly:
-  // the receipts cache so `signer.sendTransaction` results are
-  // resolvable by `provider.getTransactionReceipt`, and the receipt
-  // poller so the call path can wait for confirmation.
+  // Materialize the connection's signers; receipt operations resolve lazily
+  // through the bridge even if funding created the signer set first.
   async function makeSigners(hre) {
-    const signers = await signersMod.buildSigners(hre, {
-      knownReceipts,
-      waitForReceipt: hre.tre.waitForReceipt,
-    });
+    const signers = await signersMod.buildSigners(hre);
     // Attach the stub provider for `signer.provider` access (some chai
     // matchers reach into it).
     return signers.map((s) => Object.assign(s, { provider: stubProvider }));
@@ -1866,45 +1896,14 @@ module.exports = function createModule(deps) {
         const info = await hre.tre.waitForReceipt(deployerTronWeb, txId, {
           executionReceipt: hasDataField,
         });
-        const succeeded = hasDataField
-          ? info && info.receipt && info.receipt.result === 'SUCCESS'
-          : info.result !== 'FAILED';
-        const callValueSun = valueToCallValue(value);
-        const energyFee =
-          info && info.receipt && Number.isFinite(info.receipt.energy_fee)
-            ? Number(info.receipt.energy_fee)
-            : 0;
-        const netFee =
-          info && info.receipt && Number.isFinite(info.receipt.net_fee)
-            ? Number(info.receipt.net_fee)
-            : 0;
-        const totalFeeSun = (info && info.fee) || energyFee + netFee;
-        const receipt = {
-          nativeTransactionId: txId,
-          nativeReceipt: info?.receipt,
-          nativeTransactionInfo: info,
-          hash: '0x' + txId,
-          transactionHash: '0x' + txId,
-          status: succeeded ? 1 : 0,
-          blockNumber: info ? info.blockNumber : undefined,
-          logs: [],
-          feeSun: totalFeeSun,
-          internalTransactions: (info && info.internal_transactions) || [],
-        };
-        rememberReceipt(receipt.hash, receipt);
-        if (hasDataField && !receipt.status) {
+        if (hasDataField && info?.receipt?.result !== 'SUCCESS') {
           throw buildRevertError(txId, info);
         }
-        return deps.context.registerSubject({
-          hash: receipt.hash,
-          transactionHash: receipt.hash,
-          blockNumber: receipt.blockNumber,
-          from: tronToHex(base58),
-          to: tronToHex(toBase58),
-          valueSun: callValueSun,
-          feeSun: totalFeeSun,
-          internalTransactions: receipt.internalTransactions,
-          wait: async () => receipt,
+        return makeTxResponse(txId, info, null, {
+          fromBase58: base58,
+          toBase58,
+          callValueSun: value,
+          executionReceipt: hasDataField,
         });
       },
     };
@@ -2350,6 +2349,7 @@ module.exports = function createModule(deps) {
     makeFactory,
     deployViaFacade,
     makeSigners,
+    makeTxResponse,
     loadFixture,
 
     // Surfaced for `src/runtime/deploy.js` so its constructor-revert

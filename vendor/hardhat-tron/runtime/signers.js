@@ -83,13 +83,9 @@ module.exports = function createModule(runtimeDeps) {
   // client; the bridge later wires `factory.connect(signer)` to route
   // writes through it so transactions sign with this signer's key.
   //
-  // `deps.knownReceipts` and `deps.waitForReceipt` are supplied by the
-  // bridge when it materializes the signer set for `getSigners()`;
-  // they're consumed by `sendTransaction` to register the receipt with
-  // the bridge's cache. When the signer is built standalone (e.g. for
-  // the funding/`refundSigners` paths) those calls aren't used, so the
-  // missing deps don't matter.
-  function makeSigner(hre, privateKey, deps = {}) {
+  // Resolve bridge operations at call time so signers cached during funding
+  // use the same receipt conversion and bounded storage as contract calls.
+  function makeSigner(hre, privateKey) {
     const { tronAddress, address } = addressesFromKey(privateKey);
     const tronWeb = buildTronWeb(hre, privateKey);
     // `ethers.Wallet` for offline signing — the key material is what
@@ -137,61 +133,18 @@ module.exports = function createModule(runtimeDeps) {
       // object (the receipt field is a contract-execution shape), so
       // polling for an execution receipt would time out. Transfers instead
       // wait for native transaction-info inclusion with a block number.
-      const waitForReceipt =
-        deps.waitForReceipt || (hre.tre && hre.tre.waitForReceipt);
-      const info = await waitForReceipt(tronWeb, txId, {
+      const info = await hre.tre.waitForReceipt(tronWeb, txId, {
         executionReceipt: hasDataField,
       });
-      // Receipt-result semantics differ between TransferContract (plain
-      // TRX) and TriggerSmartContract (any `data` field, even '0x'):
-      // only the latter populates `info.receipt.result`. Falling back
-      // to status:0 would falsely flag every transfer as a revert;
-      // gate the revert check on `hasDataField`.
-      const succeeded = hasDataField
-        ? info && info.receipt && info.receipt.result === 'SUCCESS'
-        : info.result !== 'FAILED';
-      const callValueSun = valueToCallValue(value);
-      const feeSun = (info && info.fee) || 0;
-      const energyFee =
-        info && info.receipt && Number.isFinite(info.receipt.energy_fee)
-          ? Number(info.receipt.energy_fee)
-          : 0;
-      const netFee =
-        info && info.receipt && Number.isFinite(info.receipt.net_fee)
-          ? Number(info.receipt.net_fee)
-          : 0;
-      const totalFeeSun = feeSun || energyFee + netFee;
-      const receipt = {
-        nativeTransactionId: txId,
-        nativeReceipt: info.receipt,
-        nativeTransactionInfo: info,
-        hash: '0x' + txId,
-        transactionHash: '0x' + txId,
-        status: succeeded ? 1 : 0,
-        blockNumber: info ? info.blockNumber : undefined,
-        logs: [],
-        feeSun: totalFeeSun,
-        internalTransactions: (info && info.internal_transactions) || [],
-      };
-      if (deps.knownReceipts) {
-        deps.knownReceipts.set(receipt.hash, receipt);
-      }
-      if (hasDataField && !receipt.status) {
-        // Lazy-require to break the bridge ↔ signers module-load cycle.
-        const { buildRevertError } = runtimeDeps.bridge;
+      const { buildRevertError, makeTxResponse } = runtimeDeps.bridge;
+      if (hasDataField && info?.receipt?.result !== 'SUCCESS') {
         throw buildRevertError(txId, info);
       }
-      const { tronToHex } = runtimeDeps.bridge;
-      return runtimeDeps.context.registerSubject({
-        hash: receipt.hash,
-        transactionHash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        from: tronToHex(tronAddress),
-        to: tronToHex(recipientBase58),
-        valueSun: callValueSun,
-        feeSun: totalFeeSun,
-        internalTransactions: receipt.internalTransactions,
-        wait: async () => receipt,
+      return makeTxResponse(txId, info, null, {
+        fromBase58: tronAddress,
+        toBase58: recipientBase58,
+        callValueSun: value,
+        executionReceipt: hasDataField,
       });
     }
 
@@ -307,7 +260,7 @@ module.exports = function createModule(runtimeDeps) {
   // the start of every fresh fixture; in parallel that's a single
   // ~10–15 ms wave. The HTTP keep-alive agent caps `maxSockets` at 50
   // so 10 concurrent requests share the same warm connection pool.
-  async function buildSigners(hre, deps = {}) {
+  async function buildSigners(hre) {
     if (_cachedSigners) {
       return _cachedSigners;
     }
@@ -327,7 +280,7 @@ module.exports = function createModule(runtimeDeps) {
           i === 0 ? configured[0] : deriveKey(i).privateKey,
         )
       : configured;
-    const signers = keys.map((key) => makeSigner(hre, key, deps));
+    const signers = keys.map((key) => makeSigner(hre, key));
     if (!shouldFund) {
       _cachedSigners = signers;
       return signers;

@@ -304,6 +304,9 @@ module.exports = function createModule(deps) {
             tokenAddrLower,
             accountAddrLower,
           );
+          if (checkPredicate(expected, actual, negated, 'token balance')) {
+            return;
+          }
           const expectedBig = toBigInt(expected);
           const matches = actual === expectedBig;
           if (negated ? matches : !matches) {
@@ -348,16 +351,7 @@ module.exports = function createModule(deps) {
           const actuals = accountAddrsLower.map((a) =>
             tokenBalanceChange(receipt, tokenAddrLower, a),
           );
-          if (typeof expected === 'function') {
-            // Predicate form
-            const ok = expected(actuals);
-            if (negated ? ok : !ok) {
-              throw new Error(
-                negated
-                  ? `Expected token balances NOT to satisfy the predicate, but they did`
-                  : `Expected token balances to satisfy the predicate, but they didn't (got [${actuals.join(', ')}])`,
-              );
-            }
+          if (checkPredicate(expected, actuals, negated, 'token balances')) {
             return;
           }
           const expectedBig = expected.map(toBigInt);
@@ -405,6 +399,9 @@ module.exports = function createModule(deps) {
           );
           // 1 wei == 1 sun pass-through — no scaling.
           const actualWei = changeSun;
+          if (checkPredicate(expected, actualWei, negated, 'ether balance')) {
+            return;
+          }
           const expectedBig = toBigInt(expected);
           const matches = actualWei === expectedBig;
           if (negated ? matches : !matches) {
@@ -448,15 +445,7 @@ module.exports = function createModule(deps) {
           );
           // 1 wei == 1 sun pass-through — no scaling.
           const actualsWei = changesSun;
-          if (typeof expected === 'function') {
-            const ok = expected(actualsWei);
-            if (negated ? ok : !ok) {
-              throw new Error(
-                negated
-                  ? `Expected ether balances NOT to satisfy the predicate, but they did`
-                  : `Expected ether balances to satisfy the predicate, but they didn't (got [${actualsWei.join(', ')}])`,
-              );
-            }
+          if (checkPredicate(expected, actualsWei, negated, 'ether balances')) {
             return;
           }
           const expectedBig = expected.map(toBigInt);
@@ -479,6 +468,21 @@ module.exports = function createModule(deps) {
   }
 
   // --- helpers -----------------------------------------------------
+
+  function checkPredicate(expected, actual, negated, description) {
+    if (typeof expected !== 'function') {
+      return false;
+    }
+    const matches = expected(actual);
+    if (negated ? matches : !matches) {
+      throw new Error(
+        negated
+          ? `Expected ${description} NOT to satisfy the predicate, but it did`
+          : `Expected ${description} to satisfy the predicate, but it did not (got ${String(actual)})`,
+      );
+    }
+    return true;
+  }
 
   function toBigInt(v) {
     if (typeof v === 'bigint') {

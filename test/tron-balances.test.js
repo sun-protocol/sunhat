@@ -210,3 +210,49 @@ test('token identity resolution errors cannot become a zero balance change', asy
     }
   }
 });
+
+for (const name of matchers) {
+  test(`${name} honors predicates once, negation and original thrown values`, async () => {
+    for (const negated of [false, true]) {
+      for (const matches of [false, true]) {
+        let calls = 0;
+        const predicate = (actual) => {
+          calls++;
+          assert.deepEqual(actual, name.endsWith('s') ? [100n] : 100n);
+          return matches;
+        };
+        const response = transaction();
+        const assertion = negated ? expect(response).not : expect(response);
+        const args = [name.endsWith('s') ? [recipient] : recipient, predicate];
+        if (name.startsWith('changeToken')) {
+          args.unshift(token);
+        }
+        const pending = async () => {
+          await assertion[name](...args);
+        };
+        if (negated ? matches : !matches) {
+          await assert.rejects(pending(), /predicate/);
+        } else {
+          await pending();
+        }
+        assert.equal(calls, 1);
+      }
+    }
+    const original = Symbol('EXPECTED_PREDICATE_FAILURE');
+    const args = [
+      name.endsWith('s') ? [recipient] : recipient,
+      () => {
+        throw original;
+      },
+    ];
+    if (name.startsWith('changeToken')) {
+      args.unshift(token);
+    }
+    await assert.rejects(
+      async () => {
+        await expect(transaction())[name](...args);
+      },
+      (error) => error === original,
+    );
+  });
+}

@@ -77,3 +77,5 @@ npm run test:hardhat3:tron-plugin
 ```
 
 The artifact suite installs a real tgz outside the repository and exercises ordinary and patched Docker TRE. It checks declaration-inclusive TypeScript, compiler identity and batch selection, native transactions/events/assertions, EVM coexistence, read-only connections, different nodes/accounts, helper isolation, owned/reused containers, failing test cleanup and persistent node shutdown. Docker and compiler failures fail the suite. `SUNHAT_PATCHED_TRE_JAR` and `SUNHAT_TRON_SOLC` can select existing local verification artifacts; compiler integrity remains enforced.
+
+Native contract calls, raw signer calls and impersonated calls share receipt conversion and a bounded receipt cache. Their receipts retain event logs for event and token balance assertions. All four native balance matchers accept synchronous predicates; single-account predicates receive a bigint and multiple-account predicates receive a bigint array.

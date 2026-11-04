@@ -407,6 +407,67 @@ describe('Hardhat 3 TRON plugin', function () {
     const emptyOverrides = await emptyFactory.deploy(...second, {});
     assert.equal(await emptyOverrides.getAddress(), emptyPrediction);
   });
+  it('preserves raw and impersonated transaction events and balance predicates', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const [sender, recipient] = await ethers.getSigners();
+    const token = await ethers.deployContract('TokenFixture');
+    const senders = [sender];
+    if (process.env.SUNHAT_PATCHED_TRE === 'true') {
+      const address = '0x' + '4'.repeat(40);
+      await (await token.transfer(address, 20n)).wait();
+      await connection.tre.helpers.setBalance(address, 1000000000n);
+      await connection.tre.helpers.impersonateAccount(address);
+      senders.push(await ethers.getSigner(address));
+    }
+    for (const signer of senders) {
+      const from = await signer.getAddress();
+      const to = await recipient.getAddress();
+      const response = await signer.sendTransaction({
+        to: await token.getAddress(),
+        data: token.interface.encodeFunctionData('transfer', [to, 7n]),
+      });
+      const receipt = await response.wait();
+      assert.equal(receipt.logs.length, 1);
+      assert.equal(
+        await ethers.provider.getTransactionReceipt(response.hash),
+        receipt,
+      );
+      assert.equal(
+        await ethers.provider.waitForTransaction(response.hash),
+        receipt,
+      );
+      await expect(response).to.emit(token, 'Transfer').withArgs(from, to, 7n);
+      await expect(response).to.changeTokenBalance(
+        ethers,
+        token,
+        recipient,
+        (delta) => delta === 7n,
+      );
+      await expect(response).not.to.changeTokenBalance(
+        ethers,
+        token,
+        recipient,
+        (delta) => delta === 0n,
+      );
+      const transfer = await signer.sendTransaction({ to, value: 9n });
+      await expect(transfer).to.changeEtherBalance(
+        ethers,
+        recipient,
+        (delta) => delta === 9n,
+      );
+      if (signer !== sender) {
+        await connection.tre.helpers.stopImpersonatingAccount(from);
+      }
+    }
+    const evm = await network.create('evm');
+    connections.push(evm);
+    const [first, second] = await evm.ethers.getSigners();
+    await expect(
+      first.sendTransaction({ to: second.address, value: 5n }),
+    ).to.changeEtherBalance(evm.ethers, second, (delta) => delta === 5n);
+  });
   it('resolves Addressable accounts in all native balance matchers', async function () {
     const connection = await network.create('tre');
     connections.push(connection);
@@ -588,6 +649,13 @@ describe('Hardhat 3 TRON plugin', function () {
       signer.sendTransaction({ to: '0x' + '2'.repeat(40), value: 2n }),
     ).to.changeEtherBalance(first.ethers, '0x' + '2'.repeat(40), 2n);
     assert.equal(receipt.status, 1);
+    const reloaded = await second.ethers.provider.waitForTransaction(
+      transfer.hash,
+      1,
+      5000,
+    );
+    assert.equal(reloaded.status, 1);
+    assert.equal(reloaded.nativeTransactionId, receipt.nativeTransactionId);
     assert.ok(receipt.blockNumber > 0);
     assert.equal(receipt.nativeTransactionInfo.id, transfer.hash.slice(2));
     if (process.env.SUNHAT_PATCHED_TRE === 'true') {
