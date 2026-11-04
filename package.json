@@ -35,10 +35,10 @@
     "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
     "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",
     "pack:check": "npm run clean && node --test test/package.test.js",
-    "test:tron-core": "node --test test/tron-core.test.js test/tron-addresses.test.js",
+    "test:tron-core": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js",
     "test:hardhat3:tron-plugin": "npm run build && node --test test/hardhat3-tron-plugin.integration.test.js",
     "tre:build-jar": "bash scripts/build-tre-jar.sh",
-    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-plugin.test.js",
+    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js test/tron-plugin.test.js",
     "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js",
     "check:english": "node scripts/check-english.js"
   },

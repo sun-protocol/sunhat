@@ -170,6 +170,38 @@ describe('Hardhat 3 TRON plugin', function () {
     await (await deterministicChild.increment()).wait();
     assert.equal(await deterministicChild.number(), 1n);
   });
+  it('preserves native execution failures and decodes only actual revert bytes', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const contract = await ethers.deployContract('RevertFixture');
+    const code = await ethers.provider.getCode(contract.target);
+    assert.ok(code.includes('d6bda275') && code.includes('b06ebf3d'));
+    assert.equal(await contract.check(ethers.ZeroAddress), false);
+    for (const value of [3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+      const candidate = ethers.toBeHex(value, 20);
+      for (const invoke of [
+        () => contract.check(candidate),
+        () => contract.check.staticCall(candidate),
+        () => contract.check.estimateGas(candidate),
+        () => contract.pay.staticCall(candidate),
+      ]) {
+        await assert.rejects(invoke(), (error) => error.data === '0x');
+      }
+    }
+    await assert.rejects(
+      contract.write(),
+      (error) => error.data === undefined || error.data === '0x',
+    );
+    await expect(contract.failCustom())
+      .to.be.revertedWithCustomError(contract, 'Deliberate')
+      .withArgs(42n);
+    await expect(contract.failCustom.staticCall())
+      .to.be.revertedWithCustomError(contract, 'Deliberate')
+      .withArgs(42n);
+    await expect(contract.failReason()).to.be.revertedWith('EXPECTED_REVERT');
+    await expect(contract.failPanic()).to.be.revertedWithPanic(0x01);
+  });
   it('uses connection ethers on native TVM and preserves EVM coexistence', async function () {
     const first = await network.create('tre');
     connections.push(first);

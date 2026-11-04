@@ -321,7 +321,7 @@ test('explicit native address prediction keeps the prebuilt transaction', async 
   );
 });
 
-test('empty reverts query the original contract during error recovery', async (t) => {
+test('empty reverts preserve the target without inspecting bytecode', async (t) => {
   const { runtime, factory, operations, rejectConstantCalls } =
     await fixture(t);
   await factory.owner();
@@ -332,5 +332,12 @@ test('empty reverts query the original contract during error recovery', async (t
   );
   rejectConstantCalls();
   await assert.rejects(attached.owner(), (error) => error.data === '0x');
-  assert.equal(tronHex(operations.at(-1).codeAddress), tronHex(recipient));
+  assert.equal(
+    operations.some((entry) => entry.codeAddress),
+    false,
+  );
+  assert.equal(
+    operations.at(-1).body.contract_address.toLowerCase(),
+    tronHex(recipient),
+  );
 });

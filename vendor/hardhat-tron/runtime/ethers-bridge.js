@@ -384,7 +384,9 @@ module.exports = function createModule(deps) {
       // sets `result.code`/`result.message` and puts the revert bytes in
       // `constant_result[0]` (same detection as staticCallWithRevertData).
       const reverted =
-        res && res.result && (res.result.code || res.result.message);
+        res &&
+        res.result &&
+        (res.result.result === false || res.result.code || res.result.message);
       const raw =
         res && res.constant_result && res.constant_result[0]
           ? '0x' + res.constant_result[0]
@@ -1053,7 +1055,9 @@ module.exports = function createModule(deps) {
     // Successful call: result.result === true (only field) AND no
     // contract_result code. On revert, `result.code` is set and
     // `constant_result[0]` holds the revert bytes.
-    const reverted = res.result && (res.result.code || res.result.message);
+    const reverted =
+      res.result &&
+      (res.result.result === false || res.result.code || res.result.message);
     const raw =
       res.constant_result && res.constant_result[0]
         ? '0x' + res.constant_result[0]
@@ -1067,117 +1071,13 @@ module.exports = function createModule(deps) {
       return decodeReturn(decoded, fnAbi.outputs);
     }
 
-    // TVM precompile-mismatch recovery. Java-tron only supports the
-    // legacy three EVM precompiles (0x01 ecRecover, 0x02 SHA256, 0x03
-    // RIPEMD160) at their canonical addresses. A Solidity
-    // `staticcall(0x04..0x0a, ...)` — which EVM treats as a call to a
-    // missing-code address (success=true with empty returndata under
-    // post-Constantinople rules) — aborts the whole simulation on TVM
-    // with an empty constant_result and a TVM-level error code. OZ's
-    // SignatureChecker.isValidERC1271SignatureNow and similar patterns
-    // rely on the EVM behavior: the inner staticcall returns empty, the
-    // length check fails, and the outer function returns false. To match
-    // that, when we observe a reverted simulation with no constant_result
-    // data AND we can attribute the failure to a TVM-unsupported
-    // precompile address appearing in the call arguments, synthesize the
-    // zero-decoded return.
-    if (
-      raw === '0x' &&
-      hasTvmUnsupportedPrecompileArg(normalized, fnAbi.inputs)
-    ) {
-      try {
-        // Two 32-byte zero slots per output cover both static decoders
-        // (uint/bool/address/bytes32 → 0) and dynamic decoders (offset →
-        // 0, length → 0, data empty).
-        const padded =
-          '0x' + '00'.repeat(64 * Math.max(1, fnAbi.outputs.length));
-        const decoded = iface.decodeFunctionResult(ifaceFragment, padded);
-        return decodeReturn(decoded, fnAbi.outputs);
-      } catch {
-        // Outputs include a shape we can't safely fabricate. Fall through
-        // to the original error so the symptom surfaces instead of bad data.
-      }
-    }
-
-    // OZ custom-error synthesis on the view path: when staticCall reverts
-    // with empty data and the contract's bytecode contains the canonical
-    // selector for the function's output type, surface that selector.
-    // Matches the write-path synthesis below in makeMethod.invoke.
-    if (raw === '0x') {
-      const synthSelector =
-        fnAbi.outputs.length > 0 && fnAbi.outputs[0].type === 'address'
-          ? '0xb06ebf3d' // FailedDeployment()
-          : '0xd6bda275'; // FailedCall()
-      try {
-        const codeInfo = await tronWeb.trx.getContract(tronContract.address);
-        const code =
-          codeInfo && codeInfo.bytecode
-            ? '0x' + codeInfo.bytecode.toLowerCase()
-            : '0x';
-        if (code.includes(synthSelector.slice(2))) {
-          const e = new Error(`call reverted (data=${synthSelector})`);
-          e.data = synthSelector;
-          throw e;
-        }
-      } catch (e) {
-        if (e && e.data) {
-          throw e;
-        } /* swallow getContract errors */
-      }
-    }
-
-    const err = new Error(`call reverted (data=${raw})`);
-    err.data = raw;
-    if (raw.startsWith('0x08c379a0')) {
-      try {
-        err.reason = ethersV6.AbiCoder.defaultAbiCoder().decode(
-          ['string'],
-          '0x' + raw.slice(10),
-        )[0];
-      } catch {
-        /* */
-      }
-    }
-    throw err;
-  }
-
-  // Returns true iff any address-typed arg in `args` (TronWeb-normalized,
-  // so addresses are base58 `T...` strings) corresponds to an EVM
-  // precompile in the range [0x04..0x0a] that java-tron does not ship.
-  // Used by the recovery path in `staticCallWithRevertData` to
-  // differentiate "real revert with missing data" from "TVM aborted on
-  // inner staticcall to missing precompile".
-  function hasTvmUnsupportedPrecompileArg(args, inputs) {
-    if (!inputs) {
-      return false;
-    }
-    const RE = /^0x0{39}[4-9a]$/i; // 0x0000…0004 through 0x0000…000a
-    for (let i = 0; i < inputs.length; i++) {
-      const inp = inputs[i];
-      if (!inp || inp.type !== 'address') {
-        continue;
-      }
-      const v = args[i];
-      if (typeof v !== 'string') {
-        continue;
-      }
-      let hex;
-      if (v.startsWith('0x') && v.length === 42) {
-        hex = v.toLowerCase();
-      } else if (v.startsWith('T') && v.length === 34) {
-        try {
-          hex = '0x' + TronWeb.address.toHex(v).slice(2).toLowerCase();
-        } catch {
-          continue;
-        }
-      } else {
-        continue;
-      }
-      if (RE.test(hex)) {
-        return true;
-      }
-    }
-    return false;
+    // Decode only the bytes returned by this execution. Bytecode and
+    // argument values cannot establish why a call reverted.
+    throw (tronContract._iface || iface).makeError(raw, {
+      to: tronToHex(tronContract.address),
+      from: tronToHex(ownerBase58),
+      data: calldata,
+    });
   }
 
   // ethers Interface encoders expect 0x-hex addresses, not Tron base58.
@@ -1368,41 +1268,6 @@ module.exports = function createModule(deps) {
       }
       return err;
     }
-    // Sim succeeded (returned a value) but broadcast reverted with no
-    // data. The EVM-style triggerconstantcontract simulator and the
-    // TVM-style broadcast use different CREATE/CREATE2 address derivations,
-    // so a "deploy twice with the same salt" check that OZ wraps as
-    //     `if (instance == address(0)) revert FailedDeployment()`
-    // ONLY fires under broadcast (where TVM detects the collision) — the
-    // simulator returns the EVM-predicted address as if successful. The
-    // broadcast revert is therefore stripped of the custom-error data the
-    // Solidity wrapper would have produced.
-    //
-    // Recover by checking the broadcast's bytecode for the FailedDeployment
-    // selector (0xb06ebf3d). If present, the wrapper exists and an empty
-    // broadcast-revert with a successful simulator outcome is the
-    // canonical signature for this case.
-    if (
-      simErr === undefined &&
-      fnAbi.outputs.length > 0 &&
-      fnAbi.outputs[0].type === 'address'
-    ) {
-      try {
-        const code = await tronWeb.trx
-          .getContract(tronContract.address)
-          .then((cinfo) =>
-            cinfo && cinfo.bytecode
-              ? '0x' + cinfo.bytecode.toLowerCase()
-              : '0x',
-          );
-        if (code.includes('b06ebf3d')) {
-          err.data = '0xb06ebf3d'; // FailedDeployment()
-          return err;
-        }
-      } catch {
-        /* */
-      }
-    }
     return err;
   }
 
@@ -1573,14 +1438,16 @@ module.exports = function createModule(deps) {
       try {
         txId = await tronContract[fnAbi.name](...normalized).send(sendOpts);
       } catch (sendErr) {
-        // TronWeb throws synchronously on tx failure modes that never
-        // produce a tx hash — out-of-energy, validation failures, etc.
-        // Tests using `revertedWithCustomError` (e.g. Clones'
-        // `revert if address already used` → FailedDeployment, Create2's
-        // `fails deploying into existent address`) expect a real revert
-        // error with `.data`. Re-simulate via `triggerconstantcontract`,
-        // which carries the revert payload even when the broadcast path
-        // OOG'd, and re-throw as a proper revert error.
+        // TronWeb may reject before returning a transaction hash. Keep
+        // supplied revert bytes; otherwise a constant call can provide
+        // diagnostic bytes while retaining the original error as its cause.
+        if (
+          sendErr &&
+          typeof sendErr.data === 'string' &&
+          sendErr.data !== '0x'
+        ) {
+          throw sendErr;
+        }
         const msg =
           sendErr && sendErr.message
             ? String(sendErr.message)
@@ -1602,51 +1469,10 @@ module.exports = function createModule(deps) {
             typeof simErr.data === 'string' &&
             simErr.data !== '0x'
           ) {
+            simErr.cause = sendErr;
             throw simErr;
           }
-          // Synthesize an OZ custom error when both the broadcast and the
-          // simulator reverted with empty data — TVM strips the revert
-          // selector for OUT_OF_ENERGY paths, but OZ Solidity actually
-          // would have emitted a known error like FailedDeployment() (for
-          // CREATE2 collision) or FailedCall() (for inner-call OOG). Pick
-          // the selector by output type:
-          //   - returns address → FailedDeployment() (0xb06ebf3d)
-          //   - otherwise       → FailedCall() (0xd6bda275)
-          // Only synthesize when the contract's runtime bytecode actually
-          // contains the selector so this can't fabricate a wrong selector
-          // for contracts that don't use these OZ patterns.
-          const simNoData =
-            simErr === undefined ||
-            (typeof simErr.data === 'string' && simErr.data === '0x');
-          if (simNoData) {
-            const synthSelector =
-              fnAbi.outputs.length > 0 && fnAbi.outputs[0].type === 'address'
-                ? '0xb06ebf3d' // FailedDeployment()
-                : '0xd6bda275'; // FailedCall()
-            try {
-              const code = await tronWeb.trx
-                .getContract(tronContract.address)
-                .then((cinfo) =>
-                  cinfo && cinfo.bytecode
-                    ? '0x' + cinfo.bytecode.toLowerCase()
-                    : '0x',
-                );
-              if (code.includes(synthSelector.slice(2))) {
-                const e = new Error(`call reverted (data=${synthSelector})`);
-                e.data = synthSelector;
-                throw e;
-              }
-            } catch (e) {
-              if (e && e.data) {
-                throw e;
-              } /* swallow code-fetch errors */
-            }
-          }
-          // Re-throw whatever sim got us; sim's err is usually more useful
-          // than TronWeb's "energy not enough".
-          if (simErr) {
-            throw simErr;
-          }
+          // Empty or failed diagnostic calls cannot replace the send error.
         }
         throw sendErr;
       }
@@ -1702,36 +1528,15 @@ module.exports = function createModule(deps) {
       // state) so we just ignore it.
       const { args } = splitOverrides(rawArgs, fnAbi.inputs.length);
       const normalized = args.map((a, i) => normalizeArg(a, fnAbi.inputs[i]));
-      // TronWeb's `tronContract.method(...).call()` refuses to invoke
-      // any method with `stateMutability === 'payable'` ("Methods with
-      // state mutability \"payable\" must use send()"). For payable
-      // methods we route through `/wallet/triggerconstantcontract`
-      // directly — that endpoint accepts payable methods AND surfaces
-      // revert data via `constant_result` for chai-matchers' revert
-      // assertions.
-      //
-      // For non-payable non-view methods, we stick with TronWeb's
-      // `.call()` path: it correctly simulates CREATE / CREATE2 inner
-      // calls (returning the predicted address as the call's output),
-      // whereas triggerconstantcontract on a function that internally
-      // CREATEs returns empty `constant_result`. The Clones tests rely
-      // on `factory.$clone.staticCall(impl)` returning the would-be
-      // clone address — without this fallback they all break.
-      const isPayable = fnAbi.stateMutability === 'payable';
-      if (isPayable) {
-        try {
-          return await staticCallWithRevertData(
-            fnAbi,
-            tronContract,
-            tronWeb,
-            normalized,
-          );
-        } catch (e) {
-          if (e && typeof e.data === 'string') {
-            throw e;
-          }
-          throw e;
-        }
+      // Preserve revert bytes for views and payable simulations. Retain
+      // TronWeb's nonpayable simulation path for internal CREATE calls.
+      if (isView || fnAbi.stateMutability === 'payable') {
+        return staticCallWithRevertData(
+          fnAbi,
+          tronContract,
+          tronWeb,
+          normalized,
+        );
       }
       const raw = await tronContract[fnAbi.name](...normalized).call();
       return decodeReturn(raw, fnAbi.outputs);

@@ -51,6 +51,8 @@ Set `tre.matchers: true` and register `@nomicfoundation/hardhat-ethers-chai-matc
 
 The facade covers the inherited TRON testing surface, not every ethers Provider method. Native `waitForTransaction` supports inclusion confirmation counts zero and one; larger counts fail explicitly. Coverage, Solidity tests, forks and proxy upgrade plugins require separate compatibility work.
 
+Native execution failures remain failures even when an argument resembles an unsupported precompile address. Empty revert data stays `0x`; output types and selectors found in runtime bytecode do not establish an error cause. View calls, view `staticCall` and payable simulations decode actual revert bytes through the contract's ethers Interface, including custom errors, `Error(string)` and Panic. If a failed transaction has no revert bytes, the existing diagnostic constant call may provide them; the native failed receipt remains attached. Before a transaction hash is available, a diagnostic error with actual bytes retains the original send exception as `cause`. An empty, successful or unavailable diagnostic call leaves the original send exception intact.
+
 ## Validation
 
 Run these repository checks from a source checkout:
