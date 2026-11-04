@@ -27,6 +27,86 @@ describe('Hardhat 3 TRON plugin', function () {
       );
     }
   });
+  it('honors native signers for factory deployment and contract attachment', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const [first, second] = await ethers.getSigners();
+    assert.ok(first && second);
+    const seed = await ethers.deployContract('TokenFixture', [], second);
+    await seed.waitForDeployment();
+    const runner = seed.runner;
+    for (const [name, createFactory, signer] of [
+      ['default', () => ethers.getContractFactory('TokenFixture'), first],
+      [
+        'explicit',
+        () => ethers.getContractFactory('TokenFixture', second),
+        second,
+      ],
+      [
+        'native runner',
+        () => ethers.getContractFactory('TokenFixture', runner),
+        second,
+      ],
+      [
+        'connected native runner',
+        async () =>
+          (await ethers.getContractFactory('TokenFixture')).connect(runner),
+        second,
+      ],
+      [
+        'options',
+        () => ethers.getContractFactory('TokenFixture', { signer: second }),
+        second,
+      ],
+      [
+        'connected',
+        async () =>
+          (await ethers.getContractFactory('TokenFixture')).connect(second),
+        second,
+      ],
+    ]) {
+      const owner = await signer.getAddress();
+      const other = signer === first ? second : first;
+      const recipient = await other.getAddress();
+      const factory = await createFactory();
+      const token = await factory.deploy();
+      await token.waitForDeployment();
+      assert.equal(
+        await token.balanceOf(owner),
+        100n,
+        `${name}: wrong deployer`,
+      );
+      assert.equal(await token.balanceOf(recipient), 0n);
+      const attached = await ethers.getContractAt(
+        'TokenFixture',
+        await token.getAddress(),
+        name === 'default'
+          ? undefined
+          : name.endsWith('runner')
+            ? runner
+            : signer,
+      );
+      await (await attached.transfer(recipient, 3n)).wait();
+      assert.equal(await token.balanceOf(owner), 97n);
+      assert.equal(await token.balanceOf(recipient), 3n);
+      await (await attached.connect(other).transfer(owner, 1n)).wait();
+      await (
+        await factory.attach(await token.getAddress()).transfer(recipient, 1n)
+      ).wait();
+      assert.equal(await token.balanceOf(owner), 97n);
+      assert.equal(await token.balanceOf(recipient), 3n);
+    }
+    const factory = await ethers.getContractFactory('TokenFixture', second);
+    for (const invalid of [
+      null,
+      undefined,
+      new ethers.Wallet('3'.padStart(64, '0')),
+    ]) {
+      assert.throws(() => factory.connect(invalid), /native TRON signer/);
+      assert.throws(() => seed.connect(invalid), /native TRON signer/);
+    }
+  });
   it('uses connection ethers on native TVM and preserves EVM coexistence', async function () {
     const first = await network.create('tre');
     connections.push(first);

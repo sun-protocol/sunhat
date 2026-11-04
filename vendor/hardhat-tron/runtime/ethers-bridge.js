@@ -2023,10 +2023,8 @@ module.exports = function createModule(deps) {
             // through the signer's TronWeb so subsequent state-changing
             // calls are signed by that signer's key.
             return (signer) => {
-              if (signer && signer.tronWeb) {
-                return makeFacade(abi, tronAddress, signer.tronWeb, hre);
-              }
-              return makeFacade(abi, tronAddress, tronWeb, hre);
+              validateNativeSigner(signer, false);
+              return makeFacade(abi, tronAddress, signer.tronWeb, hre);
             };
           }
           if (prop === 'attach') {
@@ -2382,7 +2380,7 @@ module.exports = function createModule(deps) {
     const deployerAddress =
       signer && signer.tronAddress
         ? signer.tronAddress
-        : hre.tre.makeTronWeb().address;
+        : tronWeb.defaultAddress.base58;
     if (!tronWeb.defaultPrivateKey) {
       throw new Error(
         'TRON deployment requires a configured local signing account',
@@ -2504,7 +2502,22 @@ module.exports = function createModule(deps) {
 
   // -- Factory ------------------------------------------------------
 
+  function validateNativeSigner(signer, allowDefault = true) {
+    if (allowDefault && (signer === null || signer === undefined)) {
+      return;
+    }
+    if (
+      typeof signer !== 'object' ||
+      signer === null ||
+      signer.tronWeb === null ||
+      typeof signer.tronWeb !== 'object'
+    ) {
+      throw new Error('Contract operations require a native TRON signer');
+    }
+  }
+
   function makeFactory(hre, name, boundSigner = null) {
+    validateNativeSigner(boundSigner);
     const artifact = loadArtifact(hre, name);
     const iface = new ethersV6.Interface(artifact.abi);
     return {
@@ -2515,7 +2528,10 @@ module.exports = function createModule(deps) {
       // factory.connect(signer) returns a new factory whose .deploy
       // routes through the signer's TronWeb. Upstream OZ tests use this
       // to "deploy as alice" patterns.
-      connect: (signer) => makeFactory(hre, name, signer),
+      connect: (signer) => {
+        validateNativeSigner(signer, false);
+        return makeFactory(hre, name, signer);
+      },
       attach: (addr) => {
         const tronWeb =
           boundSigner && boundSigner.tronWeb
@@ -3017,11 +3033,20 @@ module.exports = function createModule(deps) {
       }
       return deployViaFacade(hre, name, args, signerOrOpts);
     };
-    hre.ethers.getContractFactory = (name) =>
-      Promise.resolve(makeFactory(hre, name));
-    hre.ethers.getContractAt = (name, address) => {
+    hre.ethers.getContractFactory = (name, signerOrOptions = null) => {
+      const signer =
+        signerOrOptions &&
+        typeof signerOrOptions === 'object' &&
+        !('provider' in signerOrOptions) &&
+        !('tronWeb' in signerOrOptions)
+          ? signerOrOptions.signer
+          : signerOrOptions;
+      return Promise.resolve(makeFactory(hre, name, signer));
+    };
+    hre.ethers.getContractAt = (name, address, signer = null) => {
+      validateNativeSigner(signer);
       const artifact = loadArtifact(hre, name);
-      const { tronWeb } = hre.tre.makeTronWeb();
+      const tronWeb = signer?.tronWeb ?? hre.tre.makeTronWeb().tronWeb;
       return Promise.resolve(
         makeFacade(artifact.abi, toTronBase58(address), tronWeb, hre),
       );

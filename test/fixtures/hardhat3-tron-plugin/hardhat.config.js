@@ -8,7 +8,14 @@ const tron = {
   type: 'http',
   tron: true,
   url: process.env.TRE_URL + '/jsonrpc',
-  accounts: [process.env.TRE_PRIVATE_KEY],
+  accounts: [
+    process.env.TRE_PRIVATE_KEY,
+    HDNodeWallet.fromPhrase(
+      'test test test test test test test test test test test junk',
+      undefined,
+      "m/44'/60'/0'/0/1",
+    ).privateKey,
+  ],
 };
 export default defineConfig({
   plugins: [sunhatTron, hardhatMocha, hardhatMatchers],

@@ -58,6 +58,193 @@ test('TRON providers, configured signers and artifacts remain connection-local',
   assert.ok(factoryB.interface.getFunction('value2'));
 });
 
+test('native factory and contract entries preserve the selected signing account', async (t) => {
+  const root = mkdtempSync(resolve(tmpdir(), 'sunhat-tron-signers-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const directory = resolve(root, 'artifacts/contracts/SignerFixture.sol');
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    resolve(directory, 'SignerFixture.json'),
+    JSON.stringify({
+      contractName: 'SignerFixture',
+      abi: [
+        {
+          type: 'function',
+          name: 'touch',
+          stateMutability: 'nonpayable',
+          inputs: [],
+          outputs: [],
+        },
+      ],
+      bytecode: '0x00',
+    }),
+  );
+  const input = context(root, 1, 1);
+  input.network.config.accounts.push('2'.padStart(64, '0'));
+  const runtime = core.createRuntime(input);
+  const [first, second] = await runtime.ethers.getSigners();
+  const address = '41' + '3'.repeat(40);
+  const txId = '4'.repeat(64);
+  const operations = [];
+  const signingAccounts = [];
+  const clients = new Set([
+    runtime.tre.makeTronWeb().tronWeb,
+    first.tronWeb,
+    second.tronWeb,
+  ]);
+  for (const client of clients) {
+    client.transactionBuilder.createSmartContract = async (_, owner) => {
+      operations.push(['deploy', client.address.toHex(owner).toLowerCase()]);
+      return { txID: txId, contract_address: address };
+    };
+    client.transactionBuilder.triggerSmartContract = async (
+      _address,
+      _selector,
+      _options,
+      _parameters,
+      owner,
+    ) => {
+      operations.push(['call', owner.toLowerCase()]);
+      return { result: { result: true }, transaction: { txID: txId } };
+    };
+    client.trx.sign = async (transaction) => {
+      signingAccounts.push(client.defaultAddress.hex.toLowerCase());
+      return { ...transaction, signature: ['test-signature'] };
+    };
+    client.trx.sendRawTransaction = async () => ({ result: true, txid: txId });
+  }
+  const receipt = {
+    id: txId,
+    blockNumber: 1,
+    contract_address: address,
+    receipt: { result: 'SUCCESS' },
+  };
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    assert.equal(
+      String(url),
+      'http://127.0.0.1:9090/wallet/gettransactioninfobyid',
+    );
+    return new Response(JSON.stringify(receipt));
+  });
+  const { ethers } = runtime;
+  const runner = (await ethers.getContractAt('SignerFixture', address, second))
+    .runner;
+  for (const [name, createFactory, signer] of [
+    ['default', () => ethers.getContractFactory('SignerFixture'), first],
+    [
+      'empty options',
+      () => ethers.getContractFactory('SignerFixture', {}),
+      first,
+    ],
+    [
+      'explicit',
+      () => ethers.getContractFactory('SignerFixture', second),
+      second,
+    ],
+    [
+      'options',
+      () => ethers.getContractFactory('SignerFixture', { signer: second }),
+      second,
+    ],
+    [
+      'connected',
+      async () =>
+        (await ethers.getContractFactory('SignerFixture')).connect(second),
+      second,
+    ],
+    [
+      'native runner',
+      () => ethers.getContractFactory('SignerFixture', runner),
+      second,
+    ],
+    [
+      'connected native runner',
+      async () =>
+        (await ethers.getContractFactory('SignerFixture')).connect(runner),
+      second,
+    ],
+  ]) {
+    await t.test(`factory ${name}`, async () => {
+      const expected = signer.tronWeb.defaultAddress.hex.toLowerCase();
+      const factory = await createFactory();
+      const deployed = await factory.deploy();
+      assert.deepEqual(operations.at(-1), ['deploy', expected]);
+      assert.equal(signingAccounts.at(-1), expected);
+      await (await deployed.touch()).wait();
+      assert.deepEqual(operations.at(-1), ['call', expected]);
+      assert.equal(signingAccounts.at(-1), expected);
+      await (await factory.attach(address).touch()).wait();
+      assert.deepEqual(operations.at(-1), ['call', expected]);
+      assert.equal(signingAccounts.at(-1), expected);
+    });
+  }
+  for (const [name, signer] of [
+    ['default', undefined],
+    ['explicit', second],
+    ['native runner', runner],
+  ]) {
+    await t.test(`contract ${name}`, async () => {
+      const attached = await ethers.getContractAt(
+        'SignerFixture',
+        address,
+        signer,
+      );
+      await (await attached.touch()).wait();
+      assert.deepEqual(operations.at(-1), [
+        'call',
+        (signer ?? first).tronWeb.defaultAddress.hex.toLowerCase(),
+      ]);
+      await (await attached.connect(first).touch()).wait();
+      assert.deepEqual(operations.at(-1), [
+        'call',
+        first.tronWeb.defaultAddress.hex.toLowerCase(),
+      ]);
+    });
+  }
+  await t.test(
+    'unsupported explicit signers never fall back to the default account',
+    async () => {
+      const unsupported = new ethers.Wallet('3'.padStart(64, '0'));
+      const count = operations.length;
+      for (const create of [
+        () => ethers.getContractFactory('SignerFixture', unsupported),
+        () =>
+          ethers.getContractFactory('SignerFixture', { signer: unsupported }),
+        () => ethers.getContractAt('SignerFixture', address, unsupported),
+      ]) {
+        await assert.rejects(async () => create(), /native TRON signer/);
+      }
+      assert.equal(operations.length, count);
+    },
+  );
+  await t.test(
+    'connect rejects detached and unsupported runners without retaining a key',
+    async () => {
+      const factory = await ethers.getContractFactory('SignerFixture', second);
+      const contract = await ethers.getContractAt(
+        'SignerFixture',
+        address,
+        second,
+      );
+      const count = operations.length;
+      for (const invalid of [
+        null,
+        undefined,
+        new ethers.Wallet('3'.padStart(64, '0')),
+      ]) {
+        assert.throws(() => factory.connect(invalid), /native TRON signer/);
+        assert.throws(() => contract.connect(invalid), /native TRON signer/);
+      }
+      assert.equal(operations.length, count);
+      await (await contract.touch()).wait();
+      assert.deepEqual(operations.at(-1), [
+        'call',
+        second.tronWeb.defaultAddress.hex.toLowerCase(),
+      ]);
+    },
+  );
+});
+
 async function nativeNode(t, patched, options = {}) {
   let snapshot = 0;
   const server = createServer(async (request, response) => {
