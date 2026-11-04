@@ -7,6 +7,7 @@ module.exports = function createModule(deps) {
   // receipt-poll discipline from wait.js with TronWeb's smart-contract
   // creation path.
 
+  const { timeouts } = require('../../../config/tron-defaults.json');
   const { Interface, ParamType } = require('ethers');
   const { normalizeArguments } = require('./abi');
 
@@ -131,7 +132,7 @@ module.exports = function createModule(deps) {
   // hasn't surfaced — see the `iter % 5` block below.)
   async function pollDeployReceipt(tronWeb, txId, opts = {}) {
     const info = await deps.wait.waitForReceipt(tronWeb, txId, {
-      timeout: opts.deployTimeout ?? 180000,
+      timeout: opts.deployTimeout ?? timeouts.deploymentMs,
     });
     if (info.receipt?.result !== 'SUCCESS') {
       throw deps.bridge.buildRevertError(txId, info);

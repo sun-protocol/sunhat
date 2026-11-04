@@ -12,25 +12,32 @@ module.exports = function createModule(deps = {}) {
 
   const { TronWeb } = require('tronweb');
   const { requestJson } = require('./transport');
+  const { setTimeout: delay } = require('node:timers/promises');
 
-  async function rpcCall(tronWeb, method, params = []) {
+  async function rpcCall(tronWeb, method, params = [], options = {}) {
+    const signal = options.signal;
     const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params });
     const request = () =>
       requestJson(tronWeb, '/tre', {
         body,
-        signal: AbortSignal.timeout(5000),
+        signal,
       });
     // Only reads may be repeated after an uncertain transport outcome.
     try {
       return await request();
     } catch (e) {
       if (
+        signal?.aborted ||
         !['tre_version', 'tre_instanceId'].includes(method) ||
         !isTransientFetchError(e)
       ) {
         throw e;
       }
-      await new Promise((r) => setTimeout(r, 100));
+      try {
+        await delay(100, undefined, { signal });
+      } catch {
+        throw e;
+      }
       return request();
     }
   }
@@ -52,15 +59,15 @@ module.exports = function createModule(deps = {}) {
   // Surface "method not found" cleanly so callers can degrade rather
   // than throw. An unpatched fork returns an error object; cheatcodes
   // the patched fork supports return `{ supported: true, result }`.
-  async function callOrFalse(tronWeb, method, params = []) {
-    const r = await rpcCall(tronWeb, method, params);
+  async function callOrFalse(tronWeb, method, params = [], options = {}) {
+    const r = await rpcCall(tronWeb, method, params, options);
     if (r.error) {
       return { supported: false, reason: r.error.message };
     }
     return { supported: true, result: r.result };
   }
 
-  const mine = (tw) => callOrFalse(tw, 'tre_mine', []);
+  const mine = (tw, options) => callOrFalse(tw, 'tre_mine', [], options);
   const setBlockTime = (tw, seconds) =>
     callOrFalse(tw, 'tre_blockTime', [seconds]);
 
@@ -226,7 +233,6 @@ module.exports = function createModule(deps = {}) {
       requestJson(tronWeb, '/wallet/triggersmartcontract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
         body: triggerBody,
       });
 
@@ -269,7 +275,6 @@ module.exports = function createModule(deps = {}) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
         body: JSON.stringify(signed),
       },
     );
@@ -302,7 +307,6 @@ module.exports = function createModule(deps = {}) {
     const createJson = await requestJson(tronWeb, '/wallet/createtransaction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(5000),
       body: jsonStringifyWithBigInts({
         owner_address: TronWeb.address.toHex(fromBase58),
         to_address: TronWeb.address.toHex(toBase58),
@@ -327,7 +331,6 @@ module.exports = function createModule(deps = {}) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
         body: JSON.stringify(signed),
       },
     );
@@ -381,7 +384,6 @@ module.exports = function createModule(deps = {}) {
       const codeJson = await requestJson(tronWeb, '/jsonrpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
         body: JSON.stringify({
           jsonrpc: '2.0',
           method: 'eth_getCode',

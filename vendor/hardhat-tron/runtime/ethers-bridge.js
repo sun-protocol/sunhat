@@ -2,7 +2,7 @@
 
 // Adapted from @openzeppelin/hardhat-tron 0.1.0; see ../provenance.json and LICENSE.
 module.exports = function createModule(deps) {
-  const { requestJson } = require('./transport');
+  const { requestJson, timeoutSignal } = require('./transport');
   const {
     normalizeArguments,
     normalizeCallArguments,
@@ -27,6 +27,7 @@ module.exports = function createModule(deps) {
   const fs = require('node:fs');
   const { ethers: ethersV6 } = require('ethers');
   const { TronWeb } = require('tronweb');
+  const { timeouts } = require('../../../config/tron-defaults.json');
   // Shared address codecs from @openzeppelin/tron-runtime. `toEvmAddress`
   // returns a lowercase EVM `0x` address; `toBase58Address` returns a
   // checksummed `T…` base58 address. Both accept base58, 0x-EVM hex, and
@@ -117,7 +118,11 @@ module.exports = function createModule(deps) {
     async getTransactionReceipt(hash) {
       return knownReceipts.get(hash) || null;
     },
-    async waitForTransaction(hash, confirmations = 1, timeout = 240000) {
+    async waitForTransaction(
+      hash,
+      confirmations = 1,
+      timeout = timeouts.receiptMs,
+    ) {
       if (typeof hash !== 'string' || !/^(?:0x)?[a-fA-F0-9]{64}$/.test(hash)) {
         throw new Error('A native TRON transaction ID is required');
       }
@@ -135,10 +140,11 @@ module.exports = function createModule(deps) {
       if (cached) {
         return cached;
       }
-      const started = Date.now();
+      const signal = timeoutSignal(timeout);
       const info = await deps.context.tre.waitForReceipt(this._tw(), txId, {
         timeout,
         executionReceipt: false,
+        signal,
       });
       let executionReceipt = true;
       if (typeof info?.receipt?.result !== 'string') {
@@ -147,9 +153,7 @@ module.exports = function createModule(deps) {
           '/wallet/gettransactionbyid',
           {
             body: JSON.stringify({ value: txId }),
-            signal: AbortSignal.timeout(
-              Math.max(1, timeout - (Date.now() - started)),
-            ),
+            signal,
           },
         );
         const contracts = transaction?.raw_data?.contract;

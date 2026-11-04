@@ -348,3 +348,182 @@ test(
     assert.equal(diagnostics[0][1], cleanup);
   },
 );
+
+test(
+  'native and SDK requests enforce the same configured timeout through response bodies',
+  { timeout: 5000 },
+  async (t) => {
+    const seen = [];
+    const server = createServer((request, response) => {
+      seen.push(request.url);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.write('{');
+    });
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    t.after(() => {
+      server.closeAllConnections();
+      return new Promise((done) => server.close(done));
+    });
+    const url = `http://127.0.0.1:${server.address().port}/jsonrpc`;
+    const client = { fullNode: transport.createHttpProvider(url, 30) };
+    await assert.rejects(
+      transport.requestJson(client, '/wallet/getaccount', {
+        signal: AbortSignal.timeout(1000),
+      }),
+    );
+    await assert.rejects(
+      client.fullNode.request('/wallet/getaccount', {}, 'post'),
+    );
+    await assert.rejects(createCheatcodes().rpcCall(client, 'tre_mine'));
+    assert.equal(seen.filter((path) => path === '/tre').length, 1);
+    client.fullNode = transport.createHttpProvider(url, 0);
+    await assert.rejects(
+      transport.requestJson(client, '/wallet/getaccount', {
+        signal: AbortSignal.timeout(30),
+      }),
+    );
+    const before = seen.length;
+    await assert.rejects(
+      transport.requestJson(client, '/wallet/getaccount', {
+        signal: AbortSignal.abort(new Error('EXPECTED_CANCEL')),
+      }),
+      /EXPECTED_CANCEL/,
+    );
+    assert.equal(seen.length, before);
+  },
+);
+
+test(
+  'receipt recovery mining and read backoff cannot extend the operation deadline',
+  { timeout: 5000 },
+  async (t) => {
+    const seen = [];
+    const server = createServer((request, response) => {
+      seen.push(request.url);
+      if (request.url === '/tre') {
+        return;
+      }
+      response.setHeader('Content-Type', 'application/json');
+      response.end('{}');
+    });
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    t.after(() => {
+      server.closeAllConnections();
+      return new Promise((done) => server.close(done));
+    });
+    const connection = runtime(
+      `http://127.0.0.1:${server.address().port}/jsonrpc`,
+    );
+    const client = connection.tre.makeTronWeb().tronWeb;
+    client.fullNode.timeout = 0;
+    const started = Date.now();
+    await assert.rejects(
+      connection.tre.waitForReceipt(client, 'a'.repeat(64), { timeout: 300 }),
+    );
+    assert.ok(Date.now() - started < 1500);
+    assert.equal(seen.filter((path) => path === '/tre').length, 1);
+    const count = seen.length;
+    await new Promise((done) => setTimeout(done, 30));
+    assert.equal(seen.length, count);
+
+    const original = new TypeError('fetch failed');
+    let reads = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      reads++;
+      throw original;
+    });
+    await assert.rejects(
+      connection.tre.waitForReceipt(client, 'a'.repeat(64), { timeout: 20 }),
+      (error) => error === original,
+    );
+    assert.equal(reads, 1);
+  },
+);
+
+test('expired provider waits cannot start a late native transaction lookup', async (t) => {
+  const connection = runtime();
+  const waitForReceipt = connection.tre.waitForReceipt;
+  t.mock.method(connection.tre, 'waitForReceipt', async () => {
+    await new Promise((done) => setTimeout(done, 30));
+    return { id: 'a'.repeat(64), blockNumber: 1 };
+  });
+  t.mock.method(globalThis, 'fetch', async () =>
+    assert.fail('Expired wait started HTTP'),
+  );
+  await assert.rejects(
+    connection.ethers.provider.waitForTransaction('a'.repeat(64), 1, 10),
+    (error) => error.name === 'TimeoutError',
+  );
+  for (const timeout of [-1, 1.5, Infinity, 2147483648]) {
+    assert.throws(
+      () => transport.createHttpProvider('http://127.0.0.1', timeout),
+      /TRON timeout/,
+    );
+  }
+  await assert.rejects(
+    waitForReceipt(connection.tre.makeTronWeb().tronWeb, 'a'.repeat(64), {
+      timeout: 0,
+    }),
+  );
+});
+
+test(
+  'SDK deadlines also bound a response that continuously sends body chunks',
+  { timeout: 3000 },
+  async (t) => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.write('{');
+      const interval = setInterval(() => response.write(' '), 10);
+      response.on('close', () => clearInterval(interval));
+    });
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    t.after(() => {
+      server.closeAllConnections();
+      return new Promise((done) => server.close(done));
+    });
+    const provider = transport.createHttpProvider(
+      `http://127.0.0.1:${server.address().port}`,
+      50,
+    );
+    const started = Date.now();
+    await assert.rejects(provider.request('/wallet/getaccount', {}, 'post'));
+    assert.ok(Date.now() - started < 1000);
+  },
+);
+
+test(
+  'cancellation during recovery mining preserves the original reason',
+  { timeout: 3000 },
+  async (t) => {
+    const controller = new AbortController();
+    const reason = new Error('EXPECTED_RECOVERY_CANCELLATION');
+    let mines = 0;
+    const server = createServer((request, response) => {
+      if (request.url === '/tre') {
+        mines++;
+        controller.abort(reason);
+        return;
+      }
+      response.setHeader('Content-Type', 'application/json');
+      response.end('{}');
+    });
+    await new Promise((done) => server.listen(0, '127.0.0.1', done));
+    t.after(() => {
+      server.closeAllConnections();
+      return new Promise((done) => server.close(done));
+    });
+    const connection = runtime(
+      `http://127.0.0.1:${server.address().port}/jsonrpc`,
+    );
+    await assert.rejects(
+      connection.tre.waitForReceipt(
+        connection.tre.makeTronWeb().tronWeb,
+        'a'.repeat(64),
+        { timeout: 1000, signal: controller.signal },
+      ),
+      (error) => error === reason,
+    );
+    assert.equal(mines, 1);
+  },
+);

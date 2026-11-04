@@ -35,11 +35,6 @@ module.exports = function createModule(runtimeDeps) {
   const DEFAULT_BALANCE_SUN = 5_000_000_000_000_000_000n;
   const SIGNER_COUNT = 10;
 
-  // Match the deployer TronWeb's 300 s HTTP timeout (see
-  // `src/runtime/tre-web.js`). Each signer gets its own TronWeb
-  // client, so each needs the same override.
-  const HTTP_TIMEOUT_MS = 300_000;
-
   // Cache so `buildSigners()` returns the SAME array across calls in a
   // single test run — fixtures and per-test setup re-call it many times.
   let _cachedSigners = null;
@@ -72,7 +67,7 @@ module.exports = function createModule(runtimeDeps) {
       : privateKey;
     const provider = createHttpProvider(
       url,
-      hre.network.config.timeout ?? HTTP_TIMEOUT_MS,
+      hre.network.config.timeout,
       hre.network.config.httpHeaders,
     );
     return new TronWeb({ fullHost: provider, privateKey: pkNo0x });

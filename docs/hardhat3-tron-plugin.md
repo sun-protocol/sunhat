@@ -114,3 +114,12 @@ prediction and deployment changes the signed transaction identity; the earlier
 prediction is not reused. For stable predictions with a
 `gasLimit`, explicitly fix `energyPrice` for the controlled test node, or omit
 `gasLimit` to use the configured budget directly.
+
+`networks.<name>.timeout` controls both SDK and native HTTP requests, including
+cheatcodes. A value of `0` disables only the per-request timer. Explicit
+operation deadlines still apply: receipt waits default to 240 seconds and
+deployment receipt waits to 180 seconds after broadcast. Polls, read retries,
+confirmed-view queries and recovery mining share that operation deadline;
+retries cannot extend it. Caller cancellation and the network timeout are both
+enforced, including while reading response bodies. Readiness probes and compiler
+operations retain their separate deadlines.

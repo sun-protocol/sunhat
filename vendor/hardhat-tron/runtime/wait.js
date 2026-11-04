@@ -9,7 +9,9 @@ module.exports = function createModule(deps) {
   // solidified view as a hedge for public networks.
 
   const { mine, isTransientFetchError } = deps.cheatcodes;
-  const { requestJson } = require('./transport');
+  const { requestJson, timeoutSignal } = require('./transport');
+  const { timeouts } = require('../../../config/tron-defaults.json');
+  const { setTimeout: delay } = require('node:timers/promises');
 
   // BigInt-safe JSON parser for TVM transaction-info responses. TVM's
   // response embeds `callValueInfo[*].callValue` (and similar fields) as
@@ -29,15 +31,13 @@ module.exports = function createModule(deps) {
   // adoption.
   const { jsonParseBigSafe } = require('@openzeppelin/tron-runtime');
 
-  async function _getInfoBigSafe(tronWeb, txId, endpoint, deadline) {
+  async function _getInfoBigSafe(tronWeb, txId, endpoint, signal) {
     // Use the same fullnode host TronWeb is configured with; bypass
     // TronWeb's JSON parsing (lossy on large integers).
     const fetchInfo = () =>
       requestJson(tronWeb, endpoint, {
         body: JSON.stringify({ value: txId }),
-        signal: AbortSignal.timeout(
-          Math.max(1, Math.min(5000, deadline - Date.now())),
-        ),
+        signal,
       });
     // Single retry on a connection-level error ("fetch failed", "other side
     // closed", ECONNRESET, …) on EITHER the request or the body read. java-tron
@@ -49,10 +49,14 @@ module.exports = function createModule(deps) {
     try {
       return await fetchInfo();
     } catch (e) {
-      if (!isTransientFetchError(e)) {
+      if (signal.aborted || !isTransientFetchError(e)) {
         throw e;
       }
-      await new Promise((r) => setTimeout(r, 100));
+      try {
+        await delay(100, undefined, { signal });
+      } catch {
+        throw e;
+      }
       return fetchInfo();
     }
   }
@@ -60,9 +64,17 @@ module.exports = function createModule(deps) {
   async function waitForReceipt(
     tronWeb,
     txId,
-    { timeout = 240_000, executionReceipt = true } = {},
+    {
+      timeout = timeouts.receiptMs,
+      executionReceipt = true,
+      signal: callerSignal,
+    } = {},
   ) {
-    const deadline = Date.now() + timeout;
+    const deadline = timeoutSignal(timeout);
+    const signal = callerSignal
+      ? AbortSignal.any([deadline, callerSignal])
+      : deadline;
+    signal.throwIfAborted();
     let iter = 0;
     // `tronContract.method(...).send()` internally drives a single block
     // production cycle (verified by probe: block advances by exactly 1
@@ -81,7 +93,7 @@ module.exports = function createModule(deps) {
     // millisecond compounds. The GET to TRE itself is the floor
     // (~5-15 ms), so we can't go faster than that — but we shouldn't be
     // slower either.
-    while (Date.now() < deadline) {
+    while (!signal.aborted) {
       // Unconfirmed view is the cheap fast path. Some txs (especially
       // late in a long run) only surface via the CONFIRMED view — even
       // with TransactionStore snapshotted, TRE's HTTP layer can index a
@@ -100,7 +112,7 @@ module.exports = function createModule(deps) {
         tronWeb,
         txId,
         '/wallet/gettransactioninfobyid',
-        deadline,
+        signal,
       );
       if (
         info &&
@@ -116,7 +128,7 @@ module.exports = function createModule(deps) {
           tronWeb,
           txId,
           '/walletsolidity/gettransactioninfobyid',
-          deadline,
+          signal,
         ).catch(() => null);
         if (
           confirmed &&
@@ -129,31 +141,13 @@ module.exports = function createModule(deps) {
         }
       }
       // Recovery mine every 5 iterations.
-      if (iter && iter % 5 === 0 && deadline - Date.now() > 5000) {
-        await mine(tronWeb).catch(() => {});
+      if (iter && iter % 5 === 0 && !signal.aborted) {
+        await mine(tronWeb, { signal }).catch(() => {});
       }
       iter++;
       await new Promise((r) => setImmediate(r));
     }
-    // Fallback to the solidified view as a last-ditch hedge before
-    // throwing — only meaningful on public networks (shasta/mainnet);
-    // local TRE never reaches solidified state.
-    const info = await _getInfoBigSafe(
-      tronWeb,
-      txId,
-      '/walletsolidity/gettransactioninfobyid',
-      deadline,
-    );
-    if (
-      info &&
-      (info.receipt ||
-        (!executionReceipt &&
-          typeof info.id === 'string' &&
-          Number.isSafeInteger(info.blockNumber)))
-    ) {
-      return info;
-    }
-    throw new Error(`Timed out waiting for receipt of tx ${txId}`);
+    signal.throwIfAborted();
   }
 
   return { waitForReceipt, jsonParseBigSafe };

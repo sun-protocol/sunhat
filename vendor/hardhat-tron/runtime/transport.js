@@ -1,5 +1,7 @@
 'use strict';
 
+const { timeouts } = require('../../../config/tron-defaults.json');
+
 // Native endpoints share the configured path prefix, query and credentials.
 function endpointUrl(source, endpoint = '') {
   const url = new URL(source);
@@ -22,7 +24,26 @@ function describeEndpoint(source) {
   }
 }
 
+function validateTimeout(timeout) {
+  if (!Number.isInteger(timeout) || timeout < 0 || timeout > 2147483647) {
+    throw new Error(
+      'TRON timeout must be an integer between 0 and 2147483647 ms',
+    );
+  }
+  return timeout;
+}
+
+function timeoutSignal(timeout) {
+  validateTimeout(timeout);
+  return timeout === 0
+    ? AbortSignal.abort(
+        new DOMException('TRON operation deadline expired', 'TimeoutError'),
+      )
+    : AbortSignal.timeout(timeout);
+}
+
 async function requestJson(source, endpoint, options = {}) {
+  options.signal?.throwIfAborted();
   const provider = typeof source === 'string' ? undefined : source.fullNode;
   const url = endpointUrl(provider ? provider.host : source, endpoint);
   const headers = new Headers(provider?.headers);
@@ -43,15 +64,20 @@ async function requestJson(source, endpoint, options = {}) {
     url.username = '';
     url.password = '';
   }
-  const timeout = provider?.timeout ?? 5000;
+  const timeout = provider?.timeout ?? timeouts.requestMs;
+  const signals = [options.signal];
+  if (timeout !== 0) {
+    signals.push(timeoutSignal(timeout));
+  }
+  const activeSignals = signals.filter(
+    (signal) => signal !== undefined && signal !== null,
+  );
   const response = await fetch(url.href, {
     method: 'POST',
     ...options,
     redirect: 'error',
     headers,
-    signal:
-      options.signal ??
-      (timeout === 0 ? undefined : AbortSignal.timeout(timeout)),
+    signal: activeSignals.length ? AbortSignal.any(activeSignals) : undefined,
   });
   if (!response.ok) {
     const error = Object.assign(
@@ -78,7 +104,12 @@ async function requestJson(source, endpoint, options = {}) {
   return jsonParseBigSafe(await response.text());
 }
 
-function createHttpProvider(source, timeout = 300000, headers = {}) {
+function createHttpProvider(
+  source,
+  timeout = timeouts.requestMs,
+  headers = {},
+) {
+  validateTimeout(timeout);
   const { HttpProvider } = require('tronweb').providers;
   class NativeHttpProvider extends HttpProvider {
     request(endpoint, payload = {}, method = 'get') {
@@ -91,6 +122,7 @@ function createHttpProvider(source, timeout = 300000, headers = {}) {
           data: verb === 'post' && Object.keys(payload).length ? payload : null,
           params: verb === 'get' ? payload : undefined,
           maxRedirects: 0,
+          signal: this.timeout === 0 ? undefined : timeoutSignal(this.timeout),
         })
         .then(({ data }) => data);
     }
@@ -120,5 +152,6 @@ module.exports = {
   endpointUrl,
   describeEndpoint,
   requestJson,
+  timeoutSignal,
   createHttpProvider,
 };

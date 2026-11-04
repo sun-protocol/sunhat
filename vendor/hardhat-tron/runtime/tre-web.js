@@ -14,17 +14,6 @@ module.exports = function createModule() {
   const _tronWebCache = new Map();
   const { createHttpProvider } = require('./transport');
 
-  // TronWeb's default axios timeout for `/wallet/*` HTTP calls is 30 s.
-  // In long parallel runs java-tron's state-store / snapshot
-  // LinkedHashMap grows large enough that some individual tx
-  // round-trips stall well past 30 s — and past 120 s in the worst
-  // cases — under JVM GC pressure or state-warmup. The HTTP layer
-  // surfaces those as `AxiosError: timeout of Nms exceeded` even though
-  // TRE itself recovers a beat later. 300 s gives the slow-tail txs
-  // enough headroom without papering over genuine hangs (anything
-  // beyond five minutes is still a real failure mode worth surfacing).
-  const HTTP_TIMEOUT_MS = 300_000;
-
   function makeTronWeb(hre) {
     const { TronWeb } = require('tronweb');
 
@@ -46,7 +35,7 @@ module.exports = function createModule() {
     // (TronWeb's string-URL constructor would use the default 30 s).
     const provider = createHttpProvider(
       url,
-      hre.network.config.timeout ?? HTTP_TIMEOUT_MS,
+      hre.network.config.timeout,
       hre.network.config.httpHeaders,
     );
     const tronWeb = new TronWeb({
