@@ -41,12 +41,19 @@ export interface RuntimeContext {
   };
   network: {
     name: string;
-    config: { tron: true; url: string; accounts: string[] };
+    config: {
+      tron: true;
+      url: string;
+      accounts: string[];
+      httpHeaders?: Record<string, string>;
+      timeout?: number;
+    };
     provider: Pick<EthereumProvider, 'request'>;
   };
   ethers?: object;
 }
 export interface LifecycleConfig {
+  httpHeaders?: Record<string, string>;
   image: string;
   port: number;
   readinessTimeoutMs: number;
@@ -62,7 +69,11 @@ export interface Lifecycle {
     log?: (message: string) => void,
   ): Promise<{ spawned: boolean; name: string | null; url: string }>;
   teardown(name: string | null): void;
-  isReachable(url: string, timeoutMs?: number): Promise<boolean>;
+  isReachable(
+    url: string,
+    timeoutMs?: number,
+    httpHeaders?: Record<string, string>,
+  ): Promise<boolean>;
 }
 export function createRuntime(context: RuntimeContext): {
   ethers: Readonly<Record<string, unknown>>;

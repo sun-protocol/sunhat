@@ -25,6 +25,8 @@ export default defineConfig({
 
 `accounts: 'remote'` creates a read-only connection with no signers. Configure local keys or an HD account definition for native writes. The ethers facade interprets value and balance integers as sun: one boundary unit is one sun, not one ether. Native resource fields remain available on `receipt.nativeReceipt` and `receipt.nativeTransactionInfo`; `nativeTransactionId` retains the original TRON ID. Broadcasts wait for actual inclusion, including plain TRX transfers.
 
+Configure authentication through the Hardhat network's `httpHeaders`. Native requests and SDK signers retain the configured URL's path prefix and query parameters; diagnostic messages show only the origin. Network `timeout: 0` disables the default client timeout, while readiness and receipt polling retain their own deadlines. State reads reject transport and invalid-response errors instead of returning zero. Mutating TRE requests and broadcasts do not automatically retry or follow redirects after an uncertain outcome.
+
 ## Compiler and connections
 
 The package's default TRE image and compiler mirror are maintained in `config/tron-defaults.json`. A project's `tre.image` and `tre.compiler.mirror` settings override these defaults; `tre.compiler.path` selects a local compiler instead.

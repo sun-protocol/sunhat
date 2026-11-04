@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import core from '../../../vendor/hardhat-tron/index.js';
 import type { LifecycleConfig } from '../../../vendor/hardhat-tron/index.js';
 import type { TreConfig } from './types.js';
+import { describeEndpoint } from '../../../vendor/hardhat-tron/runtime/transport.js';
 
 export type TreTask = 'test' | 'compile' | 'node' | 'connection';
 export const taskContext = new AsyncLocalStorage<TreTask>();
@@ -17,6 +18,7 @@ export function createTreManager(lifecycle = core.createLifecycle()) {
   async function acquireTre(
     config: TreConfig,
     url: string,
+    httpHeaders: Record<string, string> = {},
   ): Promise<() => Promise<void>> {
     const endpoint = new URL(url);
     if (!['http:', 'https:'].includes(endpoint.protocol)) {
@@ -27,6 +29,7 @@ export function createTreManager(lifecycle = core.createLifecycle()) {
     );
     const settings: LifecycleConfig = {
       image: config.image,
+      httpHeaders,
       port: config.port ?? port,
       startupEnv: config.startupEnv,
       readinessTimeoutMs: config.readinessTimeoutMs,
@@ -75,9 +78,9 @@ export function createTreManager(lifecycle = core.createLifecycle()) {
             console.error(`[sunhat-tron] ${message}`),
           );
         }
-        if (!(await lifecycle.isReachable(url))) {
+        if (!(await lifecycle.isReachable(url, 2000, httpHeaders))) {
           throw new Error(
-            `TRON node is not ready at ${url}; start Docker TRE or enable the applicable tre.autoStart policy`,
+            `TRON node is not ready at ${describeEndpoint(url)}; start Docker TRE or enable the applicable tre.autoStart policy`,
           );
         }
         return { spawned: false, name: null };

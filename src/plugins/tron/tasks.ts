@@ -6,6 +6,7 @@ import type { HardhatRuntimeEnvironment } from 'hardhat/types/hre';
 import { acquireTre, taskContext } from './resources.js';
 import { withCleanup } from './cleanup.js';
 import type { TreTask } from './resources.js';
+import { describeEndpoint } from '../../../vendor/hardhat-tron/runtime/transport.js';
 
 async function acquireSelected(
   hre: HardhatRuntimeEnvironment,
@@ -30,7 +31,7 @@ async function acquireSelected(
   if (!requireReady && (!config.autoStart || !policy)) {
     return async () => {};
   }
-  return acquireTre(config, await selected.url.getUrl());
+  return acquireTre(config, await selected.url.getUrl(), selected.httpHeaders);
 }
 function wrap(reason: TreTask): TaskOverrideActionFunction {
   return async (args, hre, runSuper) =>
@@ -53,7 +54,7 @@ export const runNode: TaskOverrideActionFunction = async (
   return taskContext.run('node', async () => {
     const release = await acquireSelected(hre, true);
     console.log(
-      `TRON node ready at ${await selected.url.getUrl()}; the TRE container remains running after exit`,
+      `TRON node ready at ${describeEndpoint(await selected.url.getUrl())}; the TRE container remains running after exit`,
     );
     await new Promise<void>((done) => {
       const alive = setInterval(() => {}, 1000);

@@ -10,38 +10,27 @@ module.exports = function createModule() {
   // endpoint is the EVM-compat shim and does not expose `tre_*`.
 
   const { TronWeb } = require('tronweb');
+  const { requestJson } = require('./transport');
 
   async function rpcCall(tronWeb, method, params = []) {
-    const url = tronWeb.fullNode.host.replace(/\/$/, '') + '/tre';
     const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method, params });
-    // Single retry on a connection-level error ("fetch failed", TypeError,
-    // AbortError). java-tron under G1GC with -Xmx2g can stop-the-world for
-    // 50–200 ms late in long parallel runs as the chain state grows; a
-    // pause that exceeds node's default fetch keep-alive timeout surfaces
-    // as a TypeError here rather than as a server-side error code. One
-    // 100 ms backoff catches those without masking real RPC failures
-    // (which come back as `res.json()` with `error: {…}` and aren't
-    // caught here).
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
+    const request = () =>
+      requestJson(tronWeb, '/tre', {
         body,
+        signal: AbortSignal.timeout(5000),
       });
-      return res.json();
+    // Only reads may be repeated after an uncertain transport outcome.
+    try {
+      return await request();
     } catch (e) {
-      if (!isTransientFetchError(e)) {
+      if (
+        !['tre_version', 'tre_instanceId'].includes(method) ||
+        !isTransientFetchError(e)
+      ) {
         throw e;
       }
       await new Promise((r) => setTimeout(r, 100));
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(5000),
-        body,
-      });
-      return res.json();
+      return request();
     }
   }
 
@@ -63,9 +52,7 @@ module.exports = function createModule() {
   // than throw. An unpatched fork returns an error object; cheatcodes
   // the patched fork supports return `{ supported: true, result }`.
   async function callOrFalse(tronWeb, method, params = []) {
-    const r = await rpcCall(tronWeb, method, params).catch((e) => ({
-      error: { message: e.message },
-    }));
+    const r = await rpcCall(tronWeb, method, params);
     if (r.error) {
       return { supported: false, reason: r.error.message };
     }
@@ -218,7 +205,6 @@ module.exports = function createModule() {
     tronWeb,
     { fromBase58, toBase58, data, value = 0n, multisig = false, feeLimit },
   ) {
-    const base = tronWeb.fullNode.host.replace(/\/$/, '');
     const dataHex =
       typeof data === 'string' && data.startsWith('0x')
         ? data.slice(2)
@@ -243,12 +229,12 @@ module.exports = function createModule() {
       visible: false,
     });
     const doTrigger = () =>
-      fetch(base + '/wallet/triggersmartcontract', {
+      requestJson(tronWeb, '/wallet/triggersmartcontract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(5000),
         body: triggerBody,
-      }).then((r) => r.json());
+      });
 
     let triggerJson = await doTrigger();
     if (
@@ -283,13 +269,16 @@ module.exports = function createModule() {
       multisig,
     );
 
-    const broadcastResp = await fetch(base + '/wallet/broadcasttransaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-      body: JSON.stringify(signed),
-    });
-    const broadcastJson = await broadcastResp.json();
+    const broadcastJson = await requestJson(
+      tronWeb,
+      '/wallet/broadcasttransaction',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify(signed),
+      },
+    );
     if (!broadcastJson.result) {
       const code =
         broadcastJson.code ||
@@ -310,14 +299,13 @@ module.exports = function createModule() {
     tronWeb,
     { fromBase58, toBase58, value, multisig = false },
   ) {
-    const base = tronWeb.fullNode.host.replace(/\/$/, '');
     const amount = valueToCallValue(value);
     if (amount <= 0) {
       throw new Error(
         'sendTransferTx: amount must be > 0 — TVM rejects 0-amount transfers',
       );
     }
-    const createResp = await fetch(base + '/wallet/createtransaction', {
+    const createJson = await requestJson(tronWeb, '/wallet/createtransaction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(5000),
@@ -328,7 +316,6 @@ module.exports = function createModule() {
         visible: false,
       }),
     });
-    const createJson = await createResp.json();
     if (!createJson.txID) {
       throw new Error(
         `createtransaction failed: ${JSON.stringify(createJson)}`,
@@ -340,13 +327,16 @@ module.exports = function createModule() {
       undefined,
       multisig,
     );
-    const broadcastResp = await fetch(base + '/wallet/broadcasttransaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(5000),
-      body: JSON.stringify(signed),
-    });
-    const broadcastJson = await broadcastResp.json();
+    const broadcastJson = await requestJson(
+      tronWeb,
+      '/wallet/broadcasttransaction',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(5000),
+        body: JSON.stringify(signed),
+      },
+    );
     if (!broadcastJson.result) {
       throw new Error(
         `broadcast failed: ${broadcastJson.code || broadcastJson.message || JSON.stringify(broadcastJson)}`,
@@ -391,11 +381,10 @@ module.exports = function createModule() {
       return false;
     } // already tried, don't loop
 
-    const base = tronWeb.fullNode.host.replace(/\/$/, '');
     const hexAddr = '0x' + TronWeb.address.toHex(toBase58).slice(2);
     let bytecode;
     try {
-      const codeResp = await fetch(base + '/jsonrpc', {
+      const codeJson = await requestJson(tronWeb, '/jsonrpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(5000),
@@ -406,7 +395,6 @@ module.exports = function createModule() {
           id: 1,
         }),
       });
-      const codeJson = await codeResp.json();
       bytecode = codeJson.result;
     } catch {
       return false;

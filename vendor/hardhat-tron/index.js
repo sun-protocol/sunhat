@@ -52,6 +52,7 @@ function createRuntime(input) {
       }).instanceId({
         networkName: context.network.name,
         url: context.network.config.url,
+        httpHeaders: context.network.config.httpHeaders,
         provider: context.network.provider,
       }),
   };

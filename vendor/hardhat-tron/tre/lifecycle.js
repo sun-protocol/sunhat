@@ -2,6 +2,7 @@
 
 // Adapted from @openzeppelin/hardhat-tron 0.1.0; see ../provenance.json and LICENSE.
 module.exports = function createModule(deps) {
+  const { requestJson, describeEndpoint } = require('../runtime/transport');
   // Docker lifecycle for the TRE container. Single-container case
   // only — multi-worker parallel test orchestration stays out of this
   // package; consumers that need it manage their own containers and
@@ -155,7 +156,7 @@ module.exports = function createModule(deps) {
     }
     if (matches.length > 1) {
       throw new Error(
-        `[hardhat-tron] multiple containers publish port ${port} for ${networkUrl}: ` +
+        `[hardhat-tron] multiple containers publish port ${port} for ${describeEndpoint(networkUrl)}: ` +
           matches.map((m) => `${m.name} (${m.id.slice(0, 12)})`).join(', ') +
           `. Cannot attribute the node to one of them; point the network url at the container's ` +
           `exact loopback address (e.g. http://127.0.0.1:${port}) or stop the containers you are not using.`,
@@ -240,37 +241,29 @@ module.exports = function createModule(deps) {
     }
   }
 
-  async function isReachable(networkUrl, timeoutMs = 2000) {
-    const root = networkUrl.replace(/\/jsonrpc\/?$/, '').replace(/\/$/, '');
+  async function isReachable(networkUrl, timeoutMs = 2000, httpHeaders = {}) {
     try {
-      const response = await fetch(root + '/wallet/getnodeinfo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const info = await requestJson(networkUrl, '/wallet/getnodeinfo', {
+        headers: httpHeaders,
         body: '{}',
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!response.ok) {
-        return false;
-      }
-      const info = await response.json();
       if (typeof info?.configNodeInfo?.codeVersion !== 'string') {
         return false;
       }
-      const blockResponse = await fetch(root + '/wallet/getnowblock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const block = await requestJson(networkUrl, '/wallet/getnowblock', {
+        headers: httpHeaders,
         body: '{}',
         signal: AbortSignal.timeout(timeoutMs),
       });
-      if (!blockResponse.ok) {
-        return false;
-      }
-      const block = await blockResponse.json();
       return (
         Number.isSafeInteger(block?.block_header?.raw_data?.number) &&
         block.block_header.raw_data.number >= 1
       );
-    } catch {
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403) {
+        throw error;
+      }
       return false;
     }
   }
@@ -337,26 +330,28 @@ module.exports = function createModule(deps) {
     return args;
   }
 
-  async function waitForReady(url, deadlineMs, log) {
+  async function waitForReady(url, deadlineMs, log, httpHeaders) {
     const start = Date.now();
     const lastErr = null;
     while (Date.now() - start < deadlineMs) {
-      if (await isReachable(url)) {
+      if (await isReachable(url, 2000, httpHeaders)) {
         log(`  TRE ready in ${Math.floor((Date.now() - start) / 1000)}s`);
         return;
       }
       await new Promise((r) => setTimeout(r, 250));
     }
     throw new Error(
-      `TRE did not become ready at ${url} within ${deadlineMs}ms (last: ${lastErr})`,
+      `TRE did not become ready at ${describeEndpoint(url)} within ${deadlineMs}ms (last: ${lastErr})`,
     );
   }
 
   // Returns { spawned, name, url }. spawned=false means we re-used an
   // existing reachable container (or a manually-started one).
   async function ensureUp(cfg, networkUrl, log = () => {}) {
-    if (await isReachable(networkUrl)) {
-      log(`  TRE already reachable at ${networkUrl} (skipping spawn)`);
+    if (await isReachable(networkUrl, 2000, cfg.httpHeaders)) {
+      log(
+        `  TRE already reachable at ${describeEndpoint(networkUrl)} (skipping spawn)`,
+      );
       // We didn't spawn it, but a parallel-test runner (own container + TRE_URL)
       // or a manual `tre:up` may have left the chain at genesis (block 0), where
       // java-tron's proto3 omits the zero `number` field and the first
@@ -391,7 +386,12 @@ module.exports = function createModule(deps) {
 
     _launched.set(networkUrl, name);
     try {
-      await waitForReady(networkUrl, cfg.readinessTimeoutMs, log);
+      await waitForReady(
+        networkUrl,
+        cfg.readinessTimeoutMs,
+        log,
+        cfg.httpHeaders,
+      );
     } catch (error) {
       if (!cfg.keepRunning) {
         try {

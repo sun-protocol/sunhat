@@ -54,6 +54,7 @@ module.exports = function createModule(deps) {
 
   const { spawnSync } = require('node:child_process');
   const crypto = require('node:crypto');
+  const { requestJson, describeEndpoint } = require('./transport');
 
   const lifecycle = deps.lifecycle;
 
@@ -124,10 +125,9 @@ module.exports = function createModule(deps) {
   // undefined -- an answer, not a probe failure. Transient statuses (408, 429,
   // 5xx) are thrown so an intermediary's error page is not mistaken for a
   // definitive answer.
-  async function fetchNodeServedInstanceId(url) {
-    const res = await fetch(url.replace(/\/jsonrpc$/, '/tre'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+  async function fetchNodeServedInstanceId(url, httpHeaders) {
+    const body = await requestJson(url, '/tre', {
+      headers: httpHeaders,
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
@@ -136,10 +136,6 @@ module.exports = function createModule(deps) {
       }),
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    if (res.status === 408 || res.status === 429 || res.status >= 500) {
-      throw new Error(`tre probe: upstream ${res.status}`);
-    }
-    const body = await res.json();
     const id = body && body.result;
     return typeof id === 'string' && /^0x[0-9a-f]{64}$/.test(id)
       ? id
@@ -157,10 +153,13 @@ module.exports = function createModule(deps) {
   // { id: undefined, definitive: true } -- the node answered, tier 0 does not
   // apply; { id: undefined, definitive: false } -- no answer arrived after a
   // retry, so the caller must not commit this observer away from the served id.
-  async function nodeServedInstanceId(url) {
+  async function nodeServedInstanceId(url, httpHeaders) {
     for (let attempt = 0; ; attempt++) {
       try {
-        return { id: await fetchNodeServedInstanceId(url), definitive: true };
+        return {
+          id: await fetchNodeServedInstanceId(url, httpHeaders),
+          definitive: true,
+        };
       } catch (err) {
         if (isDefinitiveProbeError(err)) {
           return { id: undefined, definitive: true };
@@ -187,7 +186,7 @@ module.exports = function createModule(deps) {
     const hash = genesis && genesis.hash;
     if (!hash) {
       throw new Error(
-        `Could not read the genesis block hash from ${url} to derive a TRE instance id.`,
+        `Could not read the genesis block hash from ${describeEndpoint(url)} to derive a TRE instance id.`,
       );
     }
     return hash;
@@ -216,7 +215,7 @@ module.exports = function createModule(deps) {
     return p;
   }
 
-  async function resolveInstanceId({ url, provider }) {
+  async function resolveInstanceId({ url, provider, httpHeaders }) {
     // A cache write is void if teardown evicted the url while a probe was in
     // flight: the resolved id belongs to the instance that was just removed.
     const gen = _evictGen.get(url) || 0;
@@ -231,7 +230,7 @@ module.exports = function createModule(deps) {
       // The probe that produced this id never got an answer, so the node may
       // serve an id every other observer already agrees on. Re-probe tier 0
       // only: the lower tiers are deterministic and cannot change.
-      const probe = await nodeServedInstanceId(url);
+      const probe = await nodeServedInstanceId(url, httpHeaders);
       const id = probe.id || cached.id;
       if (evicted()) {
         return id;
@@ -243,14 +242,14 @@ module.exports = function createModule(deps) {
         return cached.id;
       }
       console.warn(
-        `[hardhat-tron] the tre_instanceId probe for ${url} never got an answer; ` +
+        `[hardhat-tron] the tre_instanceId probe for ${describeEndpoint(url)} never got an answer; ` +
           `settling on the fallback instance id. If this node runs the patched TRE jar, ` +
           `other processes may key their upgrades manifest differently.`,
       );
       return commit(url, cached.id);
     }
 
-    const probe = await nodeServedInstanceId(url);
+    const probe = await nodeServedInstanceId(url, httpHeaders);
     let id = probe.id;
     if (!id) {
       const ownedName = lifecycle.launchedContainerFor(url);
@@ -261,7 +260,7 @@ module.exports = function createModule(deps) {
         id = owned.id;
         if (!id) {
           throw new Error(
-            `hardhat-tron launched the TRE container "${ownedName}" for ${url} ` +
+            `hardhat-tron launched the TRE container "${ownedName}" for ${describeEndpoint(url)} ` +
               `but could not read its docker identity: ${owned.failure}. ` +
               `Check that docker is still reachable, or remove the container and rerun.`,
           );

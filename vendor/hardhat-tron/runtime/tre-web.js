@@ -12,6 +12,7 @@ module.exports = function createModule() {
   // fixture). Cache one instance per (network, privateKey) tuple; tests
   // that need a fresh client can build one manually.
   const _tronWebCache = new Map();
+  const { createHttpProvider } = require('./transport');
 
   // TronWeb's default axios timeout for `/wallet/*` HTTP calls is 30 s.
   // In long parallel runs java-tron's state-store / snapshot
@@ -25,14 +26,13 @@ module.exports = function createModule() {
   const HTTP_TIMEOUT_MS = 300_000;
 
   function makeTronWeb(hre) {
-    const { TronWeb, providers } = require('tronweb');
-    const { HttpProvider } = providers;
+    const { TronWeb } = require('tronweb');
 
     const accounts = hre.network.config.accounts || [];
     const raw = accounts[0];
     const pk =
       raw === undefined ? undefined : raw.startsWith('0x') ? raw.slice(2) : raw;
-    const url = hre.network.config.url.replace(/\/jsonrpc$/i, '');
+    const url = hre.network.config.url;
 
     const cacheKey = `${url}:${pk}`;
     const cached = _tronWebCache.get(cacheKey);
@@ -44,7 +44,11 @@ module.exports = function createModule() {
     // `/jsonrpc`; the TronWeb client expects the bare host. Pass a
     // pre-built HttpProvider so the axios timeout can be raised
     // (TronWeb's string-URL constructor would use the default 30 s).
-    const provider = new HttpProvider(url, HTTP_TIMEOUT_MS);
+    const provider = createHttpProvider(
+      url,
+      hre.network.config.timeout ?? HTTP_TIMEOUT_MS,
+      hre.network.config.httpHeaders,
+    );
     const tronWeb = new TronWeb({
       fullHost: provider,
       ...(pk === undefined ? {} : { privateKey: pk }),

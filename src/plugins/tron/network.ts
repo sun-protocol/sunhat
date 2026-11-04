@@ -44,7 +44,7 @@ export default async (): Promise<Partial<NetworkHooks>> => {
         const config = context.config.tre ?? normalizeTre(undefined);
         const url = await network.url.getUrl();
         const accounts = await resolveSigningAccounts(network.accounts);
-        release = await acquireTre(config, url);
+        release = await acquireTre(config, url, network.httpHeaders);
         const runtime = core.createRuntime({
           config: {
             paths: {
@@ -56,7 +56,13 @@ export default async (): Promise<Partial<NetworkHooks>> => {
           },
           network: {
             name: connection.networkName,
-            config: { tron: true, url, accounts },
+            config: {
+              tron: true,
+              url,
+              accounts,
+              httpHeaders: network.httpHeaders,
+              timeout: network.timeout,
+            },
             provider: connection.provider,
           },
           ethers: connection.ethers,

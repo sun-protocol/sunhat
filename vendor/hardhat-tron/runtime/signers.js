@@ -65,12 +65,16 @@ module.exports = function createModule(runtimeDeps) {
   }
 
   function buildTronWeb(hre, privateKey) {
-    const { HttpProvider } = require('tronweb').providers;
-    const url = hre.network.config.url.replace(/\/jsonrpc$/i, '');
+    const { createHttpProvider } = require('./transport');
+    const url = hre.network.config.url;
     const pkNo0x = privateKey.startsWith('0x')
       ? privateKey.slice(2)
       : privateKey;
-    const provider = new HttpProvider(url, HTTP_TIMEOUT_MS);
+    const provider = createHttpProvider(
+      url,
+      hre.network.config.timeout ?? HTTP_TIMEOUT_MS,
+      hre.network.config.httpHeaders,
+    );
     return new TronWeb({ fullHost: provider, privateKey: pkNo0x });
   }
 

@@ -8,6 +8,7 @@ import plugin from '../dist/plugins/tron/index.js';
 import ethersMatchers from '@nomicfoundation/hardhat-ethers-chai-matchers';
 import { expect } from 'chai';
 import { Contract } from 'ethers';
+import { createServer } from 'node:http';
 import core from '../vendor/hardhat-tron/index.js';
 import { normalizeTre } from '../dist/plugins/tron/settings.js';
 import { withCleanup } from '../dist/plugins/tron/cleanup.js';
@@ -16,6 +17,81 @@ import {
   createTreManager,
   taskContext,
 } from '../dist/plugins/tron/resources.js';
+
+test('Hardhat forwards native HTTP credentials and redacts readiness failures', async (t) => {
+  const requests = [];
+  const server = createServer((request, response) => {
+    requests.push(request.url);
+    if (request.headers['x-api-key'] !== 'test-token') {
+      response.writeHead(401).end('{}');
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    if (request.url.includes('getnodeinfo')) {
+      response.end('{"configNodeInfo":{"codeVersion":"test"}}');
+    } else if (request.url.includes('getnowblock')) {
+      response.end('{"block_header":{"raw_data":{"number":1}}}');
+    } else if (request.url.includes('getaccount')) {
+      response.end('{"balance":5}');
+    } else {
+      response.writeHead(404).end('{}');
+    }
+  });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  t.after(() => {
+    server.closeAllConnections();
+    return new Promise((done) => server.close(done));
+  });
+  const url = `http://127.0.0.1:${server.address().port}/private-path/jsonrpc?token=private-query`;
+  const hre = await createHardhatRuntimeEnvironment(
+    {
+      plugins: [plugin],
+      tre: { compiler: { target: 'evm' }, fundSigners: false },
+      networks: {
+        tre: {
+          type: 'http',
+          tron: true,
+          url,
+          httpHeaders: { 'X-API-Key': 'test-token' },
+          accounts: ['0x' + '1'.padStart(64, '0')],
+        },
+      },
+    },
+    {},
+    process.cwd(),
+  );
+  const connection = await hre.network.create('tre');
+  await withCleanup(
+    async () => {
+      assert.equal(
+        await connection.ethers.provider.getBalance('0x' + '2'.repeat(40)),
+        5n,
+      );
+      const [signer] = await connection.ethers.getSigners();
+      assert.equal(await signer.tronWeb.trx.getBalance(signer.tronAddress), 5);
+      assert.ok(
+        requests.every(
+          (entry) =>
+            entry.startsWith('/private-path/') &&
+            entry.endsWith('?token=private-query'),
+        ),
+      );
+    },
+    () => connection.close(),
+  );
+  const manager = createTreManager({ isReachable: async () => false });
+  await assert.rejects(
+    () => manager.acquire(normalizeTre(undefined), url),
+    (error) => {
+      assert.match(error.message, /TRON node is not ready/);
+      assert.ok(
+        !error.message.includes('private-path') &&
+          !error.message.includes('private-query'),
+      );
+      return true;
+    },
+  );
+});
 
 test('TRON defaults read configuration data and reject invalid or missing assets', (t) => {
   const root = mkdtempSync(resolve(tmpdir(), 'sunhat-tron-defaults-'));

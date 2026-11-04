@@ -2,6 +2,7 @@
 
 // Adapted from @openzeppelin/hardhat-tron 0.1.0; see ../provenance.json and LICENSE.
 module.exports = function createModule(deps) {
+  const { requestJson } = require('./transport');
   // Replaces the network-touching surface of `hre.ethers` with a
   // TronWeb-backed equivalent so unmodified tests can run against the
   // local TRE container.
@@ -161,9 +162,8 @@ module.exports = function createModule(deps) {
       // live in CodeStore. Fall back to `eth_getCode` on `/jsonrpc`, which
       // reads CodeStore. Same endpoint maybeAutoRegisterContract uses.
       try {
-        const base = tw.fullNode.host.replace(/\/$/, '');
         const hexAddr = '0x' + TronWeb.address.toHex(addr).slice(2);
-        const res = await fetch(base + '/jsonrpc', {
+        const res = await requestJson(tw, '/jsonrpc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -172,7 +172,7 @@ module.exports = function createModule(deps) {
             params: [hexAddr, 'latest'],
             id: 1,
           }),
-        }).then((r) => r.json());
+        });
         if (
           res &&
           typeof res.result === 'string' &&
@@ -189,29 +189,50 @@ module.exports = function createModule(deps) {
     async getBalance(address) {
       const tw = this._tw();
       if (!tw) {
-        return 0n;
+        throw new Error('TRON provider has no native client');
       }
       const addr = signersMod.toBase58(address);
-      // Read the balance BigInt-safely. TronWeb's `trx.getBalance` parses the
-      // account JSON with lossy `JSON.parse`, quantizing any balance above 2^53 to
-      // the nearest IEEE-754 double (~1024-sun ULP at a ~5e18 balance) — so a small
-      // balance delta (e.g. a 10-sun refund landing on a pre-funded signer) reads as
-      // 0 even though the transfer happened. Pull `balance` out of the raw
-      // /wallet/getaccount text so no precision is lost. (Same >2^53 hazard the
-      // wait.js receipt parser already avoids.)
-      const base = tw.fullNode.host.replace(/\/$/, '');
-      const text = await fetch(base + '/wallet/getaccount', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const account = await requestJson(tw, '/wallet/getaccount', {
         body: JSON.stringify({
           address: TronWeb.address.toHex(addr),
           visible: false,
         }),
-      })
-        .then((r) => r.text())
-        .catch(() => '');
-      const m = text && text.match(/"balance"\s*:\s*(\d+)/);
-      return m ? BigInt(m[1]) : 0n;
+      });
+      if (
+        !account ||
+        typeof account !== 'object' ||
+        Array.isArray(account) ||
+        'Error' in account ||
+        'error' in account ||
+        'code' in account
+      ) {
+        throw new Error('Invalid TRON account response', { cause: account });
+      }
+      // Protobuf omits zero balances; an empty account denotes nonexistence.
+      if (account.balance === undefined) {
+        if (
+          Object.keys(account).length !== 0 &&
+          !(
+            typeof account.address === 'string' &&
+            TronWeb.isAddress(account.address)
+          )
+        ) {
+          throw new Error('Invalid TRON account response');
+        }
+        return 0n;
+      }
+      const balance = account.balance;
+      if (
+        !(
+          typeof balance === 'number' &&
+          Number.isSafeInteger(balance) &&
+          balance >= 0
+        ) &&
+        !(typeof balance === 'string' && /^\d+$/.test(balance))
+      ) {
+        throw new Error('Invalid TRON account balance');
+      }
+      return BigInt(balance);
     },
     async getBlockNumber() {
       const tw = this._tw();
@@ -293,15 +314,11 @@ module.exports = function createModule(deps) {
         data,
         visible: false,
       };
-      const url =
-        tw.fullNode.host.replace(/\/$/, '') + '/wallet/triggerconstantcontract';
-      const res = await fetch(url, {
+      const res = await requestJson(tw, '/wallet/triggerconstantcontract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: jsonStringifyWithBigInts(body),
-      })
-        .then((r) => r.json())
-        .catch(() => null);
+      }).catch(() => null);
       if (!res || (res.result && res.result.code)) {
         // Match ethers' shape on simulation failure — throw with revert
         // data so chai-matchers can match `revertedWith*`. Most callers
@@ -317,7 +334,7 @@ module.exports = function createModule(deps) {
     async getStorage(address, slot) {
       const tw = this._tw();
       if (!tw) {
-        return '0x' + '0'.repeat(64);
+        throw new Error('TRON provider has no native client');
       }
       // Read the EXACT slot via `eth_getStorageAt` on `/jsonrpc`. The prior
       // `/tre debug_storageRangeAt` approach returned `Object.values(storage)[0]`
@@ -327,24 +344,26 @@ module.exports = function createModule(deps) {
       // `eth_getStorageAt` is exact.
       const addr = signersMod.toBase58(address);
       const slotHex = ethersV6.toBeHex(slot, 32);
-      const base = tw.fullNode.host.replace(/\/$/, '');
       const hexAddr = '0x' + TronWeb.address.toHex(addr).slice(2);
-      const res = await fetch(base + '/jsonrpc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await requestJson(tw, '/jsonrpc', {
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
           method: 'eth_getStorageAt',
           params: [hexAddr, slotHex, 'latest'],
         }),
-      })
-        .then((r) => r.json())
-        .catch(() => null);
-      if (res && typeof res.result === 'string' && res.result !== '0x') {
-        return ethersV6.zeroPadValue(res.result, 32);
+      });
+      if (
+        !res ||
+        typeof res !== 'object' ||
+        Array.isArray(res) ||
+        'error' in res ||
+        typeof res.result !== 'string' ||
+        !/^0x(?:[0-9a-fA-F]{2}){0,32}$/.test(res.result)
+      ) {
+        throw new Error('Invalid TRON storage response', { cause: res });
       }
-      return '0x' + '0'.repeat(64);
+      return ethersV6.zeroPadValue(res.result, 32);
     },
     // ethers v6 routes `view`/`pure` Contract methods (and explicit
     // `.staticCall`) through `runner.call(tx)`. The facade path
@@ -371,15 +390,11 @@ module.exports = function createModule(deps) {
         call_value: valueToCallValue(tx.value),
         visible: false,
       };
-      const url =
-        tw.fullNode.host.replace(/\/$/, '') + '/wallet/triggerconstantcontract';
-      const res = await fetch(url, {
+      const res = await requestJson(tw, '/wallet/triggerconstantcontract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: jsonStringifyWithBigInts(body),
-      })
-        .then((r) => r.json())
-        .catch(() => null);
+      });
       // A successful constant call reports `result.result === true`; a revert
       // sets `result.code`/`result.message` and puts the revert bytes in
       // `constant_result[0]` (same detection as staticCallWithRevertData).
@@ -1035,9 +1050,6 @@ module.exports = function createModule(deps) {
     // address when no override is set.
     const ownerBase58 =
       tronWeb._impersonatedFrom || tronWeb.defaultAddress.base58;
-    const url =
-      tronWeb.fullNode.host.replace(/\/$/, '') +
-      '/wallet/triggerconstantcontract';
     const body = {
       owner_address: TronWeb.address.toHex(ownerBase58),
       contract_address: TronWeb.address.toHex(tronContract.address),
@@ -1045,12 +1057,11 @@ module.exports = function createModule(deps) {
       parameter,
       visible: false,
     };
-    const resp = await fetch(url, {
+    const res = await requestJson(tronWeb, '/wallet/triggerconstantcontract', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: jsonStringifyWithBigInts(body),
     });
-    const res = await resp.json();
 
     // Successful call: result.result === true (only field) AND no
     // contract_result code. On revert, `result.code` is set and
@@ -1171,33 +1182,35 @@ module.exports = function createModule(deps) {
       callValueSun = valueToCallValue(overrides.value);
     }
 
-    const base = deployerTronWeb.fullNode.host.replace(/\/$/, '');
     // `callValueSun` can be a BigInt (anything above 2^53 sun ≈ ~9e15
     // would lose precision under Number coercion — VestingWallet /
     // proxy-with-value tests send `parseEther("1") = 1e18` here). Use
     // the BigInt-safe JSON serializer; java-tron parses `call_value`
     // as a Long.
-    const triggerResp = await fetch(base + '/wallet/triggersmartcontract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: jsonStringifyWithBigInts({
-        owner_address: TronWeb.address.toHex(fromTronBase58),
-        contract_address: TronWeb.address.toHex(contractTronBase58),
-        function_selector: sig,
-        parameter,
-        // Default to TRE's 1_000_000_000 sun (≈10M energy @ 100
-        // sun/energy) ceiling. Honor `overrides.feeLimit` (already
-        // mapped from `overrides.gasLimit` by `makeMethod.invoke`)
-        // when supplied so OOG probes actually constrain the budget.
-        fee_limit:
-          overrides.feeLimit !== null && overrides.feeLimit !== undefined
-            ? Number(overrides.feeLimit)
-            : 1_000_000_000,
-        call_value: callValueSun,
-        visible: false,
-      }),
-    });
-    const triggerJson = await triggerResp.json();
+    const triggerJson = await requestJson(
+      deployerTronWeb,
+      '/wallet/triggersmartcontract',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: jsonStringifyWithBigInts({
+          owner_address: TronWeb.address.toHex(fromTronBase58),
+          contract_address: TronWeb.address.toHex(contractTronBase58),
+          function_selector: sig,
+          parameter,
+          // Default to TRE's 1_000_000_000 sun (≈10M energy @ 100
+          // sun/energy) ceiling. Honor `overrides.feeLimit` (already
+          // mapped from `overrides.gasLimit` by `makeMethod.invoke`)
+          // when supplied so OOG probes actually constrain the budget.
+          fee_limit:
+            overrides.feeLimit !== null && overrides.feeLimit !== undefined
+              ? Number(overrides.feeLimit)
+              : 1_000_000_000,
+          call_value: callValueSun,
+          visible: false,
+        }),
+      },
+    );
     if (
       !triggerJson.transaction ||
       !triggerJson.result ||
@@ -1224,12 +1237,15 @@ module.exports = function createModule(deps) {
       undefined,
       true,
     );
-    const broadcastResp = await fetch(base + '/wallet/broadcasttransaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(signed),
-    });
-    const broadcastJson = await broadcastResp.json();
+    const broadcastJson = await requestJson(
+      deployerTronWeb,
+      '/wallet/broadcasttransaction',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signed),
+      },
+    );
     if (!broadcastJson.result) {
       const code =
         broadcastJson.code ||
@@ -2634,7 +2650,6 @@ module.exports = function createModule(deps) {
         // eth_estimateGas via JSON-RPC; we run the call dry and read
         // energy_used, treating energy ≈ gas (1:1) at the test level.
         const txArg = (params && params[0]) || {};
-        const base = tw().fullNode.host.replace(/\/$/, '');
         const fromBase58 = txArg.from
           ? signersMod.toBase58(txArg.from)
           : tw().defaultAddress.base58;
@@ -2644,7 +2659,7 @@ module.exports = function createModule(deps) {
         } // 21000 fallback
         const dataHex = (txArg.data || '0x').replace(/^0x/, '');
         try {
-          const resp = await fetch(base + '/wallet/triggerconstantcontract', {
+          const j = await requestJson(tw(), '/wallet/triggerconstantcontract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: jsonStringifyWithBigInts({
@@ -2655,7 +2670,6 @@ module.exports = function createModule(deps) {
               visible: false,
             }),
           });
-          const j = await resp.json();
           const energy =
             j.energy_used ||
             (j.receipt && j.receipt.energy_usage_total) ||

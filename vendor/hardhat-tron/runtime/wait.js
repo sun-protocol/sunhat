@@ -9,6 +9,7 @@ module.exports = function createModule(deps) {
   // solidified view as a hedge for public networks.
 
   const { mine, isTransientFetchError } = deps.cheatcodes;
+  const { requestJson } = require('./transport');
 
   // BigInt-safe JSON parser for TVM transaction-info responses. TVM's
   // response embeds `callValueInfo[*].callValue` (and similar fields) as
@@ -31,19 +32,13 @@ module.exports = function createModule(deps) {
   async function _getInfoBigSafe(tronWeb, txId, endpoint, deadline) {
     // Use the same fullnode host TronWeb is configured with; bypass
     // TronWeb's JSON parsing (lossy on large integers).
-    const base = tronWeb.fullNode.host.replace(/\/$/, '');
-    const url = base + endpoint;
-    const fetchText = async () => {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    const fetchInfo = () =>
+      requestJson(tronWeb, endpoint, {
         body: JSON.stringify({ value: txId }),
         signal: AbortSignal.timeout(
           Math.max(1, Math.min(5000, deadline - Date.now())),
         ),
       });
-      return resp.text();
-    };
     // Single retry on a connection-level error ("fetch failed", "other side
     // closed", ECONNRESET, …) on EITHER the request or the body read. java-tron
     // under G1GC with -Xmx2g can stop-the-world for 50–200 ms late in long
@@ -51,20 +46,15 @@ module.exports = function createModule(deps) {
     // socket and surfaces here. Without a retry, one dropped poll fails the test
     // — and because every later fixture's waitForReceipt hits the same node, it
     // cascades the rest of the worker. Mirrors rpcCall's retry (cheatcodes.js).
-    let text;
     try {
-      text = await fetchText();
+      return await fetchInfo();
     } catch (e) {
       if (!isTransientFetchError(e)) {
         throw e;
       }
       await new Promise((r) => setTimeout(r, 100));
-      text = await fetchText();
+      return fetchInfo();
     }
-    if (!text) {
-      return null;
-    }
-    return jsonParseBigSafe(text);
   }
 
   async function waitForReceipt(
