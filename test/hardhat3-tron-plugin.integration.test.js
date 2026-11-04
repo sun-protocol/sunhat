@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { setTimeout } from 'node:timers/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import {
@@ -15,7 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import {
   image,
@@ -113,7 +114,6 @@ test(
       [npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund'],
       { cwd: project, timeout: 120000 },
     );
-    const compilerPath = resolve(temporary, 'tron-soljson.cjs');
     const compiler = process.env.SUNHAT_TRON_SOLC
       ? readFileSync(process.env.SUNHAT_TRON_SOLC)
       : Buffer.from(
@@ -125,7 +125,51 @@ test(
       createHash('sha256').update(compiler).digest('hex'),
       compilerSha256,
     );
-    writeFileSync(compilerPath, compiler);
+    // Exercise the installed downloader and worker with a real TVM compiler.
+    const mirror = createHttpServer((request, response) => {
+      if (request.url.startsWith('/wasm/list.json')) {
+        response.end(
+          JSON.stringify({
+            builds: [
+              {
+                version: '0.8.26',
+                longVersion: '0.8.26+commit.733b4d28',
+                path: 'soljson-v0.8.26+commit.733b4d28.js',
+                sha256: compilerSha256,
+              },
+            ],
+          }),
+        );
+      } else {
+        response.end(compiler);
+      }
+    });
+    await new Promise((ready) => mirror.listen(0, '127.0.0.1', ready));
+    t.after(
+      () =>
+        new Promise((closed) => {
+          mirror.closeAllConnections();
+          mirror.close(closed);
+        }),
+    );
+    const { default: installedCore } = await import(
+      pathToFileURL(
+        resolve(project, 'node_modules/sunhat/vendor/hardhat-tron/index.js'),
+      ).href
+    );
+    const cachedCompiler = await installedCore
+      .createCompiler({
+        cacheDir: resolve(project, 'compiler-cache'),
+      })
+      .getCompiler('0.8.26', {
+        mirror: `http://127.0.0.1:${mirror.address().port}`,
+      });
+    assert.equal(
+      createHash('sha256')
+        .update(readFileSync(cachedCompiler.compilerPath))
+        .digest('hex'),
+      compilerSha256,
+    );
     for (const patched of [false, true]) {
       await t.test(
         patched
@@ -205,7 +249,7 @@ test(
             cwd: project,
             env: {
               ...process.env,
-              SUNHAT_TRON_SOLC: compilerPath,
+              SUNHAT_TRON_SOLC: cachedCompiler.compilerPath,
               TRE_URL: url,
               TRE_PRIVATE_KEY: '0x' + privateKey,
               SUNHAT_PATCHED_TRE: String(patched),
@@ -326,7 +370,7 @@ test(
             timeout: 150000,
             env: {
               ...process.env,
-              SUNHAT_TRON_SOLC: compilerPath,
+              SUNHAT_TRON_SOLC: cachedCompiler.compilerPath,
               TRE_PRIVATE_KEY: '0x' + privateKey,
               TRE_URL: `http://127.0.0.1:${await freePort()}`,
               SUNHAT_TRE_AUTO: 'true',
@@ -412,7 +456,7 @@ test(
             cwd: project,
             env: {
               ...process.env,
-              SUNHAT_TRON_SOLC: compilerPath,
+              SUNHAT_TRON_SOLC: cachedCompiler.compilerPath,
               TRE_PRIVATE_KEY: '0x' + privateKey,
               TRE_URL: `http://127.0.0.1:${await freePort()}`,
               SUNHAT_TRE_AUTO: 'true',

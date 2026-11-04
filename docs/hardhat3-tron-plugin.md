@@ -2,7 +2,7 @@
 
 The Sunhat artifact exposes `@sun-protocol/sunhat/hardhat3-tron`. Projects using the generated `sunhat` npm alias import `sunhat/hardhat3-tron`. This entry adapts the licensed Hardhat 2 TRON runtime to public Hardhat 3 configuration, connection, Solidity and task hooks. It does not load the Hardhat 2 plugin.
 
-Use Node.js 22.13+, 24.x or 26.x. The verified consumer dependencies are Hardhat 3.21.1, hardhat-ethers 4.2.1, hardhat-mocha 4.0.1, ethers 6.17.0, tron-runtime 0.1.0, TronWeb 6.5.1 and solc 0.8.26. Import checks reject incompatible dependency versions before loading framework hooks. Consumer projects own these dependencies; installing the CLI alone installs none of them.
+Use Node.js 22.13+, 24.x or 26.x. The verified consumer dependencies are Hardhat 3.21.1, hardhat-ethers 4.2.1, hardhat-mocha 4.0.1, hardhat-utils 5.1.1, ethers 6.17.0, tron-runtime 0.1.0, TronWeb 6.5.1 and solc 0.8.26. Import checks reject incompatible dependency versions before loading framework hooks. Consumer projects own these dependencies; installing the CLI alone installs none of them.
 
 ```typescript
 import { defineConfig } from 'hardhat/config';
@@ -35,7 +35,7 @@ The package's default TRE image and compiler mirror are maintained in `config/tr
 
 Contract lookup uses Hardhat's public artifact manager for each target, including custom source directories and dependencies. Ambiguous bare names require a fully qualified `source/path.sol:ContractName`. Builds invalidate the connection's artifact indexes even on failure. An existing factory retains the artifact it was created with; request a new factory after rebuilding to use updated ABI or bytecode.
 
-The downloader verifies the upstream compiler manifest and checksum before atomic cache replacement. `tre.compiler.path` accepts only the pinned 0.8.26 TVM compiler with SHA-256 `31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1`. `include`, `exclude`, `batches` and `batchesPath` adapt source selection through the public build hook. `hardhat tron:compile-batches` builds the configured batches without deleting earlier batch artifacts.
+The downloader verifies the upstream compiler manifest and checksum before atomic cache replacement. Manifest files, compiler binaries and concurrent downloads are isolated by the normalized mirror URL. The default cache uses Hardhat's public platform cache directory under `compilers-v3/wasm/tron-solc`; `hardhat clean --global` clears it. An explicit `tre.compiler.cacheDir` is resolved from the project root and is managed separately. Existing unscoped caches are not reused because their source cannot be verified. `tre.compiler.path` accepts only the pinned 0.8.26 TVM compiler with SHA-256 `31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1`. `include`, `exclude`, `batches` and `batchesPath` adapt source selection through the public build hook. `hardhat tron:compile-batches` builds the configured batches without deleting earlier batch artifacts.
 
 Obtain ethers and optional native helpers from `await network.create(name)`. A TRON connection exposes `connection.tre`; an EVM connection does not. Close each connection after use and preserve the original operation error if closing also fails. Providers, keys, receipts, fixture caches and capability probes belong to that connection. Local metadata identifies the actual node instance rather than the connection object.
 

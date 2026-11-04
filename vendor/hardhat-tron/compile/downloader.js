@@ -12,57 +12,94 @@ module.exports = function createModule(deps) {
   //      version string would pass loadability and still be wrong.
   //      Same threat model as Hardhat's stock solc downloader.
   //
-  //   2. Per-version Promise dedup. Multiple compiles in the same
+  //   2. Per-source/version Promise dedup. Multiple compiles in the same
   //      process asking for the same version coalesce onto one
   //      download; different versions proceed independently.
   //
-  //   3. Atomic staging via .tmp + rename. An interrupted download
-  //      leaves a .tmp file we delete on the next attempt; the final
-  //      path is never partially written, so a concurrent process
-  //      checking existence either sees nothing (no file) or the
-  //      completed file.
+  //   3. Each attempt writes a unique staging file and activates it
+  //      only after verification. Failed attempts clean their own staging
+  //      file; the existing compiler remains available until replacement.
   //
-  // Cache key path is `<compilerCacheDir>/soljson-v<longVersion>.js`
-  // (matches the upstream filename verbatim, e.g.
-  // `soljson-v0.8.26+commit.733b4d28.js`). Long version is the source
-  // of truth -- two builds with the same short version but different
-  // commits are distinct on disk.
-  //
+  // Mirror-specific directories separate identical long versions from
+  // different sources. The cached .cjs suffix also supports explicit cache
+  // directories inside ESM projects; download URLs retain upstream .js names.
 
   const fs = deps.fs ?? require('node:fs');
   const crypto = require('node:crypto');
   const { pipeline } = require('node:stream/promises');
   const { Readable } = require('node:stream');
-  const wrapper = require('solc/wrapper');
+  const { Worker } = require('node:worker_threads');
+  const path = require('node:path');
 
   const { TronCompileError } = deps.errors;
   const manifest = deps.manifest;
 
-  // version (short) -> Promise<{ compilerPath, version, longVersion }>
+  // mirror identity + short version -> Promise<{ compilerPath, version, longVersion }>
   const _inFlight = new Map();
 
-  // Bust the require cache before loading so a re-run picks up a fresh
-  // download. solc/wrapper holds a module-level reference to the
-  // soljson module object, and a stale cache entry would silently keep
-  // us on the old wasm.
-  function loadAndCheckVersion(absPath, expectedShortVersion) {
-    delete require.cache[require.resolve(absPath)];
-    let solc;
+  // soljson installs global process listeners when loaded. Isolate probes
+  // from the host and terminate each worker, including failed or hung loads.
+  async function loadAndCheckVersion(absPath, expectedShortVersion) {
+    const worker = new Worker(path.join(__dirname, 'version-worker.js'), {
+      workerData: absPath,
+    });
+    let timer;
+    let failed = false;
+    let operationError;
+    let versionString;
     try {
-      const soljson = require(absPath);
-      solc = wrapper(soljson);
-    } catch (e) {
-      throw new TronCompileError(
-        `failed to load tron-solc wasm at ${absPath}: ${e.message}`,
-        e,
-      );
+      versionString = await new Promise((resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('Compiler version probe timed out')),
+          90000,
+        );
+        worker.once('message', resolve);
+        worker.once('error', reject);
+        worker.once('exit', (code) =>
+          reject(
+            new Error(
+              `Compiler version probe exited without a result (${code})`,
+            ),
+          ),
+        );
+      });
+      if (
+        typeof versionString !== 'string' ||
+        !versionString.startsWith(expectedShortVersion + '+')
+      ) {
+        throw new TronCompileError(
+          `tron-solc wasm at ${absPath} reports version '${versionString}', expected prefix '${expectedShortVersion}+'`,
+        );
+      }
+    } catch (error) {
+      failed = true;
+      const detail =
+        error instanceof Error
+          ? error.message
+          : 'compiler threw a non-Error value';
+      operationError =
+        error instanceof TronCompileError
+          ? error
+          : new TronCompileError(
+              `failed to load tron-solc wasm at ${absPath}: ${detail}`,
+              error,
+            );
     }
-    const versionString =
-      (typeof solc.version === 'function' ? solc.version() : '') || '';
-    if (!versionString.startsWith(expectedShortVersion + '+')) {
-      throw new TronCompileError(
-        `tron-solc wasm at ${absPath} reports version '${versionString}', expected prefix '${expectedShortVersion}+'`,
-      );
+    clearTimeout(timer);
+    try {
+      await worker.terminate();
+    } catch (error) {
+      if (!failed) {
+        throw error;
+      }
+      try {
+        console.error('Failed to terminate compiler version probe:', error);
+      } catch {
+        /* Preserve the original compiler error. */
+      }
+    }
+    if (failed) {
+      throw operationError;
     }
     return versionString;
   }
@@ -92,10 +129,13 @@ module.exports = function createModule(deps) {
   }
 
   async function downloadInner(build, opts) {
-    const dir = manifest.compilerCacheDir();
+    const dir = await manifest.compilerCacheDir(opts.mirror);
     fs.mkdirSync(dir, { recursive: true });
 
-    const finalPath = manifest.compilerPath(build.longVersion);
+    const finalPath = await manifest.compilerPath(
+      build.longVersion,
+      opts.mirror,
+    );
     const tmpPath = finalPath + '.' + crypto.randomUUID() + '.cjs';
 
     // Fast path: file is already on disk. Re-verify SHA-256 to catch
@@ -104,11 +144,14 @@ module.exports = function createModule(deps) {
     if (fs.existsSync(finalPath)) {
       try {
         const got = sha256OfFile(finalPath);
-        if (got.toLowerCase() === build.sha256.toLowerCase()) {
+        if (
+          got.toLowerCase().replace(/^0x/, '') ===
+          build.sha256.toLowerCase().replace(/^0x/, '')
+        ) {
           // Also verify loadability + version string, defence-in-depth
           // against a manifest entry that's correct but points at the
           // wrong wasm version.
-          loadAndCheckVersion(finalPath, build.version);
+          await loadAndCheckVersion(finalPath, build.version);
           return {
             compilerPath: finalPath,
             version: build.version,
@@ -123,8 +166,7 @@ module.exports = function createModule(deps) {
       // Keep the old file until a verified staging file atomically replaces it.
     }
 
-    const mirror = opts.mirror.replace(/\/$/, '');
-    const url = `${mirror}/wasm/${build.path}`;
+    const url = manifest.mirrorUrl(opts.mirror, build.path);
     try {
       await streamToFile(url, tmpPath);
       const got = sha256OfFile(tmpPath);
@@ -136,7 +178,7 @@ module.exports = function createModule(deps) {
           `tron-solc download from ${url} failed sha256 verification (expected ${build.sha256}, got ${got})`,
         );
       }
-      loadAndCheckVersion(tmpPath, build.version);
+      await loadAndCheckVersion(tmpPath, build.version);
       fs.renameSync(tmpPath, finalPath);
     } catch (error) {
       try {
@@ -170,10 +212,11 @@ module.exports = function createModule(deps) {
       throw new TronCompileError(`getCompiler: opts.mirror is required`);
     }
 
-    // Promise dedup keyed by short version. Different versions can
-    // download concurrently; the same version coalesces.
-    if (_inFlight.has(version)) {
-      return _inFlight.get(version);
+    // Capture the source before awaiting; a caller may reuse its options.
+    opts = { ...opts, mirror: manifest.normalizeMirror(opts.mirror) };
+    const key = manifest.mirrorKey(opts.mirror) + ':' + version;
+    if (_inFlight.has(key)) {
+      return _inFlight.get(key);
     }
 
     const p = (async () => {
@@ -181,11 +224,13 @@ module.exports = function createModule(deps) {
       return downloadInner(build, opts);
     })();
 
-    _inFlight.set(version, p);
+    _inFlight.set(key, p);
     try {
       return await p;
     } finally {
-      _inFlight.delete(version);
+      if (_inFlight.get(key) === p) {
+        _inFlight.delete(key);
+      }
     }
   }
 

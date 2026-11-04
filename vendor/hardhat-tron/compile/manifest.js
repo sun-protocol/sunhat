@@ -25,37 +25,59 @@ module.exports = function createModule(deps) {
 
   const fs = require('node:fs');
   const path = require('node:path');
-  const os = require('node:os');
-  const { randomUUID } = require('node:crypto');
+  const { createHash, randomUUID } = require('node:crypto');
 
   const { TronCompileError } = deps.errors;
 
   // 24 hours.
   const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
-  // Hardhat's compiler cache layout (compilers-v2). Colocate so it's
-  // findable by hardhat's own tooling. The `tron-solc/` subdir keeps it
-  // distinct from stock wasms in the same parent.
-  function compilerCacheDir() {
-    if (deps.cacheDir) {
-      return deps.cacheDir;
+  function normalizeMirror(mirror) {
+    const url = new URL(mirror);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new TronCompileError('Compiler mirror must use HTTP or HTTPS');
     }
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    url.hash = '';
+    return url.href;
+  }
+
+  function mirrorKey(mirror) {
+    return createHash('sha256').update(normalizeMirror(mirror)).digest('hex');
+  }
+
+  function mirrorUrl(mirror, filename) {
+    const url = new URL(normalizeMirror(mirror));
+    url.pathname = url.pathname.replace(/\/+$/, '') + '/wasm/' + filename;
+    return url.href;
+  }
+
+  async function compilerCacheDir(mirror) {
+    // The adapter supplies the host cache root. Standalone consumers use
+    // the same public helper lazily, without loading Hardhat internals.
+    const root =
+      deps.cacheDir ??
+      path.join(
+        await (
+          await import('@nomicfoundation/hardhat-utils/global-dir')
+        ).getCacheDir(),
+        'compilers-v3',
+        'wasm',
+        'tron-solc',
+      );
+    return path.join(root, 'mirrors', mirrorKey(mirror));
+  }
+
+  async function manifestPath(mirror) {
+    return path.join(await compilerCacheDir(mirror), 'list.json');
+  }
+
+  async function compilerPath(longVersion, mirror) {
+    // Explicit cache overrides may live inside a type:module project.
     return path.join(
-      os.homedir(),
-      '.cache',
-      'hardhat-nodejs',
-      'compilers-v2',
-      'wasm',
-      'tron-solc',
+      await compilerCacheDir(mirror),
+      `soljson-v${longVersion}.cjs`,
     );
-  }
-
-  function manifestPath() {
-    return path.join(compilerCacheDir(), 'list.json');
-  }
-
-  function compilerPath(longVersion) {
-    return path.join(compilerCacheDir(), `soljson-v${longVersion}.js`);
   }
 
   // Manifest entry shape (matches upstream list.json):
@@ -84,7 +106,7 @@ module.exports = function createModule(deps) {
   }
 
   async function fetchUpstream(mirror) {
-    const url = `${mirror.replace(/\/$/, '')}/wasm/list.json`;
+    const url = mirrorUrl(mirror, 'list.json');
     let res;
     try {
       res = await fetch(url, { signal: AbortSignal.timeout(90000) });
@@ -117,8 +139,8 @@ module.exports = function createModule(deps) {
     return { parsed, text };
   }
 
-  function readCached() {
-    const p = manifestPath();
+  async function readCached(mirror) {
+    const p = await manifestPath(mirror);
     if (!fs.existsSync(p)) {
       return null;
     }
@@ -135,18 +157,19 @@ module.exports = function createModule(deps) {
     return { parsed, mtimeMs: stat.mtimeMs };
   }
 
-  function writeCache(text) {
-    const dir = compilerCacheDir();
+  async function writeCache(text, mirror) {
+    const dir = await compilerCacheDir(mirror);
     fs.mkdirSync(dir, { recursive: true });
     // Atomic-ish write: tmp + rename. Concurrent compiles in the same
     // process are dedup'd by the in-flight Promise map at the call
     // site; concurrent compiles across processes might race here, but
     // rename is atomic on POSIX, and we'd just end up with one
     // process's copy.
-    const tmp = manifestPath() + '.' + randomUUID() + '.tmp';
+    const target = await manifestPath(mirror);
+    const tmp = target + '.' + randomUUID() + '.tmp';
     try {
       fs.writeFileSync(tmp, text, { flag: 'wx' });
-      fs.renameSync(tmp, manifestPath());
+      fs.renameSync(tmp, target);
     } catch (error) {
       try {
         fs.rmSync(tmp, { force: true });
@@ -167,31 +190,33 @@ module.exports = function createModule(deps) {
   // In-flight dedup for the manifest fetch itself -- avoids hammering
   // the upstream when multiple compiles happen back-to-back in the same
   // process.
-  let _inFlight = null;
+  const _inFlight = new Map();
 
   async function loadManifest({
     mirror,
     ttlMs = DEFAULT_TTL_MS,
     forceRefresh = false,
   }) {
+    mirror = normalizeMirror(mirror);
+    const key = mirrorKey(mirror);
     if (!forceRefresh) {
-      const cached = readCached();
+      const cached = await readCached(mirror);
       if (cached && Date.now() - cached.mtimeMs < ttlMs) {
         return cached.parsed;
       }
     }
-    if (_inFlight) {
-      return _inFlight;
+    if (_inFlight.has(key)) {
+      return _inFlight.get(key);
     }
 
-    _inFlight = (async () => {
+    const pending = (async () => {
       try {
         const { parsed, text } = await fetchUpstream(mirror);
-        writeCache(text);
+        await writeCache(text, mirror);
         return parsed;
       } catch (e) {
-        // Network failure: fall back to ANY cached copy regardless of age.
-        const cached = readCached();
+        // Offline fallback must retain the selected source identity.
+        const cached = await readCached(mirror);
         if (cached) {
           console.warn(
             `[hardhat-tron] tron-solc manifest refresh failed (${e.message}); using stale cache from ${new Date(
@@ -201,12 +226,16 @@ module.exports = function createModule(deps) {
           return cached.parsed;
         }
         throw e;
-      } finally {
-        _inFlight = null;
       }
     })();
-
-    return _inFlight;
+    _inFlight.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (_inFlight.get(key) === pending) {
+        _inFlight.delete(key);
+      }
+    }
   }
 
   // Find a build entry by exact short version. Returns null if absent.
@@ -217,6 +246,7 @@ module.exports = function createModule(deps) {
   // Resolve a version: try the cached manifest first, refresh if absent.
   // Throws TronCompileError if still absent after refresh.
   async function resolveBuild(version, opts) {
+    opts = { ...opts, mirror: normalizeMirror(opts.mirror) };
     let manifest = await loadManifest(opts);
     let build = findBuild(manifest, version);
     if (!build) {
@@ -231,7 +261,7 @@ module.exports = function createModule(deps) {
     }
     if (
       typeof build.sha256 !== 'string' ||
-      !/^0x[0-9a-f]{64}$/i.test(build.sha256)
+      !/^(?:0x)?[0-9a-f]{64}$/i.test(build.sha256)
     ) {
       throw new TronCompileError(
         `manifest entry for ${version} has invalid sha256: ${build.sha256}`,
@@ -248,6 +278,9 @@ module.exports = function createModule(deps) {
   }
 
   return {
+    normalizeMirror,
+    mirrorKey,
+    mirrorUrl,
     compilerCacheDir,
     manifestPath,
     compilerPath,

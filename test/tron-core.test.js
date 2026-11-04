@@ -460,7 +460,6 @@ test('compiler cleanup failure does not replace load failure and staging paths a
         server.close(closed);
       }),
   );
-  writeFileSync(resolve(root, `soljson-v${build.longVersion}.js`), payload);
   const leftovers = [];
   const compiler = () =>
     core.createCompiler({
@@ -474,6 +473,14 @@ test('compiler cleanup failure does not replace load failure and staging paths a
       },
     });
   const options = { mirror: `http://127.0.0.1:${server.address().port}` };
+  const cachedPath = await compiler().compilerPath(
+    build.longVersion,
+    options.mirror,
+  );
+  mkdirSync(await compiler().compilerCacheDir(options.mirror), {
+    recursive: true,
+  });
+  writeFileSync(cachedPath, payload);
   const results = await Promise.allSettled([
     compiler().getCompiler('0.8.26', options),
     compiler().getCompiler('0.8.26', options),
@@ -485,6 +492,7 @@ test('compiler cleanup failure does not replace load failure and staging paths a
   }
   assert.equal(leftovers.length, 2);
   assert.notEqual(leftovers[0], leftovers[1]);
+  assert.equal(fs.readFileSync(cachedPath, 'utf8'), payload);
 });
 
 test(

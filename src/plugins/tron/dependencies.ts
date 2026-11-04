@@ -4,8 +4,12 @@ import { existsSync } from 'node:fs';
 import { isRecord, readJson } from '../../json.js';
 
 const require = createRequire(import.meta.url);
-export function assertDependency(name: string, minimum: string): void {
-  let directory = dirname(require.resolve(name));
+export function assertDependency(
+  name: string,
+  minimum: string,
+  entry = name,
+): void {
+  let directory = dirname(require.resolve(entry));
   while (true) {
     const path = resolve(directory, 'package.json');
     if (existsSync(path)) {

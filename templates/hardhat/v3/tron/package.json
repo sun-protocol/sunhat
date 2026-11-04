@@ -22,6 +22,7 @@
     "sunhat": "{{sunhatDependency}}",
     "@openzeppelin/tron-runtime": "0.1.0",
     "tronweb": "6.5.1",
-    "solc": "0.8.26"
+    "solc": "0.8.26",
+    "@nomicfoundation/hardhat-utils": "5.1.1"
   }
 }

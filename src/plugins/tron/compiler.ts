@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { getCacheDir } from '@nomicfoundation/hardhat-utils/global-dir';
 import type { HardhatConfig } from 'hardhat/types/config';
 import core from '../../../vendor/hardhat-tron/index.js';
 import type { TreConfig } from './types.js';
@@ -24,11 +25,14 @@ export async function configureTronCompiler(
   if (!config.paths.cache.endsWith('-tron')) {
     config.paths.cache += '-tron';
   }
-  const compiler = core.createCompiler(
-    tre.compiler.cacheDir === undefined
-      ? {}
-      : { cacheDir: resolve(config.paths.root, tre.compiler.cacheDir) },
-  );
+  const compiler = tre.compiler.path
+    ? undefined
+    : core.createCompiler({
+        cacheDir:
+          tre.compiler.cacheDir === undefined
+            ? join(await getCacheDir(), 'compilers-v3', 'wasm', 'tron-solc')
+            : resolve(config.paths.root, tre.compiler.cacheDir),
+      });
   for (const profile of Object.values(config.solidity.profiles)) {
     for (const entry of [
       ...profile.compilers,
@@ -52,7 +56,7 @@ export async function configureTronCompiler(
           throw new Error(`TRON compiler checksum mismatch: ${path}`);
         }
         entry.path = path;
-      } else {
+      } else if (compiler !== undefined) {
         entry.path = (
           await compiler.getCompiler(entry.version, {
             mirror: tre.compiler.mirror,

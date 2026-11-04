@@ -21,6 +21,12 @@ for (const [name, version] of [
   }
 }
 
+assertDependency(
+  '@nomicfoundation/hardhat-utils',
+  '5.1.1',
+  '@nomicfoundation/hardhat-utils/package.json',
+);
+
 const [{ definePlugin }, { overrideTask, task }] = await Promise.all([
   import('hardhat/plugins'),
   import('hardhat/config'),
