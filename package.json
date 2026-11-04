@@ -38,7 +38,7 @@
     "test:tron-core": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js test/tron-predictions.test.js test/tron-balances.test.js test/tron-transport.test.js test/tron-capabilities.test.js test/tron-abi.test.js",
     "test:hardhat3:tron-plugin": "npm run build && node --test test/hardhat3-tron-plugin.integration.test.js",
     "tre:build-jar": "bash scripts/build-tre-jar.sh",
-    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js test/tron-predictions.test.js test/tron-balances.test.js test/tron-transport.test.js test/tron-capabilities.test.js test/tron-abi.test.js test/tron-plugin.test.js",
+    "test:tron-plugin": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js test/tron-predictions.test.js test/tron-balances.test.js test/tron-transport.test.js test/tron-capabilities.test.js test/tron-abi.test.js test/tron-artifacts.test.js test/tron-plugin.test.js",
     "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js",
     "check:english": "node scripts/check-english.js"
   },

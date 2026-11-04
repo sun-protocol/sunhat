@@ -28,6 +28,26 @@ describe('Hardhat 3 TRON plugin', function () {
       );
     }
   });
+  it('loads custom source artifacts for native and EVM connections', async function () {
+    const native = await network.create('tre');
+    connections.push(native);
+    const evm = await network.create('evm');
+    connections.push(evm);
+    const custom = await native.ethers.deployContract('CustomCounter');
+    await custom.waitForDeployment();
+    await (await custom.increment()).wait();
+    const attached = await native.ethers.getContractAt(
+      'src/CustomCounter.sol:CustomCounter',
+      await custom.getAddress(),
+    );
+    assert.equal(await attached.number(), 1n);
+    const evmCustom = await evm.ethers.deployContract('CustomCounter');
+    await evmCustom.waitForDeployment();
+    assert.equal(await evmCustom.number(), 0n);
+    await (await evmCustom.increment()).wait();
+    assert.equal(await evmCustom.number(), 1n);
+    assert.equal(await custom.number(), 1n);
+  });
   it('matches standard ABI resolution, nested returns and payable simulation', async function () {
     const connection = await network.create('tre');
     connections.push(connection);

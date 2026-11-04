@@ -7,7 +7,7 @@ export default {
     ...config.tre,
     compiler: {
       ...config.tre.compiler,
-      include: ['contracts/**/*.sol'],
+      include: ['contracts/**/*.sol', 'src/**/*.sol'],
       exclude: ['**/Excluded.sol'],
       batchesPath: './batches.cjs',
     },

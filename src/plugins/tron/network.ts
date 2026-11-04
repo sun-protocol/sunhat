@@ -1,8 +1,7 @@
 import type { NetworkHooks } from 'hardhat/types/hooks';
 import type { NetworkConnection } from 'hardhat/types/network';
-import { createHardhatRuntimeEnvironment } from 'hardhat/hre';
-import type { ArtifactManager } from 'hardhat/types/artifacts';
 import core from '../../../vendor/hardhat-tron/index.js';
+import { artifactsFor } from './artifacts.js';
 import { normalizeTre } from './settings.js';
 import { resolveSigningAccounts } from './accounts.js';
 import { withCleanup } from './cleanup.js';
@@ -17,22 +16,20 @@ export default async (): Promise<Partial<NetworkHooks>> => {
     NetworkConnection<string>,
     ReturnType<typeof core.createRuntime>
   >();
-  const artifactManagers = new Map<string, Promise<ArtifactManager>>();
   return {
     async newConnection(context, next) {
       let selectedContext = context;
       const evmPath = context.config.tre?.artifactPaths?.evm;
       if (evmPath !== undefined && evmPath !== context.config.paths.artifacts) {
-        let pending = artifactManagers.get(evmPath);
-        if (pending === undefined) {
-          pending = createHardhatRuntimeEnvironment(
-            { paths: { artifacts: evmPath } },
-            {},
-            context.config.paths.root,
-          ).then((hre) => hre.artifacts);
-          artifactManagers.set(evmPath, pending);
-        }
-        selectedContext = { ...context, artifacts: await pending };
+        const artifacts = await artifactsFor(context, evmPath);
+        // Hardhat hook contexts inherit HRE fields through their prototype.
+        selectedContext = new Proxy(context, {
+          get(target, property, receiver) {
+            return property === 'artifacts'
+              ? artifacts
+              : Reflect.get(target, property, receiver);
+          },
+        });
       }
       const connection = await next(selectedContext);
       const network = connection.networkConfig;
@@ -47,6 +44,10 @@ export default async (): Promise<Partial<NetworkHooks>> => {
         release = await acquireTre(config, url, network.httpHeaders);
         const runtime = core.createRuntime({
           lifecycle: treLifecycle,
+          artifacts: await artifactsFor(
+            context,
+            config.artifactPaths?.tron ?? context.config.paths.artifacts,
+          ),
           config: {
             paths: {
               root: context.config.paths.root,

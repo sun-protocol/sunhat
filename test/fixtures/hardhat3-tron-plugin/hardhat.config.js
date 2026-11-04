@@ -19,6 +19,7 @@ const tron = {
 };
 export default defineConfig({
   plugins: [sunhatTron, hardhatMocha, hardhatMatchers],
+  paths: { sources: ['contracts', 'src'] },
   solidity: {
     version: '0.8.26',
     settings: {

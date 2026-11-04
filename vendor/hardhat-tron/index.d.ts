@@ -1,3 +1,4 @@
+import type { ArtifactManager } from 'hardhat/types/artifacts';
 import type { TronWeb } from 'tronweb';
 import type {
   EthereumProvider,
@@ -35,6 +36,7 @@ export interface TreRuntime {
   makeTronWeb(): { tronWeb: TronWeb; address: string };
 }
 export interface RuntimeContext {
+  artifacts?: Pick<ArtifactManager, 'readArtifact'>;
   lifecycle?: Pick<Lifecycle, 'instanceId'>;
   config: {
     paths: { root: string; artifacts: string };

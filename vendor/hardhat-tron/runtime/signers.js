@@ -210,7 +210,7 @@ module.exports = function createModule(runtimeDeps) {
     async function predictAddress(name, args = []) {
       const bridge = runtimeDeps.bridge;
       const deploy = runtimeDeps.deploy;
-      const artifact = bridge.loadArtifact(hre, name);
+      const artifact = await bridge.loadArtifact(hre, name);
       const { cacheKey, deployOpts } = await bridge.prepareDeployment(
         tronAddress,
         artifact,

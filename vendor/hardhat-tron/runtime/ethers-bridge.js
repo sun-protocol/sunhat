@@ -1512,122 +1512,75 @@ module.exports = function createModule(deps) {
 
   // -- Artifact loader ------------------------------------------------
 
-  // Each test re-deploys via `ethers.deployContract(name)`, but the
-  // artifact JSON itself doesn't change during a test run. Cache by
-  // name (both bare and fully-qualified) to avoid the directory walk +
-  // JSON.parse on every fixture call. Memo on `npm test` cleared.
-  //
-  // _artifactIndex maps bare names (e.g. "ERC20Mock") → array of
-  // candidate absolute paths. Built once on first cache-miss bare-name
-  // lookup by a single `readdirSync({ recursive: true })`. The original
-  // implementation re-walked the whole `artifacts-tron/contracts` tree
-  // on every cache-miss — fine for the first N unique contracts but
-  // wasted ~50-200ms per cold lookup × hundreds of unique contracts on
-  // the OZ tree.
-  const _artifactCache = new Map();
-  let _artifactIndex = null;
-
-  function _buildArtifactIndex(roots) {
-    const idx = new Map();
-    for (const root of roots) {
-      if (!fs.existsSync(root)) {
-        continue;
-      }
-      for (const entry of fs.readdirSync(root, { recursive: true })) {
-        if (typeof entry !== 'string') {
-          continue;
-        }
-        if (!entry.endsWith('.json')) {
-          continue;
-        }
-        // Skip Hardhat's `dbg.json` debug-info files; only `<Contract>.json`
-        // is a real artifact.
-        if (entry.endsWith('.dbg.json')) {
-          continue;
-        }
-        const base = path.basename(entry, '.json');
-        const abs = path.join(root, entry);
-        let bucket = idx.get(base);
-        if (!bucket) {
-          bucket = [];
-          idx.set(base, bucket);
-        }
-        bucket.push(abs);
-      }
-    }
-    return idx;
-  }
-
-  // Project-source artifact roots scanned for bare-name lookup. Includes
-  // the main source tree (`contracts/`) and the `hardhat-exposed` wrapper
-  // tree (`contracts-exposed/`, the plugin's default outDir). Other
-  // top-level entries under `artifacts/` (`build-info/`, dependency
-  // packages like `@openzeppelin/...`) are intentionally excluded — they
-  // are huge (build-info) or only addressable via fully-qualified name.
-  function _artifactRoots(artifactsDir) {
-    return [
-      path.join(artifactsDir, 'contracts'),
-      path.join(artifactsDir, 'contracts-exposed'),
-    ];
-  }
-
-  function loadArtifact(hre, name) {
-    const cached = _artifactCache.get(name);
-    if (cached) {
-      return cached;
-    }
-
-    const artifactsDir = hre.config.paths.artifacts;
-    const sep = name.indexOf(':');
-    // Fully-qualified `path/to/Foo.sol:Foo` → direct lookup.
-    if (sep !== -1) {
-      const relPath = name.slice(0, sep);
-      const contractName = name.slice(sep + 1);
-      const abs = path.join(artifactsDir, relPath, `${contractName}.json`);
-      if (!fs.existsSync(abs)) {
-        throw new Error(`Artifact not found at ${abs}`);
-      }
-      const a = JSON.parse(fs.readFileSync(abs, 'utf8'));
-      _artifactCache.set(name, a);
-      return a;
-    }
-    // Bare name lookup via prebuilt name → paths index. Walks both the
-    // main source tree and the `hardhat-exposed` wrapper tree so originals
-    // (`Foo.json`) and exposed wrappers (`$Foo.json`) are both findable
-    // regardless of the plugin's outDir setting.
-    const roots = _artifactRoots(artifactsDir);
-    if (!_artifactIndex) {
-      _artifactIndex = _buildArtifactIndex(roots);
-    }
-    const candidates = _artifactIndex.get(name);
-    if (!candidates || candidates.length === 0) {
-      // Possible cause: artifact written AFTER the index was built (rare
-      // in test flows — compile runs before test). Rebuild once and retry
-      // before giving up.
-      _artifactIndex = _buildArtifactIndex(roots);
-      const retry = _artifactIndex.get(name);
-      if (!retry || retry.length === 0) {
-        throw new Error(
-          `Artifact for contract "${name}" not found in ${roots.join(', ')}`,
+  async function loadArtifact(hre, name) {
+    let artifact;
+    if (hre.artifacts) {
+      artifact = await hre.artifacts.readArtifact(name);
+    } else {
+      const root = hre.config.paths.artifacts;
+      const separator = name.lastIndexOf(':');
+      let filename;
+      if (separator !== -1) {
+        filename = path.join(
+          root,
+          name.slice(0, separator),
+          `${name.slice(separator + 1)}.json`,
         );
+      } else {
+        // Standalone consumers have no host manager. Scan every source root,
+        // including dependencies, while excluding build metadata.
+        const candidates = fs.existsSync(root)
+          ? fs
+              .readdirSync(root, { recursive: true, withFileTypes: true })
+              .filter(
+                (entry) =>
+                  entry.isFile() &&
+                  entry.name === `${name}.json` &&
+                  !entry.name.endsWith('.dbg.json'),
+              )
+              .map((entry) => path.join(entry.parentPath, entry.name))
+              .filter((file) => {
+                const relative = path.relative(root, file);
+                return (
+                  relative.includes(path.sep) &&
+                  relative.split(path.sep)[0] !== 'build-info'
+                );
+              })
+          : [];
+        if (candidates.length === 0) {
+          throw new Error(
+            `Artifact for contract "${name}" not found in ${root}`,
+          );
+        }
+        if (candidates.length > 1) {
+          throw new Error(`Multiple artifacts named "${name}" found; use a fully-qualified name:
+  ${candidates.join('\n  ')}`);
+        }
+        filename = candidates[0];
       }
-      if (retry.length > 1) {
-        throw new Error(
-          `Multiple artifacts named "${name}" found, please use a fully-qualified name:\n  ${retry.join('\n  ')}`,
-        );
+      const source = fs.readFileSync(filename, 'utf8');
+      try {
+        artifact = JSON.parse(source);
+      } catch (error) {
+        throw new Error(`Invalid JSON in contract artifact ${filename}`, {
+          cause: error,
+        });
       }
-      const a = JSON.parse(fs.readFileSync(retry[0], 'utf8'));
-      _artifactCache.set(name, a);
-      return a;
     }
-    if (candidates.length > 1) {
-      throw new Error(
-        `Multiple artifacts named "${name}" found, please use a fully-qualified name:\n  ${candidates.join('\n  ')}`,
-      );
+    if (
+      artifact === null ||
+      typeof artifact !== 'object' ||
+      Array.isArray(artifact) ||
+      !Array.isArray(artifact.abi) ||
+      typeof artifact.bytecode !== 'string' ||
+      (artifact.sourceName !== undefined &&
+        typeof artifact.sourceName !== 'string') ||
+      (artifact.contractName !== undefined &&
+        typeof artifact.contractName !== 'string')
+    ) {
+      throw new Error(`Invalid contract artifact: ${name}`);
     }
-    const a = JSON.parse(fs.readFileSync(candidates[0], 'utf8'));
-    _artifactCache.set(name, a);
-    return a;
+    return artifact;
   }
 
   // -- Predict-address cache ---------------------------------------
@@ -1701,7 +1654,13 @@ module.exports = function createModule(deps) {
 
   // -- Deploy -------------------------------------------------------
 
-  async function deployViaFacade(hre, name, args = [], signer = null) {
+  async function deployViaFacade(
+    hre,
+    name,
+    args = [],
+    signer = null,
+    selectedArtifact,
+  ) {
     // If a signer is provided, deploy through THAT signer's TronWeb -
     // contract ownership / msg.sender at construction reflects the
     // signer's TVM address. Without a signer, fall back to the
@@ -1717,7 +1676,7 @@ module.exports = function createModule(deps) {
         'TRON deployment requires a configured local signing account',
       );
     }
-    const artifact = loadArtifact(hre, name);
+    const artifact = selectedArtifact ?? (await loadArtifact(hre, name));
     const { cacheKey, deployOpts } = await prepareDeployment(
       deployerAddress,
       artifact,
@@ -1792,21 +1751,21 @@ module.exports = function createModule(deps) {
     }
   }
 
-  function makeFactory(hre, name, boundSigner = null) {
+  function makeFactory(hre, name, artifact, boundSigner = null) {
     validateNativeSigner(boundSigner);
-    const artifact = loadArtifact(hre, name);
     const iface = new ethersV6.Interface(artifact.abi);
     return {
       bytecode: artifact.bytecode,
       interface: iface,
       abi: artifact.abi,
-      deploy: async (...args) => deployViaFacade(hre, name, args, boundSigner),
+      deploy: async (...args) =>
+        deployViaFacade(hre, name, args, boundSigner, artifact),
       // factory.connect(signer) returns a new factory whose .deploy
       // routes through the signer's TronWeb. Upstream OZ tests use this
       // to "deploy as alice" patterns.
       connect: (signer) => {
         validateNativeSigner(signer, false);
-        return makeFactory(hre, name, signer);
+        return makeFactory(hre, name, artifact, signer);
       },
       attach: (addr) => {
         const tronWeb =
@@ -2292,7 +2251,7 @@ module.exports = function createModule(deps) {
       }
       return deployViaFacade(hre, name, args, signerOrOpts);
     };
-    hre.ethers.getContractFactory = (name, signerOrOptions = null) => {
+    hre.ethers.getContractFactory = async (name, signerOrOptions = null) => {
       const signer =
         signerOrOptions &&
         typeof signerOrOptions === 'object' &&
@@ -2300,11 +2259,12 @@ module.exports = function createModule(deps) {
         !('tronWeb' in signerOrOptions)
           ? signerOrOptions.signer
           : signerOrOptions;
-      return Promise.resolve(makeFactory(hre, name, signer));
+      const artifact = await loadArtifact(hre, name);
+      return makeFactory(hre, name, artifact, signer);
     };
-    hre.ethers.getContractAt = (name, address, signer = null) => {
+    hre.ethers.getContractAt = async (name, address, signer = null) => {
       validateNativeSigner(signer);
-      const artifact = loadArtifact(hre, name);
+      const artifact = await loadArtifact(hre, name);
       const tronWeb = signer?.tronWeb ?? hre.tre.makeTronWeb().tronWeb;
       return Promise.resolve(
         makeFacade(artifact.abi, toTronBase58(address), tronWeb, hre),
