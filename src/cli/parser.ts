@@ -1,4 +1,5 @@
 import { usage } from '../errors.js';
+import { targetSchema } from '../project/binding-schema.js';
 import type { Target } from '../project/binding.js';
 
 export type Invocation =
@@ -37,8 +38,11 @@ export function parse(argv: readonly string[]): Invocation {
 }
 
 export function parseTarget(value: string): Target {
-  if (value !== 'tron' && value !== 'evm') {
-    return usage(`invalid target ${value}; expected tron or evm`);
+  const result = targetSchema.safeParse(value);
+  if (!result.success) {
+    return usage(
+      `invalid target ${value}; expected ${targetSchema.options.join(' or ')}`,
+    );
   }
-  return value;
+  return result.data;
 }

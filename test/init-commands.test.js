@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { delimiter, dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test, { after } from 'node:test';
@@ -28,6 +28,19 @@ const runtime = mkdtempSync(resolve(tmpdir(), 'sunhat-command-runtime-'));
 after(() => rmSync(runtime, { recursive: true, force: true }));
 const { packageRoot, cli } = copyCliRuntime(resolve(runtime, 'package'));
 configureFoundryTemplates(packageRoot);
+const globalBin = resolve(runtime, 'global-bin');
+mkdirSync(globalBin);
+symlinkSync(cli, resolve(globalBin, 'sunhat'));
+if (process.platform === 'win32') {
+  writeFileSync(
+    resolve(globalBin, 'sunhat.cmd'),
+    `@echo off\r\n"${process.execPath}" "${cli}" %*\r\n`,
+  );
+}
+const scriptEnv = {
+  ...process.env,
+  PATH: [globalBin, process.env.PATH].filter(Boolean).join(delimiter),
+};
 const downloadFixture = fileURLToPath(
   new URL('./fixtures/toolchain-download.js', import.meta.url),
 );
@@ -136,7 +149,7 @@ function run(cwd, args, { env = {}, preload = false } = {}) {
     cwd,
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...process.env, ...foundryInstallEnv, ...env },
+    env: { ...scriptEnv, ...foundryInstallEnv, ...env },
   });
 }
 
@@ -233,10 +246,20 @@ function installFrameworkFixture(project) {
       binaries,
     });
   }
-  // Expose the real CLI to the generated npm scripts without installing packages.
+  // Native Hardhat scripts resolve their local framework binary. Foundry uses
+  // the isolated global CLI on PATH without a project-local Sunhat dependency.
   const bin = resolve(project.root, 'node_modules/.bin');
   mkdirSync(bin, { recursive: true });
-  symlinkSync(cli, resolve(bin, 'sunhat'));
+  if (project.framework === 'hardhat') {
+    const entry = resolve(project.root, 'node_modules/hardhat/cli.cjs');
+    symlinkSync(entry, resolve(bin, 'hardhat'));
+    if (process.platform === 'win32') {
+      writeFileSync(
+        resolve(bin, 'hardhat.cmd'),
+        `@echo off\r\n"${process.execPath}" "${entry}" %*\r\n`,
+      );
+    }
+  }
 }
 
 function expectedCall(project, tool, args) {
@@ -327,10 +350,16 @@ for (const framework of ['foundry', 'hardhat']) {
             ? spawnSync(
                 process.execPath,
                 [process.env.npm_execpath, ...npmArgs],
-                { cwd: initialized.nested, encoding: 'utf8', timeout: 10_000 },
+                {
+                  cwd: initialized.nested,
+                  env: scriptEnv,
+                  encoding: 'utf8',
+                  timeout: 10_000,
+                },
               )
             : spawnSync('npm', npmArgs, {
                 cwd: initialized.nested,
+                env: scriptEnv,
                 encoding: 'utf8',
                 timeout: 10_000,
               });

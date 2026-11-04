@@ -14,18 +14,12 @@ import fs, {
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { copyCliRuntime } from './fixtures/runtime.js';
 import { initProject } from '../dist/cli/init.js';
 import { CliError } from '../dist/errors.js';
 import { applyScaffold } from '../dist/scaffold/apply.js';
 import { planAdoption, planScaffold } from '../dist/scaffold/plan.js';
-
-const repository = fileURLToPath(new URL('../', import.meta.url));
-const packageMetadata = JSON.parse(
-  readFileSync(resolve(repository, 'package.json'), 'utf8'),
-);
 
 function runtime(t) {
   const temporary = realpathSync(
@@ -118,12 +112,20 @@ test('adoption planning preserves the project and checks late conflicts before c
   }
 });
 
-for (const framework of ['hardhat', 'foundry']) {
+for (const [framework, hardhatVersion] of [
+  ['hardhat', 2],
+  ['hardhat', 3],
+  ['foundry', undefined],
+]) {
   for (const target of ['evm', 'tron']) {
-    test(`${framework}/${target} initialization follows template changes without rebuilding`, (t) => {
+    test(`${framework}${hardhatVersion ?? ''}/${target} initialization follows template changes without rebuilding`, (t) => {
       const fixture = runtime(t);
       const source = resolve(fixture.packageRoot, 'templates', framework);
-      const variant = resolve(source, target);
+      const selected =
+        framework === 'hardhat'
+          ? resolve(source, `v${hardhatVersion}`)
+          : source;
+      const variant = resolve(selected, target);
       const project = resolve(
         fixture.temporary,
         process.platform === 'win32'
@@ -133,6 +135,7 @@ for (const framework of ['hardhat', 'foundry']) {
       const manifest = JSON.parse(
         readFileSync(resolve(variant, 'package.json')),
       );
+      manifest.devDependencies ??= {};
       manifest.devDependencies['@types/node'] = '22.10.2';
       manifest.scripts.typecheck = 'tsc --noEmit';
       json(resolve(variant, 'package.json'), manifest);
@@ -156,14 +159,29 @@ for (const framework of ['hardhat', 'foundry']) {
       assert.notEqual(customizedConfig, originalConfig);
       writeFileSync(resolve(variant, native), customizedConfig);
       const binding = readFileSync(
-        resolve(variant, 'sunhat.toml'),
+        resolve(source, target, 'sunhat.toml'),
         'utf8',
       ).replace(/\n$/u, ' # template-owned binding\n');
-      writeFileSync(resolve(variant, 'sunhat.toml'), binding);
+      writeFileSync(resolve(source, target, 'sunhat.toml'), binding);
       const readme = `# Customized ${framework}/${target} template\n`;
       writeFileSync(resolve(variant, 'README.md'), readme);
       json(resolve(source, 'common/config/shared.json'), { enabled: true });
       json(resolve(source, 'common/config/runtime.json'), { layer: 'common' });
+      if (framework === 'hardhat') {
+        json(resolve(source, 'common/config/version.json'), {
+          layer: 'shared-common',
+        });
+        json(resolve(source, target, 'config/version.json'), {
+          layer: 'shared-target',
+        });
+        json(resolve(selected, 'common/config/version.json'), {
+          layer: 'version-common',
+          version: hardhatVersion,
+        });
+        json(resolve(selected, 'common/config/runtime.json'), {
+          layer: 'version-common',
+        });
+      }
       json(resolve(variant, 'config/runtime.json'), {
         layer: target,
         name: '{{projectName}}',
@@ -172,6 +190,9 @@ for (const framework of ['hardhat', 'foundry']) {
       const result = run(fixture, [
         '--framework',
         framework,
+        ...(hardhatVersion === undefined
+          ? []
+          : ['--hardhat-version', String(hardhatVersion)]),
         '--target',
         target,
         project,
@@ -185,9 +206,14 @@ for (const framework of ['hardhat', 'foundry']) {
         readFileSync(resolve(project, 'package.json')),
       );
       assert.equal(generated.name, basename(project));
+      const metadata = JSON.parse(
+        readFileSync(resolve(fixture.packageRoot, 'package.json')),
+      );
       assert.equal(
-        generated.devDependencies.sunhat,
-        `npm:${packageMetadata.name}@${packageMetadata.version}`,
+        generated.devDependencies?.sunhat,
+        framework === 'hardhat' && hardhatVersion === 3 && target === 'tron'
+          ? `npm:${metadata.name}@${metadata.version}`
+          : undefined,
       );
       assert.equal(generated.devDependencies['@types/node'], '22.10.2');
       assert.equal(generated.scripts.typecheck, 'tsc --noEmit');
@@ -218,11 +244,17 @@ for (const framework of ['hardhat', 'foundry']) {
           name: basename(project),
         },
       );
+      if (framework === 'hardhat') {
+        assert.deepEqual(
+          JSON.parse(readFileSync(resolve(project, 'config/version.json'))),
+          { layer: 'version-common', version: hardhatVersion },
+        );
+      }
     });
   }
 }
 
-test('package metadata drives the version command and every generated Sunhat dependency', (t) => {
+test('package metadata drives versions and only the H3/TRON plugin dependency', (t) => {
   const fixture = runtime(t);
   const path = resolve(fixture.packageRoot, 'package.json');
   const metadata = JSON.parse(readFileSync(path, 'utf8'));
@@ -251,15 +283,30 @@ test('package metadata drives the version command and every generated Sunhat dep
       const generated = JSON.parse(
         readFileSync(resolve(project, 'package.json'), 'utf8'),
       );
-      assert.equal(
-        generated.devDependencies.sunhat,
-        `npm:${metadata.name}@${metadata.version}`,
-      );
+      assert.equal(generated.devDependencies?.sunhat, undefined);
       const readme = readFileSync(resolve(project, 'README.md'), 'utf8');
       assert.ok(readme.includes(`${metadata.name}@${metadata.version}`));
       assert.doesNotMatch(readme, /\{\{sunhatPackage\}\}/u);
     }
   }
+  const pluginProject = resolve(fixture.temporary, 'hardhat3-tron');
+  const initialized = run(fixture, [
+    '--framework',
+    'hardhat',
+    '--hardhat-version',
+    '3',
+    '--target',
+    'tron',
+    pluginProject,
+  ]);
+  assert.equal(initialized.status, 0, initialized.stderr);
+  const manifest = JSON.parse(
+    readFileSync(resolve(pluginProject, 'package.json')),
+  );
+  assert.equal(
+    manifest.devDependencies.sunhat,
+    `npm:${metadata.name}@${metadata.version}`,
+  );
 });
 
 test('new template files participate in conflict checks before any project file is written', (t) => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +44,11 @@ for (const target of ['evm', 'tron']) {
         [cli, 'init', '--framework', 'hardhat', '--target', target, project],
         temporary,
       );
-      // Use the generated package as-is, including its exact dependency versions.
+      const manifest = JSON.parse(
+        readFileSync(resolve(project, 'package.json')),
+      );
+      assert.equal(manifest.devDependencies.sunhat, undefined);
+      // Install the framework exactly as generated; no Sunhat override is needed.
       run(
         [
           process.env.npm_execpath,
@@ -56,6 +60,7 @@ for (const target of ['evm', 'tron']) {
         project,
         150_000,
       );
+      assert.equal(existsSync(resolve(project, 'node_modules/sunhat')), false);
       const config = JSON.parse(
         readFileSync(resolve(project, 'tsconfig.json'), 'utf8'),
       );
@@ -69,6 +74,20 @@ for (const target of ['evm', 'tron']) {
         project,
         30_000,
       );
+      if (target === 'evm') {
+        await t.test(
+          'native build and test scripts run without a local Sunhat package',
+          () => {
+            run([process.env.npm_execpath, 'run', 'build'], project, 90000);
+            const tested = run(
+              [process.env.npm_execpath, 'test'],
+              project,
+              30000,
+            );
+            assert.match(tested.stdout, /1 passing/u);
+          },
+        );
+      }
       if (target === 'tron') {
         await t.test(
           'the default test task never starts or stops Docker',

@@ -1,0 +1,56 @@
+{
+  "node": {
+    "majors": [20, 22, 24, 26],
+    "minimum": {
+      "cli": {
+        "major": 20,
+        "minor": 11
+      },
+      "hardhat3": {
+        "major": 22,
+        "minor": 13
+      },
+      "hardhat2Tron": {
+        "major": 22,
+        "minor": 0
+      }
+    },
+    "tested": ["20.11.0", "22.13.0", "24.22.1", "26.0.0"],
+    "tooling": "24.22.1"
+  },
+  "hardhat3Tron": {
+    "hardhat": {
+      "minimum": "3.21.1",
+      "tested": "3.21.1"
+    },
+    "@nomicfoundation/hardhat-ethers": {
+      "minimum": "4.2.1",
+      "tested": "4.2.1"
+    },
+    "@nomicfoundation/hardhat-mocha": {
+      "minimum": "4.0.1",
+      "tested": "4.0.1"
+    },
+    "ethers": {
+      "minimum": "6.17.0",
+      "tested": "6.17.0"
+    },
+    "@openzeppelin/tron-runtime": {
+      "minimum": "0.1.0",
+      "tested": "0.1.0"
+    },
+    "tronweb": {
+      "minimum": "6.5.1",
+      "tested": "6.5.1"
+    },
+    "solc": {
+      "minimum": "0.8.26",
+      "tested": "0.8.26"
+    },
+    "@nomicfoundation/hardhat-utils": {
+      "minimum": "5.1.1",
+      "tested": "5.1.1",
+      "entry": "@nomicfoundation/hardhat-utils/package.json"
+    }
+  }
+}

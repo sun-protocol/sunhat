@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/OpenZeppelin/hardhat-tron",
+  "revision": "d3aa82e3914087778b0cdc21d6faa05be87cecd9",
+  "components": {
+    "java-tron TransactionCapsule": "GPL-3.0-or-later; original notice retained in source",
+    "other upstream patch/build sources": "MIT; upstream LICENSE retained"
+  },
+  "files": {
+    "org/tron/core/capsule/TransactionCapsule.java": "c5fdc67e7603dec91defa78824be6b7fb6fa6a555bb05ff6a5f6b78e07206e76",
+    "org/tron/core/services/jsonrpc/tre/TreJsonRpcImpl.java": "c31272d3d627936d4dd16a14ea06da7d2d1500e5af8e2139f6153062e72c5a12",
+    "org/tron/core/services/jsonrpc/tre/TreJsonRpc.java": "4bc19f196bf888a6c82bef3958f94ba566c0f7975c806942c530108705c81ddd",
+    "org/tron/core/services/jsonrpc/tre/TreImpersonationRegistry.java": "aebec5c9cd8a4595ede98e7dcba303b26a9bc454e332499394d37b23275bc522",
+    "org/tron/consensus/dpos/DposSlot.java": "f5173a97a1d236f2a128371684d12888f6b7235f3c3f4c65aa4889e93fa3d15a"
+  }
+}

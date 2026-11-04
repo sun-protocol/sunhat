@@ -4,9 +4,9 @@ Sunhat runs Hardhat or Foundry using the framework and target recorded in the pr
 
 ## Requirements
 
-- Node.js **20.11+** for Sunhat. Node.js 24 is used for repository development and validation.
+- Node.js **20.11+, 22.x, 24.x, or 26.x** for Sunhat; other majors are rejected. Node.js 20 remains supported and will be deprecated in a future release. Node.js 24 is used for repository development. Hardhat 3 requires **22.13+, 24.x, or 26.x**; the Hardhat 2/TRON plugin requires **22.x, 24.x, or 26.x**.
 - Foundry toolchain installation needs access to the configured GitHub release and `tar` on macOS/Linux or PowerShell on Windows. Its installer supports macOS/Linux arm64 and x64, and Windows x64.
-- Hardhat projects currently require **Hardhat 2**, declared as an exact version matching the installed package. Hardhat TRON tests need a running TRE JSON-RPC endpoint. Container startup is disabled by default; Docker is required only if you choose to run TRE in a container.
+- Hardhat projects require **Hardhat 2 or 3**, declared as an exact version matching the installed package. Hardhat TRON tests need a running TRE endpoint. Container startup is disabled by default; Docker is required only if you choose to run TRE in a container. Hardhat 3 support requires this checkout's unpublished 2.1.0 artifact; released 2.0.0 supports the existing Hardhat 2 route.
 - First compilation needs network access when the compiler is not already cached.
 
 ## Install Sunhat
@@ -21,12 +21,14 @@ The version command should print `sunhat 2.0.0`. Ensure npm's global executable 
 
 ## Create a project
 
-| Framework | Target            | Command                                                    |
-| --------- | ----------------- | ---------------------------------------------------------- |
-| Foundry   | TRON, the default | `sunhat init counter-tron`                                 |
-| Foundry   | EVM               | `sunhat init --target evm counter-evm`                     |
-| Hardhat   | TRON              | `sunhat init --framework hardhat hardhat-tron`             |
-| Hardhat   | EVM               | `sunhat init --framework hardhat --target evm hardhat-evm` |
+| Framework | Target            | Command                                                                           |
+| --------- | ----------------- | --------------------------------------------------------------------------------- |
+| Foundry   | TRON, the default | `sunhat init counter-tron`                                                        |
+| Foundry   | EVM               | `sunhat init --target evm counter-evm`                                            |
+| Hardhat   | TRON              | `sunhat init --framework hardhat hardhat-tron`                                    |
+| Hardhat   | EVM               | `sunhat init --framework hardhat --target evm hardhat-evm`                        |
+| Hardhat 3 | TRON              | `sunhat init --framework hardhat --hardhat-version 3 --target tron hardhat3-tron` |
+| Hardhat 3 | EVM               | `sunhat init --framework hardhat --hardhat-version 3 --target evm hardhat3-evm`   |
 
 `init` writes project files without downloading toolchains or installing npm packages. It refuses to overwrite existing destination files. For an existing framework project, use [adoption](#adopt-an-existing-project).
 
@@ -58,38 +60,59 @@ sunhat test
 
 For EVM, initialize with `--target evm` and use the same install, compile, and test sequence. The EVM template does not load the TRON plugin.
 
-## Use the local CLI and npm scripts
+### Hardhat 3 from the development artifact
 
-Generated projects declare the creating CLI's npm package and exact version under the `sunhat` alias. Install the generated project's dependencies from its root:
-
-```bash
-npm install
-```
-
-For Sunhat 2.0.0, the alias is `npm:@sun-protocol/sunhat@2.0.0`. It is independent of the initializing machine's installation path. Commit `package.json` and the package-manager lockfile for reproducible npm dependency installation.
+The two Hardhat 3 commands above require 2.1.0 from this checkout. Build a real archive first; this does not publish it:
 
 ```bash
-npx --no-install sunhat --version
+# In the Sunhat checkout:
+npm ci
+npm pack
+npm install --global ./sun-protocol-sunhat-2.1.0.tgz
+sunhat init --framework hardhat --hardhat-version 3 --target tron hardhat3-tron
+cd hardhat3-tron
+npm install --save-dev sunhat@file:/absolute/path/to/sun-protocol-sunhat-2.1.0.tgz
 npm run build
-npm test
+TRE_AUTO_START=true npm test
+TRE_AUTO_START=true TRE_KEEP_RUNNING=true npx --no-install sunhat node --network tre
 ```
 
-The generated `build` script runs `sunhat build` for Foundry or `sunhat compile` for Hardhat. Both templates map `npm test` to `sunhat test`. Forward additional arguments with `npm run build -- <args>` or `npm test -- <args>`.
+The last command retains TRE when terminated. In another shell in the generated project, run `npx --no-install sunhat run scripts/deploy.ts --network tre`. For a managed existing TRE, set `TRE_URL` to its HTTP endpoint and `TRE_PRIVATE_KEY` to a `0x`-prefixed signing key instead of enabling startup. The H3 template accepts the base URL or `/jsonrpc` URL. It uses a public development key only for loopback endpoints; a remote endpoint without a key is read-only. Value/balance integers are sun, and receipts retain native resource fields.
 
-Global Sunhat resolves the project's framework tools, but it does not switch to the project's Sunhat version. Use `npx --no-install sunhat ...` or the generated npm scripts when you want the local CLI.
+For H3/EVM, use the EVM initialization command, run `npm install`, then `npm run build` and `npm test`; no local Sunhat dependency or Docker is needed. Hardhat 3 uses `build` and explicit `network.create()` connections. Its TRON and EVM artifacts have separate roots. Patched snapshots/time/account helpers require a separate patched jar; see the [plugin guide](hardhat3-tron-plugin.md). Generated TRON scripts reject EVM connections before writes.
 
-### Develop against a local checkout
+## Project dependencies and npm scripts (2.1.0)
 
-Run `npm run build` in the Sunhat checkout. In a generated project's root, explicitly point its Sunhat dependency at that checkout:
+This dependency split applies to projects generated by the local 2.1.0 artifact. Install that tgz as described above before initializing these projects. Released 2.0.0 retains its original local-CLI dependencies and scripts.
+
+Only Hardhat 3/TRON declares the creating Sunhat package under the `sunhat` alias, because `hardhat.config.ts` imports `sunhat/hardhat3-tron`. Its alias uses the creator's package name and exact version. Until that version is published, install its local tgz as shown above.
+
+Hardhat 2/EVM, Hardhat 2/TRON and Hardhat 3/EVM install their declared framework/plugin dependencies with ordinary `npm install`; no Sunhat package is added. Their npm scripts call local Hardhat directly:
+
+| Project            | `npm run build`   | `npm test`     | Project-local Sunhat           |
+| ------------------ | ----------------- | -------------- | ------------------------------ |
+| Hardhat 2 EVM/TRON | `hardhat compile` | `hardhat test` | None                           |
+| Hardhat 3 EVM      | `hardhat build`   | `hardhat test` | None                           |
+| Hardhat 3 TRON     | `hardhat build`   | `hardhat test` | Required for the TRON plugin   |
+| Foundry EVM/TRON   | `sunhat build`    | `sunhat test`  | None; Sunhat must be on `PATH` |
+
+Foundry templates have no npm dependencies. Their scripts use the globally installed CLI to resolve the project-local EVM or TRON toolchain; they do not select an unrelated global Forge executable. Run `sunhat toolchain install` explicitly before building. `npm install` is optional for these templates.
+
+The global `sunhat <command>` wrapper remains available for every bound project and forwards to the project's native framework. It does not require a project-local CLI dependency. Forward npm script arguments with `npm run build -- <args>` or `npm test -- <args>`.
+
+### Develop the H3/TRON plugin against a local checkout
+
+Build a tgz from the checkout, then install it only in the H3/TRON consumer:
 
 ```bash
-npm pkg set "devDependencies.sunhat=file:/absolute/path/to/sunhat2"
-npm install
+npm install --save-dev sunhat@file:/absolute/path/to/sun-protocol-sunhat-2.1.0.tgz
 ```
 
-Rebuild the checkout after source changes. Restore the registry dependency before sharing the project or committing its dependency configuration.
+This explicit local artifact dependency is for development. Other generated framework projects need no replacement Sunhat dependency. Restore a published plugin dependency before sharing an H3/TRON project.
 
 ## Adopt an existing project
+
+Hardhat 3 adoption requires ESM and an exact Hardhat version. Configure/register the native plugins first; a TRON project uses `sunhat/hardhat3-tron`. Then run `sunhat init --adopt --framework hardhat --hardhat-version 3 --target tron`. Adoption only writes the binding and does not migrate configuration, source or dependencies. Plugin availability checks do not prove registration; native configuration and user scripts own network selection. Apply the generated helper's `connection.tre` guard to adapted TRON actions before writes.
 
 Run the appropriate command from a directory containing `foundry.toml` or `hardhat.config.js`, `.cjs`, or `.ts`:
 
@@ -102,11 +125,7 @@ Run the appropriate command from a directory containing `foundry.toml` or `hardh
 
 Adoption preserves native framework configuration, source files, tests, and `package.json`. It adds the Sunhat binding. Foundry adoption also adds `foundry-toolchain.json` if missing; run `sunhat toolchain install` separately. For Hardhat, install the project's declared dependencies separately.
 
-To add a local Sunhat CLI to an adopted project:
-
-```bash
-npm install --save-dev --save-exact @sun-protocol/sunhat@2.0.0
-```
+Adopted projects use the installed global CLI for `sunhat` commands. H3/TRON consumers must separately install and register the native TRON plugin; ordinary framework projects do not need a local Sunhat package.
 
 An already-bound project is rejected by `init`; it is not reinitialized.
 
@@ -130,25 +149,26 @@ Use `framework = "hardhat"` for Hardhat or `target = "evm"` for EVM. Choose the 
 | `foundry-toolchain.json`        | Foundry release, platform archives, and installation checksums        |
 | `package.json` and its lockfile | npm dependencies and project scripts                                  |
 
-Run commands from the project root or a subdirectory. Sunhat locates the nearest ancestor containing `sunhat.toml` and runs the framework from that project root. See [TOML compatibility](toml-binding.md) for binding syntax details.
+Run commands from the project root or a subdirectory. Sunhat locates the nearest ancestor containing `sunhat.toml` and runs the framework from that project root. Use TOML 1.0 syntax for the binding's `project` table; `framework` accepts `hardhat` or `foundry`, and `target` accepts `evm` or `tron`.
 
 ## Compiler installation
 
 Compilers are resolved by the framework on first compilation. Foundry toolchain installation does not predownload Solidity compilers.
 
-| Project          | First compilation                                                    | Compiler selection                                                             |
-| ---------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Foundry EVM      | `sunhat build` downloads uncached `solc`                             | Source pragmas or the `solc` setting in `foundry.toml`; the sample uses 0.8.28 |
-| Foundry TRON     | `sunhat build` resolves native `tron-solc`                           | `solc` in `foundry.toml`; the selected toolchain defaults to 0.8.28            |
-| Hardhat EVM/TRON | After `npm install`, `sunhat compile` resolves the selected compiler | `solidity` in `hardhat.config.ts`; both templates select 0.8.26                |
+| Project            | First compilation                                                    | Compiler selection                                                              |
+| ------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Foundry EVM        | `sunhat build` downloads uncached `solc`                             | `solc` in `foundry.toml`; templates pin 0.8.28                                  |
+| Foundry TRON       | `sunhat build` resolves native `tron-solc`                           | `solc` in `foundry.toml`; templates pin 0.8.28                                  |
+| Hardhat 2 EVM/TRON | After `npm install`, `sunhat compile` resolves the selected compiler | `solidity` in `hardhat.config.ts`; templates select 0.8.26                      |
+| Hardhat 3 EVM/TRON | After `npm install`, `sunhat build` resolves the selected compiler   | `solidity` plus the TRON plugin's target/path settings; templates select 0.8.26 |
 
-For example, set this key under the existing `[profile.default]` section in `foundry.toml`:
+Both Foundry templates include this key under `[profile.default]` in `foundry.toml`:
 
 ```toml
 solc = "0.8.28"
 ```
 
-Foundry also accepts a local compiler path through `solc`. Foundry-TRON caches downloaded native compilers under `~/.foundry-tron/solc/`. Hardhat TRON uses the compiler downloader supplied by `@openzeppelin/hardhat-tron`.
+Edit the quoted value to select another compiler version, such as `"0.8.26"`, and update source pragmas to accept that version. Foundry also accepts a local compiler path through `solc`; TRON projects require a native `tron-solc` executable. Foundry-TRON caches downloaded native compilers under `~/.foundry-tron/solc/`. Hardhat 2/TRON uses the compiler downloader supplied by `@openzeppelin/hardhat-tron`. Hardhat 3/TRON uses the verified downloader adapted in `sunhat/hardhat3-tron` and Hardhat 3's public compiler path setting.
 
 ## Common Foundry commands
 
@@ -174,18 +194,21 @@ TRON Foundry commands use the project's Foundry-TRON binaries. Anvil and Chisel 
 
 ## Common Hardhat commands
 
-| Command                                | Purpose                             |
-| -------------------------------------- | ----------------------------------- |
-| `sunhat compile --force`               | Recompile contracts                 |
-| `sunhat test --grep Counter`           | Run matching tests                  |
-| `sunhat run scripts/deploy.ts`         | Run the generated deployment script |
-| `sunhat node`                          | Run the configured node task        |
-| `sunhat console --no-compile`          | Open a console                      |
-| `sunhat flatten contracts/Counter.sol` | Flatten the sample contract         |
-| `sunhat clean`                         | Remove artifacts and cache          |
-| `sunhat help compile`                  | Show compile-task options           |
+| Command                                | Purpose                              |
+| -------------------------------------- | ------------------------------------ |
+| `sunhat compile --force`               | Recompile contracts, Hardhat 2       |
+| `sunhat build`                         | Compile contracts, Hardhat 3         |
+| `sunhat test --grep Counter`           | Run matching tests, Hardhat 2        |
+| `sunhat test mocha --grep Counter`     | Run matching tests, Hardhat 3        |
+| `sunhat run scripts/deploy.ts`         | Run the generated deployment script  |
+| `sunhat node`                          | Run the configured node task         |
+| `sunhat console --no-compile`          | Open a console, Hardhat 2            |
+| `sunhat flatten contracts/Counter.sol` | Flatten the sample contract          |
+| `sunhat clean`                         | Remove artifacts and cache           |
+| `sunhat compile --help`                | Show compile-task options, Hardhat 2 |
+| `sunhat build --help`                  | Show build-task options, Hardhat 3   |
 
-Plugin tasks are forwarded in the same form: `sunhat <task> [args...]`. Sunhat forwards arguments and the framework's exit status; it does not translate Foundry commands into Hardhat tasks or the reverse. Use `sunhat compile` with Hardhat and `sunhat build` with Foundry.
+Plugin tasks are forwarded in the same form: `sunhat <task> [args...]`. Sunhat forwards arguments and the framework's exit status; it does not translate native task names. Use `sunhat compile` with Hardhat 2 and `sunhat build` with Hardhat 3 or Foundry.
 
 ## Foundry toolchain installation
 
@@ -206,6 +229,6 @@ Sunhat 1.x is maintenance-only. The v2 CLI does not replace v1's Hardhat plugin 
 
 1. Review dependencies, configuration imports, deployment scripts, and custom tasks that use the v1 plugin. Configure the native framework and plugins for the features the project needs. Generated v2 templates provide working configuration examples.
 2. Bind the project using the matching `init --adopt` command above. Adoption does not rewrite the old plugin configuration or migrate its deployment records.
-3. Replace the v1 Sunhat dependency with `@sun-protocol/sunhat@2.0.0` after updating those imports and scripts, then run compilation and tests.
+3. Remove the v1 plugin dependency after updating its imports and scripts. Use the global v2 CLI for routing; retain a local Sunhat dependency only when adopting the H3/TRON plugin. Then run compilation and tests.
 
 Keep projects that still depend on v1-only APIs pinned to their existing 1.x release until that migration is complete.
