@@ -119,6 +119,34 @@ describe('Hardhat 3 TRON plugin', function () {
     const multi = await abi.multiple();
     assert.equal(multi.count, 2n);
     assert.equal(multi.row.value, 9n);
+    const measured = await tronWeb.transactionBuilder.triggerConstantContract(
+      toBase58Address(await abi.getAddress()),
+      'mutate()',
+      {},
+      [],
+      address,
+    );
+    const expectedEnergy = BigInt(measured.energy_used);
+    assert.ok(expectedEnergy > 0n);
+    assert.equal(await abi.mutate.estimateGas(), expectedEnergy);
+    const request = {
+      from: owner,
+      to: await abi.getAddress(),
+      data: abi.interface.encodeFunctionData('mutate'),
+    };
+    assert.equal(
+      await connection.ethers.provider.estimateGas(request),
+      expectedEnergy,
+    );
+    assert.equal(
+      BigInt(
+        await connection.provider.request({
+          method: 'eth_estimateGas',
+          params: [request],
+        }),
+      ),
+      expectedEnergy,
+    );
     assert.equal(await abi.mutate.staticCall(), 1n);
     assert.equal(await abi.counter(), 0n);
     await (await abi.mutate()).wait();
@@ -301,6 +329,9 @@ describe('Hardhat 3 TRON plugin', function () {
       .to.be.revertedWithCustomError(contract, 'Deliberate')
       .withArgs(42n);
     await expect(contract.failCustom.staticCall())
+      .to.be.revertedWithCustomError(contract, 'Deliberate')
+      .withArgs(42n);
+    await expect(contract.failCustom.estimateGas())
       .to.be.revertedWithCustomError(contract, 'Deliberate')
       .withArgs(42n);
     await expect(contract.failReason()).to.be.revertedWith('EXPECTED_REVERT');

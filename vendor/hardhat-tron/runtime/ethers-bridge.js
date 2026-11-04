@@ -316,49 +316,7 @@ module.exports = function createModule(deps) {
       };
     },
     async estimateGas(tx) {
-      // TVM has no `eth_estimateGas` analog, but
-      // `/wallet/triggerconstantcontract` returns `energy_used` from a
-      // dry-run that mirrors EVM gas semantics under our 1:1
-      // gas-to-energy mapping. Used by OZ's ERC2771Forwarder tests'
-      // `estimateRequest` helper, which forms a synthetic call from
-      // the forwarder to its target with the forwarded calldata + the
-      // appended `from` address (ERC-2771 trailing-sender encoding).
-      //
-      // The TX shape is the ethers v6 transaction-request: `{from, to,
-      // data, value, gasLimit}`. We map directly: `to → contract_address`,
-      // `from → owner_address`, `data → data` (raw hex calldata).
-      const tw = this._tw();
-      if (!tw) {
-        return 0n;
-      }
-      const from = signersMod.toBase58(tx.from);
-      const to = signersMod.toBase58(tx.to);
-      const data =
-        typeof tx.data === 'string' && tx.data.startsWith('0x')
-          ? tx.data.slice(2)
-          : tx.data || '';
-      const body = {
-        owner_address: TronWeb.address.toHex(from),
-        contract_address: TronWeb.address.toHex(to),
-        data,
-        visible: false,
-      };
-      const res = await requestJson(tw, '/wallet/triggerconstantcontract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonStringifyWithBigInts(body),
-      }).catch(() => null);
-      if (!res || (res.result && res.result.code)) {
-        // Match ethers' shape on simulation failure — throw with revert
-        // data so chai-matchers can match `revertedWith*`. Most callers
-        // just want a numeric estimate; if the simulation reverts they
-        // typically don't care about the data, only that something was
-        // returned without an exception. Default to 21000n on error
-        // rather than throwing, mirroring the loose "guess" behavior of
-        // EVM clients on simulation failure.
-        return 21000n;
-      }
-      return BigInt(res.energy_used || 21000);
+      return estimateTransactionEnergy(this._tw(), tx);
     },
     async getStorage(address, slot) {
       const tw = this._tw();
@@ -751,6 +709,7 @@ module.exports = function createModule(deps) {
     tronWeb,
     normalized,
     overrides = {},
+    estimate = false,
   ) {
     const { fragment: ifaceFragment, iface } = getFragmentAndIface(fnAbi);
     const sig = canonicalSig(fnAbi);
@@ -767,7 +726,9 @@ module.exports = function createModule(deps) {
     // verify the owner's signature. Falls back to the TronWeb's default
     // address when no override is set.
     const ownerBase58 =
-      tronWeb._impersonatedFrom || tronWeb.defaultAddress.base58;
+      overrides.from ??
+      tronWeb._impersonatedFrom ??
+      tronWeb.defaultAddress.base58;
     const body = {
       owner_address: TronWeb.address.toHex(ownerBase58),
       contract_address: TronWeb.address.toHex(tronContract.address),
@@ -776,35 +737,119 @@ module.exports = function createModule(deps) {
       call_value: valueToCallValue(overrides.value ?? 0),
       visible: false,
     };
-    const res = await requestJson(tronWeb, '/wallet/triggerconstantcontract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: jsonStringifyWithBigInts(body),
-    });
-
-    // Successful call: result.result === true (only field) AND no
-    // contract_result code. On revert, `result.code` is set and
-    // `constant_result[0]` holds the revert bytes.
-    const reverted =
-      res.result &&
-      (res.result.result === false || res.result.code || res.result.message);
-    const raw =
-      res.constant_result && res.constant_result[0]
-        ? '0x' + res.constant_result[0]
-        : '0x';
-
-    if (!reverted) {
-      const decoded = iface.decodeFunctionResult(ifaceFragment, raw);
-      return decoded.length === 1 ? decoded[0] : decoded;
+    const { response, raw } = await simulateConstantCall(
+      tronWeb,
+      body,
+      tronContract._iface || iface,
+      {
+        to: tronToHex(tronContract.address),
+        from: tronToHex(ownerBase58),
+        data: calldata,
+      },
+    );
+    if (estimate) {
+      return readEnergyEstimate(response);
     }
+    const decoded = iface.decodeFunctionResult(ifaceFragment, raw);
+    return decoded.length === 1 ? decoded[0] : decoded;
+  }
 
-    // Decode only the bytes returned by this execution. Bytecode and
-    // argument values cannot establish why a call reverted.
-    throw (tronContract._iface || iface).makeError(raw, {
-      to: tronToHex(tronContract.address),
-      from: tronToHex(ownerBase58),
-      data: calldata,
-    });
+  async function simulateConstantCall(tronWeb, body, iface, transaction) {
+    const response = await requestJson(
+      tronWeb,
+      '/wallet/triggerconstantcontract',
+      {
+        body: jsonStringifyWithBigInts(body),
+      },
+    );
+    const result = response?.result;
+    if (
+      result === null ||
+      typeof result !== 'object' ||
+      Array.isArray(result)
+    ) {
+      throw new Error('Invalid TRON constant-call result');
+    }
+    if (
+      response.constant_result !== undefined &&
+      !Array.isArray(response.constant_result)
+    ) {
+      throw new Error('Invalid TRON constant-call output array');
+    }
+    const output = response.constant_result?.length
+      ? response.constant_result[0]
+      : '';
+    if (typeof output !== 'string' || !/^(?:[0-9a-fA-F]{2})*$/.test(output)) {
+      throw new Error('Invalid TRON constant-call output');
+    }
+    const raw = '0x' + output;
+    if (result.result === false || result.code || result.message) {
+      throw iface.makeError(raw, transaction);
+    }
+    if (result.result !== true) {
+      throw new Error('Missing TRON constant-call success flag');
+    }
+    return { response, raw };
+  }
+
+  function readEnergyEstimate(response) {
+    const value = response.energy_used;
+    if (
+      !(
+        (typeof value === 'number' && Number.isSafeInteger(value)) ||
+        typeof value === 'bigint' ||
+        (typeof value === 'string' && /^[0-9]+$/.test(value))
+      ) ||
+      BigInt(value) < 0n
+    ) {
+      throw new Error('Invalid or missing TRON energy_used estimate');
+    }
+    return BigInt(value);
+  }
+
+  async function estimateTransactionEnergy(tronWeb, transaction) {
+    const tx = await ethersV6.resolveProperties(transaction);
+    if (tx.to === null || tx.to === undefined) {
+      throw ethersV6.makeError(
+        'TRON deployment energy estimation is not supported',
+        'UNSUPPORTED_OPERATION',
+        {
+          operation: 'estimateGas',
+        },
+      );
+    }
+    const resolveAddress = async (value) =>
+      toTronBase58(
+        ethersV6.isAddressable(value) ? await value.getAddress() : value,
+      );
+    const from = await resolveAddress(tx.from ?? tronWeb.defaultAddress.base58);
+    const to = await resolveAddress(tx.to);
+    ethersV6.assertArgument(
+      typeof from === 'string' && TronWeb.isAddress(from),
+      'TRON estimation requires a valid sender',
+      'from',
+      tx.from,
+    );
+    ethersV6.assertArgument(
+      typeof to === 'string' && TronWeb.isAddress(to),
+      'invalid TRON recipient',
+      'to',
+      tx.to,
+    );
+    const data = ethersV6.hexlify(tx.data ?? '0x');
+    const { response } = await simulateConstantCall(
+      tronWeb,
+      {
+        owner_address: TronWeb.address.toHex(from),
+        contract_address: TronWeb.address.toHex(to),
+        data: data.slice(2),
+        call_value: valueToCallValue(tx.value ?? 0),
+        visible: false,
+      },
+      new ethersV6.Interface([]),
+      { from: tronToHex(from), to: tronToHex(to), data },
+    );
+    return readEnergyEstimate(response);
   }
 
   // State-changing call from an impersonated owner_address.
@@ -965,6 +1010,31 @@ module.exports = function createModule(deps) {
         value: valueToCallValue(overrides.value ?? 0),
         gasLimit: overrides.gasLimit,
       };
+      if (overrides.from !== undefined && overrides.from !== null) {
+        const candidate = await overrides.from;
+        const from = toTronBase58(
+          ethersV6.isAddressable(candidate)
+            ? await candidate.getAddress()
+            : candidate,
+        );
+        ethersV6.assertArgument(
+          typeof from === 'string' && TronWeb.isAddress(from),
+          'invalid transaction sender',
+          'from',
+          candidate,
+        );
+        if (tronWeb.defaultPrivateKey || tronWeb._impersonatedFrom) {
+          const owner =
+            tronWeb._impersonatedFrom ?? tronWeb.defaultAddress.base58;
+          ethersV6.assertArgument(
+            tronToHex(from) === tronToHex(owner),
+            'transaction from mismatch',
+            'from',
+            candidate,
+          );
+        }
+        effective.from = from;
+      }
       const normalized = await normalizeCallArguments(fnAbi.inputs, args);
       return { overrides: effective, normalized };
     }
@@ -1169,14 +1239,14 @@ module.exports = function createModule(deps) {
 
     invoke.estimateGas = async (...rawArgs) => {
       const { normalized, overrides } = await prepareCall(rawArgs);
-      await staticCallWithRevertData(
+      return staticCallWithRevertData(
         fnAbi,
         tronContract,
         tronWeb,
         normalized,
         overrides,
+        true,
       );
-      return isView ? 21000n : 50000n;
     };
 
     invoke.staticCall = async (...rawArgs) => {
@@ -2124,40 +2194,9 @@ module.exports = function createModule(deps) {
     // Standalone eth_* shim — not all are evm_-prefixed.
     async function handleEthRpc(method, params) {
       if (method === 'eth_estimateGas') {
-        // Best-effort gas estimate via triggerconstantcontract. Tests use
-        // this to compute "less than estimate" gas limits for OOG forcing
-        // (test/metatx/ERC2771Forwarder.test.js). TRE doesn't implement
-        // eth_estimateGas via JSON-RPC; we run the call dry and read
-        // energy_used, treating energy ≈ gas (1:1) at the test level.
-        const txArg = (params && params[0]) || {};
-        const fromBase58 = txArg.from
-          ? signersMod.toBase58(txArg.from)
-          : tw().defaultAddress.base58;
-        const toBase58 = txArg.to ? signersMod.toBase58(txArg.to) : null;
-        if (!toBase58) {
-          return '0x5208';
-        } // 21000 fallback
-        const dataHex = (txArg.data || '0x').replace(/^0x/, '');
-        try {
-          const j = await requestJson(tw(), '/wallet/triggerconstantcontract', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: jsonStringifyWithBigInts({
-              owner_address: TronWeb.address.toHex(fromBase58),
-              contract_address: TronWeb.address.toHex(toBase58),
-              data: dataHex,
-              call_value: valueToCallValue(txArg.value),
-              visible: false,
-            }),
-          });
-          const energy =
-            j.energy_used ||
-            (j.receipt && j.receipt.energy_usage_total) ||
-            21000;
-          return '0x' + Number(energy).toString(16);
-        } catch {
-          return '0x5208';
-        }
+        return ethersV6.toQuantity(
+          await estimateTransactionEnergy(tw(), params?.[0] ?? {}),
+        );
       }
       return undefined;
     }

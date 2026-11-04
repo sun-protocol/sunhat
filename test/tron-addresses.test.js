@@ -117,6 +117,7 @@ async function fixture(t, { caller = factoryAddress, rejected = false } = {}) {
         }
         return Response.json({
           result: { result: true },
+          energy_used: 734,
           constant_result: [
             iface.encodeFunctionResult('owner', [recipient]).slice(2),
           ],
