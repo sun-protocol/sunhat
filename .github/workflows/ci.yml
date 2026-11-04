@@ -8,46 +8,100 @@ permissions:
   contents: read
 
 jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    outputs:
+      tooling: ${{ steps.matrix.outputs.tooling }}
+      minimum: ${{ steps.matrix.outputs.minimum }}
+      hardhat3: ${{ steps.matrix.outputs.hardhat3 }}
+      otherHardhat3: ${{ steps.matrix.outputs.otherHardhat3 }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: matrix
+        run: node scripts/compatibility-matrix.js >> "$GITHUB_OUTPUT"
+
   node:
+    needs: compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: ${{ needs.compatibility.outputs.tooling }}
           cache: npm
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
       - run: npm test
+      - run: npm run check:compatibility
+      - run: npm run test:tron-plugin
+      - run: npm run check:english
       - run: npm run test:templates
+      - run: npm run test:hardhat3
       - run: npm run pack:check
 
+  hardhat3-supported-node:
+    needs: compatibility
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ${{ fromJSON(needs.compatibility.outputs.otherHardhat3) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:hardhat3
+
+  hardhat3-tron:
+    needs: compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        node: ${{ fromJSON(needs.compatibility.outputs.hardhat3) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run tre:build-jar
+      - run: npm run test:hardhat3:tron-plugin
+      - run: npm run test:hardhat3:tron-template
+
   minimum-node:
+    needs: compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: ${{ needs.compatibility.outputs.tooling }}
           cache: npm
       - run: npm ci
       - run: npm run build
       - uses: actions/setup-node@v7
         with:
-          node-version: 20.11.0
+          node-version: ${{ needs.compatibility.outputs.minimum }}
       - run: npm ci --omit=dev --ignore-scripts
       - run: npm run test:runtime
 
   windows-toolchain:
+    needs: compatibility
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.22.1
+          node-version: ${{ needs.compatibility.outputs.tooling }}
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: node --test test/toolchain.test.js test/process.test.js
+      - run: node --test test/tron-compiler.test.js
       - run: npm run pack:check

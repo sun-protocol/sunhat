@@ -28,6 +28,78 @@ test('Binding validation accepts plain parsed values without a TOML parser', () 
   }
 });
 
+test('binding validation accepts null-prototype tables and ignores unrelated fields', () => {
+  const project = Object.assign(Object.create(null), {
+    framework: 'hardhat',
+    target: 'evm',
+    metadata: { count: 42n, created: new Date('2026-01-01T00:00:00Z') },
+  });
+  const document = Object.assign(Object.create(null), {
+    project,
+    metadata: { enabled: true },
+  });
+
+  assert.deepEqual(validateBinding(document, 'sunhat.toml'), {
+    framework: 'hardhat',
+    target: 'evm',
+  });
+  assert.equal(document.project, project);
+  assert.equal(project.metadata.count, 42n);
+});
+
+test('binding validation rejects objects with inherited project tables or fields', () => {
+  for (const document of [
+    Object.create({ project: { framework: 'hardhat', target: 'evm' } }),
+    { project: Object.create({ framework: 'hardhat', target: 'evm' }) },
+  ]) {
+    assert.throws(
+      () => validateBinding(document, 'sunhat.toml'),
+      (error) => {
+        assert.ok(error instanceof CliError);
+        assert.equal(error.exitCode, 4);
+        assert.match(error.message, /invalid project binding/u);
+        return true;
+      },
+    );
+  }
+});
+
+test('binding validation preserves field diagnostics without coercing values', () => {
+  for (const [field, values, expected] of [
+    [
+      'framework',
+      [undefined, null, true, 1, [], {}, '', 'Hardhat', ' hardhat', 'foundry '],
+      'foundry or hardhat',
+    ],
+    [
+      'target',
+      [undefined, null, true, 1, [], {}, '', 'EVM', ' evm', 'tron '],
+      'tron or evm',
+    ],
+  ]) {
+    for (const value of values) {
+      assert.throws(
+        () =>
+          validateBinding(
+            {
+              project: { framework: 'hardhat', target: 'evm', [field]: value },
+            },
+            'custom/sunhat.toml',
+          ),
+        (error) => {
+          assert.ok(error instanceof CliError);
+          assert.equal(error.exitCode, 4);
+          assert.equal(
+            error.message,
+            `invalid ${field} in custom/sunhat.toml; expected ${expected}`,
+          );
+          return true;
+        },
+      );
+    }
+  }
+});
+
 test('Binding validation rejects malformed parsed project values', () => {
   for (const document of [
     null,

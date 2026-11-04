@@ -1,0 +1,17 @@
+{
+  "image": "tronbox/tre@sha256:f4332e11df12a9f360639a4546fd046593909630fda48af00b30410c144342f0",
+  "compilerMirror": "https://raw.githubusercontent.com/tronprotocol/solc-bin/32695fe4b8d85704da9ec4cedce107a905e412ac",
+  "transaction": {
+    "feeLimit": 1000000000
+  },
+  "timeouts": {
+    "requestMs": 300000,
+    "receiptMs": 240000,
+    "deploymentMs": 180000
+  },
+  "jdkImage": "eclipse-temurin@sha256:91011320978c10ec51d2cde1eb6f616db6d2a739a0e521096c343dd3fed9abe6",
+  "localCompiler": {
+    "version": "0.8.26",
+    "sha256": "31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1"
+  }
+}

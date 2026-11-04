@@ -6,7 +6,7 @@ const repository = fileURLToPath(new URL('../../', import.meta.url));
 
 export function copyCliRuntime(packageRoot) {
   mkdirSync(packageRoot);
-  for (const name of ['bin', 'dist', 'templates', 'package.json']) {
+  for (const name of ['bin', 'dist', 'templates', 'config', 'package.json']) {
     cpSync(resolve(repository, name), resolve(packageRoot, name), {
       recursive: true,
     });

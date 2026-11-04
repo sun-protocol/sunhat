@@ -1,24 +1,26 @@
+import { compatibility } from '../compatibility.js';
+import { nodeSupportDescription } from '../runtime.js';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { errorMessage, hasErrorCode, toolchainError } from '../errors.js';
 import { spawnNative } from '../process.js';
-import { isRecord, readJson } from '../json.js';
+import type { Target } from '../project/binding.js';
+import {
+  hardhatMajor,
+  isHardhat3NodeSupported,
+  readHardhatPackage,
+} from '../project/hardhat.js';
 import { resolveExecutable } from './executable.js';
-
-interface PackageJson {
-  version?: string;
-  bin?: string | Record<string, string>;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}
 
 export async function runHardhat(
   root: string,
   args: readonly string[],
+  target: Target,
 ): Promise<number> {
-  const project = readPackageJson(resolve(root, 'package.json'));
-  const require = createRequire(resolve(root, 'package.json'));
+  const projectPath = resolve(root, 'package.json');
+  const project = readHardhatPackage(projectPath);
+  const require = createRequire(projectPath);
   let manifestPath: string;
   try {
     manifestPath = require.resolve('hardhat/package.json');
@@ -33,7 +35,7 @@ export async function runHardhat(
               ?.map((directory) => resolve(directory, 'hardhat/package.json'))
               .find((candidate) => existsSync(candidate));
       if (path) {
-        readPackageJson(path);
+        readHardhatPackage(path);
       }
     }
     if (hasErrorCode(error, 'ERR_INVALID_PACKAGE_CONFIG')) {
@@ -47,10 +49,11 @@ export async function runHardhat(
       { cause: error },
     );
   }
-  const manifest = readPackageJson(manifestPath);
-  if (!manifest.version?.startsWith('2.')) {
+  const manifest = readHardhatPackage(manifestPath);
+  const major = hardhatMajor(manifest.version);
+  if (!major) {
     return toolchainError(
-      `Hardhat 2 is required; resolved ${manifest.version ?? 'unknown'} at ${manifestPath}`,
+      `Hardhat 2 or 3 is required; resolved ${manifest.version ?? 'unknown'} at ${manifestPath}`,
     );
   }
   const expected =
@@ -64,6 +67,21 @@ export async function runHardhat(
     return toolchainError(
       `Hardhat version mismatch: expected ${expected}, resolved ${manifest.version} at ${manifestPath}`,
     );
+  }
+  if (major === 3) {
+    if (project.type !== 'module') {
+      return toolchainError(
+        `Hardhat 3 requires "type": "module" in ${projectPath}`,
+      );
+    }
+    if (!isHardhat3NodeSupported(process.versions.node)) {
+      return toolchainError(
+        `Hardhat 3 requires Node.js ${nodeSupportDescription(compatibility.node.minimum.hardhat3)}; resolved ${process.versions.node} for ${manifestPath}`,
+      );
+    }
+    if (target === 'tron') {
+      assertTronPlugin(require);
+    }
   }
   const relative =
     typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.hardhat;
@@ -79,26 +97,27 @@ export async function runHardhat(
   return await spawnNative(process.execPath, [entry, ...args], root);
 }
 
-function readPackageJson(path: string): PackageJson {
-  const value = readJson(path);
-  if (
-    !isRecord(value) ||
-    (value.version !== undefined && typeof value.version !== 'string') ||
-    (value.bin !== undefined &&
-      typeof value.bin !== 'string' &&
-      !isStringRecord(value.bin)) ||
-    (value.dependencies !== undefined && !isStringRecord(value.dependencies)) ||
-    (value.devDependencies !== undefined &&
-      !isStringRecord(value.devDependencies))
-  ) {
-    return toolchainError(`invalid package manifest: ${path}`);
+function assertTronPlugin(require: NodeJS.Require): void {
+  for (const name of [
+    'sunhat/hardhat3-tron',
+    '@sun-protocol/sunhat/hardhat3-tron',
+  ]) {
+    try {
+      require.resolve(name);
+      return;
+    } catch (error) {
+      if (
+        !hasErrorCode(error, 'MODULE_NOT_FOUND') &&
+        !hasErrorCode(error, 'ERR_PACKAGE_PATH_NOT_EXPORTED')
+      ) {
+        return toolchainError(
+          `cannot resolve ${name}: ${errorMessage(error)}`,
+          { cause: error },
+        );
+      }
+    }
   }
-  return value;
-}
-
-function isStringRecord(value: unknown): value is Record<string, string> {
-  return (
-    isRecord(value) &&
-    Object.values(value).every((item) => typeof item === 'string')
+  return toolchainError(
+    'Hardhat 3/TRON requires the Sunhat hardhat3-tron plugin; install project dependencies and register sunhat/hardhat3-tron in hardhat.config',
   );
 }

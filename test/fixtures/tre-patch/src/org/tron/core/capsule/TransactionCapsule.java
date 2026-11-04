@@ -1,0 +1,1033 @@
+/*
+ * java-tron is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * java-tron is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+// OZ-on-TVM patch notes:
+// This file is vendored verbatim from java-tron GreatVoyage-v4.8.2
+// (the release tronbox/tre 2.0.0 is built from; unchanged through v4.8.2.2)
+// (chainbase/src/main/java/org/tron/core/capsule/TransactionCapsule.java),
+// with two deliberate deltas:
+//
+//   (1) Lombok annotations (@Slf4j, @Setter, @Getter) are EXPANDED to
+//       their manual equivalents — we don't ship Lombok in the
+//       patch-build container's javac classpath, and the bytecode
+//       contract that the rest of FullNode.jar depends on is the
+//       Lombok-generated methods (setVerified / get-set-BlockNum /
+//       get-set-TrxTrace / get-set-Time / get-set-Order /
+//       is-set-TransactionCreate / is-set-InBlock + the `logger`
+//       field). Removing Lombok with no replacement would emit a
+//       class missing those methods and the JVM would throw
+//       NoSuchMethodError at runtime as soon as Manager/Wallet/etc.
+//       calls one.
+//
+//   (2) `validateSignature(Transaction, byte[], AccountStore,
+//       DynamicPropertiesStore)` — the static chokepoint that every
+//       on-push validation flows through — gets an early return when
+//       `owner_address` is on the TreImpersonationRegistry whitelist.
+//       Bypasses BOTH ECRecover and permission/weight check.
+//       Motivation, semantics, and security caveats are in
+//       org.tron.core.services.jsonrpc.tre.TreImpersonationRegistry.
+//
+//   (3) TRE's own modifications, reconstructed from the bytecode of the
+//       tronbox/tre 2.0.0 jar (the image ships a TRE-specific java-tron
+//       build, and since we overlay the WHOLE class we would otherwise
+//       silently drop them): `shouldDoSigVerify()` and its use in
+//       `validateSignature(AccountStore, DynamicPropertiesStore)`, plus
+//       the `getWeight` branch that lets a `tre_unlockedAccounts` address
+//       satisfy a permission at full threshold. They implement TRE's
+//       unlocked-accounts feature (skip signature checks for listed
+//       owners) and are marked `TRE addition`.
+//
+// Everything else is upstream. When bumping java-tron / TRE, re-fetch
+// this file from the matching java-tron tag, re-apply the three deltas
+// above, and compare `javap -c -p` of the rebuilt class against the
+// image's stock class to catch new TRE-side changes.
+
+package org.tron.core.capsule;
+
+import static org.tron.common.utils.StringUtil.encode58Check;
+import static org.tron.common.utils.WalletUtil.checkPermissionOperations;
+import static org.tron.core.Constant.MAX_CONTRACT_RESULT_SIZE;
+import static org.tron.core.exception.P2pException.TypeEnum.PROTOBUF_ERROR;
+
+import com.google.common.primitives.Bytes;
+import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.CodedInputStream;
+import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.GeneratedMessageV3;
+import com.google.protobuf.Internal;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.UnknownFieldSet;
+import java.io.IOException;
+import java.security.SignatureException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.commons.lang3.ArrayUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.tron.common.crypto.ECKey.ECDSASignature;
+import org.tron.common.crypto.Rsv;
+import org.tron.common.crypto.SignInterface;
+import org.tron.common.crypto.SignUtils;
+import org.tron.common.es.ExecutorServiceManager;
+import org.tron.common.overlay.message.Message;
+import org.tron.common.parameter.CommonParameter;
+import org.tron.common.utils.ByteArray;
+import org.tron.common.utils.ForkController;
+import org.tron.common.utils.ReflectUtils;
+import org.tron.common.utils.Sha256Hash;
+import org.tron.core.actuator.TransactionFactory;
+import org.tron.core.config.Parameter;
+import org.tron.core.db.TransactionContext;
+import org.tron.core.db.TransactionTrace;
+import org.tron.core.exception.BadItemException;
+import org.tron.core.exception.ContractValidateException;
+import org.tron.core.exception.P2pException;
+import org.tron.core.exception.PermissionException;
+import org.tron.core.exception.SignatureFormatException;
+import org.tron.core.exception.TransactionExpirationException;
+import org.tron.core.exception.ValidateSignatureException;
+import org.tron.core.services.jsonrpc.tre.TreImpersonationRegistry;
+import org.tron.core.store.AccountStore;
+import org.tron.core.store.DynamicPropertiesStore;
+import org.tron.protos.Protocol.Key;
+import org.tron.protos.Protocol.Permission;
+import org.tron.protos.Protocol.Permission.PermissionType;
+import org.tron.protos.Protocol.Transaction;
+import org.tron.protos.Protocol.Transaction.Contract.ContractType;
+import org.tron.protos.Protocol.Transaction.Result;
+import org.tron.protos.Protocol.Transaction.Result.contractResult;
+import org.tron.protos.Protocol.Transaction.raw;
+import org.tron.protos.contract.AccountContract.AccountCreateContract;
+import org.tron.protos.contract.AssetIssueContractOuterClass.AssetIssueContract;
+import org.tron.protos.contract.AssetIssueContractOuterClass.ParticipateAssetIssueContract;
+import org.tron.protos.contract.AssetIssueContractOuterClass.TransferAssetContract;
+import org.tron.protos.contract.BalanceContract;
+import org.tron.protos.contract.BalanceContract.TransferContract;
+import org.tron.protos.contract.ShieldContract.ShieldedTransferContract;
+import org.tron.protos.contract.ShieldContract.SpendDescription;
+import org.tron.protos.contract.SmartContractOuterClass.CreateSmartContract;
+import org.tron.protos.contract.SmartContractOuterClass.TriggerSmartContract;
+import org.tron.protos.contract.WitnessContract.VoteWitnessContract;
+import org.tron.protos.contract.WitnessContract.WitnessCreateContract;
+import org.tron.protos.contract.WitnessContract.WitnessUpdateContract;
+
+public class TransactionCapsule implements ProtoCapsule<Transaction> {
+
+  // Manual @Slf4j(topic = "capsule") expansion. java-tron's
+  // lombok.config sets lombok.log.fieldName=logger so the generated
+  // field is named `logger`, not Lombok's default `log`.
+  private static final Logger logger = LoggerFactory.getLogger("capsule");
+
+  private static final String esName = "valid-contract-proto";
+  private static final ExecutorService executorService = ExecutorServiceManager
+      .newFixedThreadPool(esName, CommonParameter.getInstance()
+          .getValidContractProtoThreadNum());
+  private static final String OWNER_ADDRESS = "ownerAddress_";
+  // 2-6 ms in general, so we set 50 ms as the threshold for slow signature verification.
+  private static final long SLOW_SIG_VERIFY_MS = 50;
+
+  private Transaction transaction;
+  private boolean isVerified = false;
+  private long blockNum = -1;
+  private TransactionTrace trxTrace;
+
+  private long time;
+  private long order;
+  private byte[] ownerAddress;
+  private Sha256Hash id;
+
+  private boolean isTransactionCreate = false;
+  private boolean isInBlock = false;
+
+  // Lombok-replacement getters/setters. Method signatures must match
+  // exactly what Lombok would have generated — the rest of FullNode.jar
+  // is bytecode-linked against these names. See the file-header note.
+  public void setVerified(boolean isVerified) {
+    this.isVerified = isVerified;
+  }
+
+  public long getBlockNum() {
+    return this.blockNum;
+  }
+
+  public void setBlockNum(long blockNum) {
+    this.blockNum = blockNum;
+  }
+
+  public TransactionTrace getTrxTrace() {
+    return this.trxTrace;
+  }
+
+  public void setTrxTrace(TransactionTrace trxTrace) {
+    this.trxTrace = trxTrace;
+  }
+
+  public long getTime() {
+    return this.time;
+  }
+
+  public void setTime(long time) {
+    this.time = time;
+  }
+
+  public long getOrder() {
+    return this.order;
+  }
+
+  public void setOrder(long order) {
+    this.order = order;
+  }
+
+  public boolean isTransactionCreate() {
+    return this.isTransactionCreate;
+  }
+
+  public void setTransactionCreate(boolean isTransactionCreate) {
+    this.isTransactionCreate = isTransactionCreate;
+  }
+
+  public boolean isInBlock() {
+    return this.isInBlock;
+  }
+
+  public void setInBlock(boolean isInBlock) {
+    this.isInBlock = isInBlock;
+  }
+
+  public byte[] getOwnerAddress() {
+    if (this.ownerAddress == null) {
+      this.ownerAddress = getOwner(this.transaction.getRawData().getContract(0));
+    }
+    return this.ownerAddress;
+  }
+
+
+  /**
+   * constructor TransactionCapsule.
+   */
+  public TransactionCapsule(Transaction trx) {
+    this.transaction = trx;
+  }
+
+  /**
+   * get account from bytes data.
+   */
+  public TransactionCapsule(byte[] data) throws BadItemException {
+    try {
+      this.transaction = Transaction.parseFrom(Message.getCodedInputStream(data));
+    } catch (Exception e) {
+      throw new BadItemException("Transaction proto data parse exception");
+    }
+  }
+
+  public TransactionCapsule(CodedInputStream codedInputStream) throws BadItemException {
+    try {
+      this.transaction = Transaction.parseFrom(codedInputStream);
+    } catch (IOException e) {
+      throw new BadItemException("Transaction proto data parse exception");
+    }
+  }
+
+  public TransactionCapsule(AccountCreateContract contract, AccountStore accountStore) {
+    AccountCapsule account = accountStore.get(contract.getOwnerAddress().toByteArray());
+    if (account != null && account.getType() == contract.getType()) {
+      return; // Account isexit
+    }
+
+    createTransaction(contract, ContractType.AccountCreateContract);
+  }
+
+  public TransactionCapsule(TransferContract contract, AccountStore accountStore) {
+
+    AccountCapsule owner = accountStore.get(contract.getOwnerAddress().toByteArray());
+    if (owner == null || owner.getBalance() < contract.getAmount()) {
+      return; //The balance is not enough
+    }
+
+    createTransaction(contract, ContractType.TransferContract);
+  }
+
+  public TransactionCapsule(VoteWitnessContract voteWitnessContract) {
+    createTransaction(voteWitnessContract, ContractType.VoteWitnessContract);
+  }
+
+  public TransactionCapsule(WitnessCreateContract witnessCreateContract) {
+    createTransaction(witnessCreateContract, ContractType.WitnessCreateContract);
+  }
+
+  public TransactionCapsule(WitnessUpdateContract witnessUpdateContract) {
+    createTransaction(witnessUpdateContract, ContractType.WitnessUpdateContract);
+  }
+
+  public TransactionCapsule(TransferAssetContract transferAssetContract) {
+    createTransaction(transferAssetContract, ContractType.TransferAssetContract);
+  }
+
+  public TransactionCapsule(ParticipateAssetIssueContract participateAssetIssueContract) {
+    createTransaction(participateAssetIssueContract, ContractType.ParticipateAssetIssueContract);
+  }
+
+  public TransactionCapsule(raw rawData, List<ByteString> signatureList) {
+    this.transaction = Transaction.newBuilder().setRawData(rawData).addAllSignature(signatureList)
+        .build();
+  }
+
+  @Deprecated
+  public TransactionCapsule(AssetIssueContract assetIssueContract) {
+    createTransaction(assetIssueContract, ContractType.AssetIssueContract);
+  }
+
+  public TransactionCapsule(com.google.protobuf.Message message, ContractType contractType) {
+    Transaction.raw.Builder transactionBuilder = Transaction.raw.newBuilder().addContract(
+        Transaction.Contract.newBuilder().setType(contractType).setParameter(
+            (message instanceof Any ? (Any) message : Any.pack(message))).build());
+    transaction = Transaction.newBuilder().setRawData(transactionBuilder.build()).build();
+  }
+
+  public static long getWeight(Permission permission, byte[] address) {
+    List<Key> list = permission.getKeysList();
+    for (Key key : list) {
+      // TRE addition: an unlocked account (tre_unlockedAccounts) counts at
+      // full threshold regardless of which key actually signed.
+      if (CommonParameter.getInstance().unlockedAccounts
+          .contains(encode58Check(key.getAddress().toByteArray()))) {
+        return permission.getThreshold();
+      }
+      if (key.getAddress().equals(ByteString.copyFrom(address))) {
+        return key.getWeight();
+      }
+    }
+    return 0;
+  }
+
+  /**
+   *  make sure ForkController.init(ChainBaseManager) is invoked before invoke this method.
+   *
+   *  @see ForkController#init(org.tron.core.ChainBaseManager)
+   */
+  public static long checkWeight(Permission permission, List<ByteString> sigs, byte[] hash,
+      List<ByteString> approveList)
+      throws SignatureException, PermissionException, SignatureFormatException {
+    long currentWeight = 0;
+    if (sigs.size() > permission.getKeysCount()) {
+      throw new PermissionException(
+          "Signature count is " + (sigs.size()) + " more than key counts of permission : "
+              + permission.getKeysCount());
+    }
+    HashMap addMap = new HashMap();
+    for (ByteString sig : sigs) {
+      if (sig.size() < 65) {
+        throw new SignatureFormatException(
+            "Signature size is " + sig.size());
+      }
+      String base64 = TransactionCapsule.getBase64FromByteString(sig);
+      byte[] address = SignUtils
+          .signatureToAddress(hash, base64, CommonParameter.getInstance().isECKeyCryptoEngine());
+      long weight = getWeight(permission, address);
+      if (weight == 0) {
+        throw new PermissionException(
+            ByteArray.toHexString(hash) + " is signed by " + encode58Check(address)
+                + " but it is not contained of permission.");
+      }
+      if (ForkController.instance().pass(Parameter.ForkBlockVersionEnum.VERSION_4_7_1)) {
+        base64 = encode58Check(address);
+      }
+      if (addMap.containsKey(base64)) {
+        throw new PermissionException(encode58Check(address) + " has signed twice!");
+      }
+      addMap.put(base64, weight);
+      if (approveList != null) {
+        approveList.add(ByteString.copyFrom(address)); //out put approve list.
+      }
+      currentWeight += weight;
+    }
+    return currentWeight;
+  }
+
+  //make sure that contractType is validated before
+  //No exception will be thrown here
+  public static byte[] getShieldTransactionHashIgnoreTypeException(Transaction tx) {
+    try {
+      return hashShieldTransaction(tx, CommonParameter.getInstance()
+          .getZenTokenId());
+    } catch (ContractValidateException | InvalidProtocolBufferException e) {
+      logger.debug(e.getMessage(), e);
+    }
+    return null;
+  }
+
+  public static byte[] hashShieldTransaction(Transaction tx, String tokenId)
+      throws ContractValidateException, InvalidProtocolBufferException {
+    Any contractParameter = tx.getRawData().getContract(0).getParameter();
+    if (!contractParameter.is(ShieldedTransferContract.class)) {
+      throw new ContractValidateException(
+          "contract type error,expected type [ShieldedTransferContract],real type["
+              + contractParameter
+              .getClass() + "]");
+    }
+
+    ShieldedTransferContract shieldedTransferContract = contractParameter
+        .unpack(ShieldedTransferContract.class);
+    ShieldedTransferContract.Builder newContract = ShieldedTransferContract.newBuilder();
+    newContract.setFromAmount(shieldedTransferContract.getFromAmount());
+    newContract.addAllReceiveDescription(shieldedTransferContract.getReceiveDescriptionList());
+    newContract.setToAmount(shieldedTransferContract.getToAmount());
+    newContract.setTransparentFromAddress(shieldedTransferContract.getTransparentFromAddress());
+    newContract.setTransparentToAddress(shieldedTransferContract.getTransparentToAddress());
+    for (SpendDescription spendDescription : shieldedTransferContract.getSpendDescriptionList()) {
+      newContract
+          .addSpendDescription(spendDescription.toBuilder().clearSpendAuthoritySignature().build());
+    }
+
+    Transaction.raw.Builder rawBuilder = tx.toBuilder()
+        .getRawDataBuilder()
+        .clearContract()
+        .addContract(
+            Transaction.Contract.newBuilder().setType(ContractType.ShieldedTransferContract)
+                .setParameter(
+                    Any.pack(newContract.build())).build());
+
+    Transaction transaction = tx.toBuilder().clearRawData()
+        .setRawData(rawBuilder).build();
+
+    byte[] mergedByte = Bytes.concat(Sha256Hash
+            .of(CommonParameter.getInstance().isECKeyCryptoEngine(), tokenId.getBytes()).getBytes(),
+        transaction.getRawData().toByteArray());
+    return Sha256Hash.of(CommonParameter
+        .getInstance().isECKeyCryptoEngine(), mergedByte).getBytes();
+  }
+
+  // todo mv this static function to capsule util
+  public static byte[] getOwner(Transaction.Contract contract) {
+    ByteString owner;
+    try {
+      Any contractParameter = contract.getParameter();
+      switch (contract.getType()) {
+        case ShieldedTransferContract: {
+          ShieldedTransferContract shieldedTransferContract = contractParameter
+              .unpack(ShieldedTransferContract.class);
+          if (!shieldedTransferContract.getTransparentFromAddress().isEmpty()) {
+            owner = shieldedTransferContract.getTransparentFromAddress();
+          } else {
+            return new byte[0];
+          }
+          break;
+        }
+        // todo add other contract
+        default: {
+          Class<? extends GeneratedMessageV3> clazz = TransactionFactory
+              .getContract(contract.getType());
+          if (clazz == null) {
+            logger.warn("not exist {}", contract.getType());
+            return new byte[0];
+          }
+          GeneratedMessageV3 generatedMessageV3 = contractParameter.unpack(clazz);
+          owner = ReflectUtils.getFieldValue(generatedMessageV3, OWNER_ADDRESS);
+          if (owner == null) {
+            logger.warn("not exist [{}] field,{}", OWNER_ADDRESS, clazz);
+            return new byte[0];
+          }
+          break;
+        }
+      }
+      return owner.toByteArray();
+    } catch (InvalidProtocolBufferException invalidProtocolBufferException) {
+      logger.warn("InvalidProtocolBufferException occurred because {}, please verify the interface "
+          + "input parameters", invalidProtocolBufferException.getMessage());
+      return new byte[0];
+    } catch (Exception ex) {
+      logger.error(ex.getMessage());
+      return new byte[0];
+    }
+  }
+
+  public static <T extends com.google.protobuf.Message> T parse(Class<T> clazz,
+      CodedInputStream codedInputStream) throws InvalidProtocolBufferException {
+    T defaultInstance = Internal.getDefaultInstance(clazz);
+    return (T) defaultInstance.getParserForType().parseFrom(codedInputStream);
+  }
+
+  public static void validContractProto(List<Transaction> transactionList) throws P2pException {
+    List<Future<Boolean>> futureList = new ArrayList<>();
+    transactionList.forEach(transaction -> {
+      Future<Boolean> future = executorService.submit(() -> {
+        try {
+          validContractProto(transaction.getRawData().getContract(0));
+          return true;
+        } catch (Exception e) {
+          logger.error("{}", e.getMessage());
+        }
+        return false;
+      });
+      futureList.add(future);
+    });
+    for (Future<Boolean> future : futureList) {
+      try {
+        if (!future.get()) {
+          throw new P2pException(PROTOBUF_ERROR, PROTOBUF_ERROR.getDesc());
+        }
+      } catch (Exception e) {
+        if (e instanceof InterruptedException){
+          Thread.currentThread().interrupt();
+        }
+        throw new P2pException(PROTOBUF_ERROR, PROTOBUF_ERROR.getDesc());
+      }
+    }
+  }
+
+  public static void validContractProto(Transaction.Contract contract)
+      throws InvalidProtocolBufferException, P2pException {
+    Any contractParameter = contract.getParameter();
+    Class clazz = TransactionFactory.getContract(contract.getType());
+    if (clazz == null) {
+      throw new P2pException(PROTOBUF_ERROR, PROTOBUF_ERROR.getDesc());
+    }
+    com.google.protobuf.Message src = contractParameter.unpack(clazz);
+    com.google.protobuf.Message contractMessage = parse(clazz,
+        Message.getCodedInputStream(src.toByteArray()));
+
+    Message.compareBytes(src.toByteArray(), contractMessage.toByteArray());
+  }
+
+  // todo mv this static function to capsule util
+  public static byte[] getToAddress(Transaction.Contract contract) {
+    ByteString to;
+    try {
+      Any contractParameter = contract.getParameter();
+      switch (contract.getType()) {
+        case TransferContract:
+          to = contractParameter.unpack(TransferContract.class).getToAddress();
+          break;
+        case TransferAssetContract:
+          to = contractParameter.unpack(TransferAssetContract.class).getToAddress();
+          break;
+        case ParticipateAssetIssueContract:
+          to = contractParameter.unpack(ParticipateAssetIssueContract.class).getToAddress();
+          break;
+
+        default:
+          return new byte[0];
+      }
+      return to.toByteArray();
+    } catch (Exception ex) {
+      logger.error(ex.getMessage());
+      return new byte[0];
+    }
+  }
+
+  // todo mv this static function to capsule util
+  public static long getCallValue(Transaction.Contract contract) {
+    try {
+      Any contractParameter = contract.getParameter();
+      switch (contract.getType()) {
+        case TriggerSmartContract:
+          return contractParameter.unpack(TriggerSmartContract.class).getCallValue();
+
+        case CreateSmartContract:
+          return contractParameter.unpack(CreateSmartContract.class).getNewContract()
+              .getCallValue();
+        default:
+          return 0L;
+      }
+    } catch (Exception ex) {
+      logger.error(ex.getMessage());
+      return 0L;
+    }
+  }
+
+  public static String getBase64FromByteString(ByteString sign) {
+    Rsv rsv = Rsv.fromSignature(sign.toByteArray());
+    return ECDSASignature.fromComponents(rsv.getR(), rsv.getS(), rsv.getV()).toBase64();
+  }
+
+  public static boolean validateSignature(Transaction transaction,
+      byte[] hash, AccountStore accountStore, DynamicPropertiesStore dynamicPropertiesStore)
+      throws PermissionException, SignatureException, SignatureFormatException {
+    Transaction.Contract contract = transaction.getRawData().getContractList().get(0);
+    int permissionId = contract.getPermissionId();
+    byte[] owner = getOwner(contract);
+
+    // OZ-on-TVM addition: bypass ECRecover + permission/weight
+    // checks when `owner` is on the impersonation whitelist. Used by
+    // the bridge to forge `msg.sender` for AccessManaged/Bridge-style
+    // tests where the test sends "as" a contract address it doesn't
+    // hold the key for. Regtest-only — see TreImpersonationRegistry.
+    if (TreImpersonationRegistry.isImpersonated(owner)) {
+      return true;
+    }
+
+    AccountCapsule account = accountStore.get(owner);
+    Permission permission = null;
+    if (account == null) {
+      if (permissionId == 0) {
+        permission = AccountCapsule.getDefaultPermission(ByteString.copyFrom(owner));
+      }
+      if (permissionId == 2) {
+        permission = AccountCapsule
+            .createDefaultActivePermission(ByteString.copyFrom(owner), dynamicPropertiesStore);
+      }
+    } else {
+      permission = account.getPermissionById(permissionId);
+    }
+    if (permission == null) {
+      throw new PermissionException("permission isn't exit");
+    }
+    checkPermission(permissionId, permission, contract);
+    long weight = checkWeight(permission, transaction.getSignatureList(), hash, null);
+    if (weight >= permission.getThreshold()) {
+      return true;
+    }
+    return false;
+  }
+
+  public boolean sanitize() {
+    if (this.transaction.getUnknownFields().asMap().isEmpty()) {
+      return false;
+    }
+    this.transaction = this.transaction.toBuilder()
+        .setUnknownFields(UnknownFieldSet.getDefaultInstance())
+        .build();
+    return true;
+  }
+
+  public void resetResult() {
+    if (this.getInstance().getRetCount() > 0) {
+      this.transaction = this.getInstance().toBuilder().clearRet().build();
+    }
+  }
+
+  public void setResult(TransactionResultCapsule transactionResultCapsule) {
+    this.transaction = this.getInstance().toBuilder().addRet(transactionResultCapsule.getInstance())
+        .build();
+  }
+
+  public void setReference(long blockNum, byte[] blockHash) {
+    byte[] refBlockNum = ByteArray.fromLong(blockNum);
+    Transaction.raw rawData = this.transaction.getRawData().toBuilder()
+        .setRefBlockHash(ByteString.copyFrom(ByteArray.subArray(blockHash, 8, 16)))
+        .setRefBlockBytes(ByteString.copyFrom(ByteArray.subArray(refBlockNum, 6, 8)))
+        .build();
+    setRawData(rawData);
+  }
+
+  public long getExpiration() {
+    return transaction.getRawData().getExpiration();
+  }
+
+  /**
+   * @param expiration must be in milliseconds format
+   */
+  public void setExpiration(long expiration) {
+    Transaction.raw rawData = this.transaction.getRawData().toBuilder().setExpiration(expiration)
+        .build();
+    setRawData(rawData);
+  }
+
+  public void setTimestamp() {
+    Transaction.raw rawData = this.transaction.getRawData().toBuilder()
+        .setTimestamp(System.currentTimeMillis())
+        .build();
+    setRawData(rawData);
+  }
+
+  public void setTimestamp(long timestamp) {
+    Transaction.raw rawData = this.transaction.getRawData().toBuilder()
+        .setTimestamp(timestamp)
+        .build();
+    setRawData(rawData);
+  }
+
+  public long getTimestamp() {
+    return transaction.getRawData().getTimestamp();
+  }
+
+  public void setFeeLimit(long feeLimit) {
+    Transaction.raw rawData = this.transaction.getRawData().toBuilder()
+        .setFeeLimit(feeLimit)
+        .build();
+    setRawData(rawData);
+  }
+
+  public long getFeeLimit() {
+    return transaction.getRawData().getFeeLimit();
+  }
+
+  @Deprecated
+  public void createTransaction(com.google.protobuf.Message message, ContractType contractType) {
+    Transaction.raw.Builder transactionBuilder = Transaction.raw.newBuilder().addContract(
+        Transaction.Contract.newBuilder().setType(contractType).setParameter(
+            Any.pack(message)).build());
+    transaction = Transaction.newBuilder().setRawData(transactionBuilder.build()).build();
+  }
+
+  public Sha256Hash getMerkleHash() {
+    byte[] transBytes = this.transaction.toByteArray();
+    return Sha256Hash.of(CommonParameter.getInstance().isECKeyCryptoEngine(),
+        transBytes);
+  }
+
+  private Sha256Hash getRawHash() {
+    return Sha256Hash.of(CommonParameter.getInstance().isECKeyCryptoEngine(),
+        this.transaction.getRawData().toByteArray());
+  }
+
+  public void sign(byte[] privateKey) {
+    SignInterface cryptoEngine = SignUtils
+        .fromPrivate(privateKey, CommonParameter.getInstance().isECKeyCryptoEngine());
+    ByteString sig = ByteString.copyFrom(cryptoEngine.Base64toBytes(cryptoEngine
+        .signHash(getTransactionId().getBytes())));
+    this.transaction = this.transaction.toBuilder().addSignature(sig).build();
+  }
+
+  public void addSign(byte[] privateKey, AccountStore accountStore)
+      throws PermissionException, SignatureException, SignatureFormatException {
+    Transaction.Contract contract = this.transaction.getRawData().getContract(0);
+    int permissionId = contract.getPermissionId();
+    byte[] owner = getOwnerAddress();
+    AccountCapsule account = accountStore.get(owner);
+    if (account == null) {
+      throw new PermissionException("Account is not exist!");
+    }
+    Permission permission = account.getPermissionById(permissionId);
+    if (permission == null) {
+      throw new PermissionException("permission isn't exit");
+    }
+    checkPermission(permissionId, permission, contract);
+    List<ByteString> approveList = new ArrayList<>();
+    SignInterface cryptoEngine = SignUtils
+        .fromPrivate(privateKey, CommonParameter.getInstance().isECKeyCryptoEngine());
+    byte[] address = cryptoEngine.getAddress();
+    if (this.transaction.getSignatureCount() > 0) {
+      checkWeight(permission, this.transaction.getSignatureList(),
+          this.getTransactionId().getBytes(),
+          approveList);
+      if (approveList.contains(ByteString.copyFrom(address))) {
+        throw new PermissionException(encode58Check(address) + " had signed!");
+      }
+    }
+
+    long weight = getWeight(permission, address);
+    if (weight == 0) {
+      throw new PermissionException(
+          ByteArray.toHexString(privateKey) + "'s address is " + encode58Check(address)
+              + " but it is not contained of permission.");
+    }
+    ByteString sig = ByteString.copyFrom(cryptoEngine.Base64toBytes(cryptoEngine
+        .signHash(getTransactionId().getBytes())));
+    this.transaction = this.transaction.toBuilder().addSignature(sig).build();
+  }
+
+  private static void checkPermission(int permissionId, Permission permission, Transaction.Contract contract) throws PermissionException {
+    if (permissionId != 0) {
+      if (permission.getType() != PermissionType.Active) {
+        throw new PermissionException("Permission type is error");
+      }
+      //check operations
+      if (!checkPermissionOperations(permission, contract)) {
+        throw new PermissionException("Permission denied");
+      }
+    }
+  }
+
+  /**
+   * validate signature
+   */
+  public boolean validatePubSignature(AccountStore accountStore,
+      DynamicPropertiesStore dynamicPropertiesStore)
+      throws ValidateSignatureException {
+    if (!isVerified) {
+      if (this.transaction.getSignatureCount() <= 0
+              || this.transaction.getRawData().getContractCount() <= 0) {
+        throw new ValidateSignatureException("miss sig or contract");
+      }
+      if (this.transaction.getSignatureCount() > dynamicPropertiesStore
+              .getTotalSignNum()) {
+        throw new ValidateSignatureException("too many signatures");
+      }
+
+      byte[] hash = getTransactionId().getBytes();
+
+      long startNs = System.nanoTime();
+      try {
+        if (!validateSignature(this.transaction, hash, accountStore, dynamicPropertiesStore)) {
+          isVerified = false;
+          throw new ValidateSignatureException("sig error");
+        }
+      } catch (SignatureException | PermissionException | SignatureFormatException e) {
+        isVerified = false;
+        throw new ValidateSignatureException(e.getMessage());
+      } finally {
+        logSlowSigVerify(startNs);
+      }
+      isVerified = true;
+    }
+    return true;
+  }
+
+  /**
+   * WARN-logs when a single signature verification exceeds
+   * {@link #SLOW_SIG_VERIFY_MS}. Package-private so it can be exercised from
+   * tests without forcing a real slow crypto path.
+   */
+  void logSlowSigVerify(long startNs) {
+    long costMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
+    if (costMs > SLOW_SIG_VERIFY_MS) {
+      logger.warn("slow verify: txId={}, sigCount={}, cost={} ms",
+          getTransactionId(), this.transaction.getSignatureCount(), costMs);
+    }
+  }
+
+  /**
+   * validate signature
+   */
+  public boolean validateSignature(AccountStore accountStore,
+      DynamicPropertiesStore dynamicPropertiesStore) throws ValidateSignatureException {
+    // TRE addition: `&& shouldDoSigVerify()` — skip verification entirely when
+    // the owner is in `tre_unlockedAccounts`.
+    if (!isVerified && shouldDoSigVerify()) {
+      //Do not support multi contracts in one transaction
+      Transaction.Contract contract = this.getInstance().getRawData().getContract(0);
+      if (contract.getType() != ContractType.ShieldedTransferContract) {
+        validatePubSignature(accountStore, dynamicPropertiesStore);
+      } else {  //ShieldedTransfer
+        byte[] owner = getOwnerAddress();
+        if (!ArrayUtils.isEmpty(owner)) { //transfer from transparent address
+          validatePubSignature(accountStore, dynamicPropertiesStore);
+        } else { //transfer from shielded address
+          if (this.transaction.getSignatureCount() > 0) {
+            throw new ValidateSignatureException("there should be no signatures signed by "
+                    + "transparent address when transfer from shielded address");
+          }
+        }
+      }
+    }
+    isVerified = true;
+    return true;
+  }
+
+  /**
+   * TRE addition. False when the transaction's owner is listed in
+   * `tre_unlockedAccounts`, in which case signature verification is skipped.
+   */
+  public boolean shouldDoSigVerify() {
+    byte[] owner = getOwner(getInstance().getRawData().getContract(0));
+    return !CommonParameter.getInstance().unlockedAccounts.contains(encode58Check(owner));
+  }
+
+  public Sha256Hash getTransactionId() {
+    if (this.id == null) {
+      this.id = getRawHash();
+    }
+    return this.id;
+  }
+
+  private void setRawData(Transaction.raw rawData) {
+    this.transaction = this.transaction.toBuilder().setRawData(rawData).build();
+    // invalidate trxId
+    this.id = null;
+  }
+
+  @Override
+  public byte[] getData() {
+    return this.transaction.toByteArray();
+  }
+
+  public long getSerializedSize() {
+    return this.transaction.getSerializedSize();
+  }
+
+  /**
+   * Compute the number of bytes that would be needed to encode an embedded message field, including
+   * tag.
+   * message Block {
+   *   repeated Transaction transactions = 1;
+   *   BlockHeader block_header = 2;
+   * }
+   */
+  public long computeTrxSizeForBlockMessage() {
+    return CodedOutputStream.computeMessageSize(1, this.transaction);
+  }
+
+  public long getResultSerializedSize() {
+    long size = 0;
+    for (Result result : this.transaction.getRetList()) {
+      size += result.getSerializedSize();
+    }
+    return size;
+  }
+
+  public long getResultSizeWithMaxContractRet() {
+    long size = 0;
+    for (Result result : this.transaction.getRetList()) {
+      size += result.toBuilder().clearContractRet().build().getSerializedSize()
+          + MAX_CONTRACT_RESULT_SIZE;
+    }
+    return size;
+  }
+
+  @Override
+  public Transaction getInstance() {
+    return this.transaction;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder toStringBuff = new StringBuilder();
+    toStringBuff.append("TransactionCapsule \n[ ");
+
+    toStringBuff.append("hash=").append(getTransactionId()).append("\n");
+    AtomicInteger i = new AtomicInteger();
+    if (!getInstance().getRawData().getContractList().isEmpty()) {
+      toStringBuff.append("contract list:{ ");
+      getInstance().getRawData().getContractList().forEach(contract -> {
+        toStringBuff.append("[" + i + "] ").append("type: ").append(contract.getType())
+            .append("\n");
+        toStringBuff.append("from address=").append(getOwner(contract)).append("\n");
+        toStringBuff.append("to address=").append(getToAddress(contract)).append("\n");
+        if (contract.getType().equals(ContractType.TransferContract)) {
+          TransferContract transferContract;
+          try {
+            transferContract = contract.getParameter()
+                .unpack(TransferContract.class);
+            toStringBuff.append("transfer amount=").append(transferContract.getAmount())
+                .append("\n");
+          } catch (InvalidProtocolBufferException e) {
+            e.printStackTrace();
+          }
+        } else if (contract.getType().equals(ContractType.TransferAssetContract)) {
+          TransferAssetContract transferAssetContract;
+          try {
+            transferAssetContract = contract.getParameter()
+                .unpack(TransferAssetContract.class);
+            toStringBuff.append("transfer asset=").append(transferAssetContract.getAssetName())
+                .append("\n");
+            toStringBuff.append("transfer amount=").append(transferAssetContract.getAmount())
+                .append("\n");
+          } catch (InvalidProtocolBufferException e) {
+            e.printStackTrace();
+          }
+        }
+        if (this.transaction.getSignatureList().size() >= i.get() + 1) {
+          toStringBuff.append("sign=").append(getBase64FromByteString(
+              this.transaction.getSignature(i.getAndIncrement()))).append("\n");
+        }
+      });
+      toStringBuff.append("}\n");
+    } else {
+      toStringBuff.append("contract list is empty\n");
+    }
+
+    toStringBuff.append("]");
+    return toStringBuff.toString();
+  }
+
+  public void setResult(TransactionContext context) {
+    this.setResultCode(context.getProgramResult().getResultCode());
+  }
+
+  public void setResultCode(contractResult code) {
+    Result ret;
+    if (this.transaction.getRetCount() > 0) {
+      ret = this.transaction.getRet(0).toBuilder().setContractRet(code).build();
+
+      this.transaction = transaction.toBuilder().setRet(0, ret).build();
+      return;
+    }
+    ret = Result.newBuilder().setContractRet(code).build();
+    this.transaction = transaction.toBuilder().addRet(ret).build();
+  }
+
+  public Transaction.Result.contractResult getContractResult() {
+    if (this.transaction.getRetCount() > 0) {
+      return this.transaction.getRet(0).getContractRet();
+    }
+    return null;
+  }
+
+
+
+  public contractResult getContractRet() {
+    if (this.transaction.getRetCount() <= 0) {
+      return null;
+    }
+    return this.transaction.getRet(0).getContractRet();
+  }
+
+  /**
+   * Check if a transaction capsule contains a smart contract transaction or not.
+   * @return
+   */
+  public boolean isContractType() {
+    try {
+      ContractType type = this.getInstance().getRawData().getContract(0).getType();
+      return  (type == ContractType.TriggerSmartContract || type == ContractType.CreateSmartContract);
+    } catch (Exception ex) {
+      logger.warn("check contract type failed, reason {}", ex.getMessage());
+      return false;
+    }
+  }
+
+  public BalanceContract.TransferContract getTransferContract() {
+    try {
+      return transaction.getRawData()
+          .getContract(0)
+          .getParameter()
+          .unpack(BalanceContract.TransferContract.class);
+    } catch (InvalidProtocolBufferException e) {
+      return null;
+    }
+  }
+
+  public void removeRedundantRet() {
+    Transaction tx = this.getInstance();
+    List<Result> tmpList = new ArrayList<>(tx.getRetList());
+    int contractCount = tx.getRawData().getContractCount();
+    if (tx.getRetCount() > contractCount && contractCount > 0) {
+      Transaction.Builder transactionBuilder = tx.toBuilder().clearRet();
+      for (int i = 0; i < contractCount; i++) {
+        Result result = tmpList.get(i);
+        transactionBuilder.addRet(result);
+      }
+      this.transaction = transactionBuilder.build();
+    }
+  }
+
+  public void checkExpiration(long nextSlotTime) throws TransactionExpirationException {
+    if (getExpiration() < nextSlotTime) {
+      throw new TransactionExpirationException(String.format(
+          "Transaction expiration time is %d, but next slot time is %d",
+          getExpiration(), nextSlotTime));
+    }
+  }
+
+  public boolean retCountIsGreatThanContractCount() {
+    int contractCount = getContractCount();
+    return getRetCount() > contractCount && contractCount > 0;
+  }
+
+  public int getRetCount() {
+    return this.getInstance().getRetCount();
+  }
+
+  public int getContractCount() {
+    return this.getInstance().getRawData().getContractCount();
+  }
+}

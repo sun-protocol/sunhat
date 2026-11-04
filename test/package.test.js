@@ -13,7 +13,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse } from 'smol-toml';
 import {
@@ -66,6 +66,15 @@ test(
     t.after(() => rmSync(temporary, { recursive: true, force: true }));
     const archives = resolve(temporary, 'archives');
     mkdirSync(archives);
+    const internal = resolve(repository, 'docs/internal');
+    mkdirSync(internal, { recursive: true });
+    const privateFixture = mkdtempSync(resolve(internal, 'package-check-'));
+    t.after(() => rmSync(privateFixture, { recursive: true, force: true }));
+    writeFileSync(
+      resolve(privateFixture, 'private-note.md'),
+      'Internal packaging test fixture. This file must not be published.\n',
+      { flag: 'wx' },
+    );
     run([npm, 'pack', '--pack-destination', archives], repository, {
       timeout: 90_000,
     });
@@ -96,6 +105,58 @@ test(
     const installed = resolve(consumer, 'node_modules', metadata.name);
     assert.equal(lstatSync(installed).isSymbolicLink(), false);
     const cli = resolve(installed, 'bin/sunhat.js');
+    for (const name of Object.keys(metadata.peerDependencies)) {
+      assert.equal(
+        existsSync(resolve(consumer, 'node_modules', name)),
+        false,
+        `CLI-only installation unexpectedly installed optional peer ${name}`,
+      );
+    }
+
+    await t.test(
+      'the artifact installs alongside an existing Hardhat 2 and ethers 5 host',
+      () => {
+        const legacy = resolve(temporary, 'legacy host');
+        mkdirSync(legacy);
+        run(
+          [
+            npm,
+            'install',
+            '--ignore-scripts',
+            '--no-audit',
+            '--no-fund',
+            resolve(archives, tarballs[0]),
+            'hardhat@2.22.0',
+            'ethers@5.7.2',
+          ],
+          legacy,
+          { timeout: 90000 },
+        );
+        for (const [name, version] of [
+          ['hardhat', '2.22.0'],
+          ['ethers', '5.7.2'],
+        ]) {
+          assert.equal(
+            JSON.parse(
+              readFileSync(
+                resolve(legacy, 'node_modules', name, 'package.json'),
+              ),
+            ).version,
+            version,
+          );
+        }
+        assert.equal(
+          run(
+            [
+              resolve(legacy, 'node_modules', metadata.name, 'bin/sunhat.js'),
+              '--version',
+            ],
+            legacy,
+          ).stdout,
+          `sunhat ${metadata.version}\n`,
+        );
+      },
+    );
 
     await t.test(
       'the artifact contains runtime files, templates and documentation',
@@ -103,20 +164,66 @@ test(
         for (const path of [
           'dist/cli/main.js',
           'dist/package.js',
+          'dist/plugins/tron/index.js',
+          'dist/plugins/tron/index.d.ts',
+          'vendor/hardhat-tron/LICENSE',
+          'config/tron-defaults.json',
+          'config/compatibility.json',
+          'docs/hardhat3-tron-plugin.md',
           'templates',
           'README.md',
           'docs/QuickStart.md',
-          'docs/toml-binding.md',
+          'docs/release-2.1.0.md',
         ]) {
           assert.ok(existsSync(resolve(installed, path)), `missing ${path}`);
         }
-        for (const path of ['src', 'test', '.github']) {
+        for (const path of [
+          'src',
+          'test',
+          '.github',
+          'docs/internal',
+          'docs/hardhat3-tron-requirements.md',
+          'docs/hardhat3-tron-development-plan.md',
+          'docs/hardhat3-compatibility.md',
+          'docs/toml-binding.md',
+        ]) {
           assert.equal(
             existsSync(resolve(installed, path)),
             false,
             `unexpected ${path}`,
           );
         }
+      },
+    );
+
+    await t.test(
+      'installed TRON defaults load outside the repository and preserve project overrides',
+      () => {
+        const configured = run(
+          [
+            '--input-type=module',
+            '-e',
+            `const { normalizeTre } = await import(process.argv[1]);
+           console.log(JSON.stringify({
+             defaults: normalizeTre(undefined),
+             overridden: normalizeTre({ image: 'custom/tre:test', compiler: { mirror: 'https://example.invalid/solc' } })
+           }));`,
+            pathToFileURL(resolve(installed, 'dist/plugins/tron/settings.js'))
+              .href,
+          ],
+          consumer,
+        );
+        const { defaults, overridden } = JSON.parse(configured.stdout);
+        const asset = JSON.parse(
+          readFileSync(resolve(installed, 'config/tron-defaults.json')),
+        );
+        assert.equal(defaults.image, asset.image);
+        assert.equal(defaults.compiler.mirror, asset.compilerMirror);
+        assert.equal(overridden.image, 'custom/tre:test');
+        assert.equal(
+          overridden.compiler.mirror,
+          'https://example.invalid/solc',
+        );
       },
     );
 
@@ -149,11 +256,18 @@ test(
     );
 
     configureFoundryTemplates(installed);
-    for (const framework of ['foundry', 'hardhat']) {
+    for (const [framework, version] of [
+      ['foundry', undefined],
+      ['hardhat', 2],
+      ['hardhat', 3],
+    ]) {
       for (const target of ['evm', 'tron']) {
-        const project = resolve(consumer, `${framework}-${target}`);
+        const project = resolve(
+          consumer,
+          `${framework}-${version ?? 'native'}-${target}`,
+        );
         await t.test(
-          `${framework}/${target} initializes offline from the installed templates`,
+          `${framework}${version ?? ''}/${target} initializes offline from the installed templates`,
           () => {
             const downloadLog = resolve(
               temporary,
@@ -167,6 +281,9 @@ test(
                 'init',
                 '--framework',
                 framework,
+                ...(version === undefined
+                  ? []
+                  : ['--hardhat-version', String(version)]),
                 '--target',
                 target,
                 project,
@@ -188,9 +305,14 @@ test(
               readFileSync(resolve(project, 'package.json'), 'utf8'),
             );
             assert.equal(
-              manifest.devDependencies.sunhat,
-              `npm:${metadata.name}@${metadata.version}`,
+              manifest.devDependencies?.sunhat,
+              framework === 'hardhat' && version === 3 && target === 'tron'
+                ? `npm:${metadata.name}@${metadata.version}`
+                : undefined,
             );
+            assert.equal(manifest.dependencies?.sunhat, undefined);
+            assert.equal(manifest.dependencies?.[metadata.name], undefined);
+            assert.equal(manifest.devDependencies?.[metadata.name], undefined);
             const binding = parse(
               readFileSync(resolve(project, 'sunhat.toml'), 'utf8'),
             );
@@ -220,6 +342,24 @@ test(
           },
         );
         if (framework === 'foundry') {
+          await t.test(
+            `${framework}/${target} installs npm metadata without a Sunhat dependency`,
+            () => {
+              run(
+                [npm, 'install', '--ignore-scripts', '--no-audit', '--no-fund'],
+                project,
+              );
+              const manifest = JSON.parse(
+                readFileSync(resolve(project, 'package.json')),
+              );
+              assert.equal(manifest.dependencies?.sunhat, undefined);
+              assert.equal(manifest.devDependencies?.sunhat, undefined);
+              assert.equal(
+                existsSync(resolve(project, 'node_modules/sunhat')),
+                false,
+              );
+            },
+          );
           await t.test(
             `${framework}/${target} installs its toolchain explicitly`,
             () => {
