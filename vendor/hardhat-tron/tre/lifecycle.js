@@ -50,14 +50,23 @@ module.exports = function createModule(deps) {
   // node's own tre_instanceId (tier 0) -- the chain-derived genesis hash is
   // only the last resort when neither of those applies.
   const _launched = new Map();
+  const _ownedIds = new Map();
+
+  function associateOwnedUrl(name, url) {
+    if (![..._launched.values()].includes(name)) {
+      throw new Error(`Cannot associate an unowned TRE container: ${name}`);
+    }
+    _launched.set(url, name);
+  }
 
   function launchedContainerFor(networkUrl) {
-    return _launched.get(networkUrl);
+    return _ownedIds.get(_launched.get(networkUrl));
   }
 
   // Test-only: manipulate launched-container ownership without booting docker.
-  function _setLaunchedForTests(url, name) {
+  function _setLaunchedForTests(url, name, id = name) {
     _launched.set(url, name);
+    _ownedIds.set(name, id);
   }
   function _forgetLaunchedForTests(url) {
     _launched.delete(url);
@@ -180,7 +189,7 @@ module.exports = function createModule(deps) {
     try {
       const u = new URL(networkUrl);
       host = u.hostname;
-      port = u.port || '9090';
+      port = u.port || (u.protocol === 'https:' ? '443' : '80');
     } catch {
       return undefined;
     }
@@ -384,7 +393,21 @@ module.exports = function createModule(deps) {
       );
     }
 
+    const id = r.stdout?.trim();
+    if (!id || !/^[a-f0-9]{64}$/.test(id)) {
+      throw new Error(
+        `Docker did not return a container ID for ${name}; inspect the container before removing it`,
+      );
+    }
+    for (const [url, previousName] of _launched) {
+      if (previousName === name) {
+        _launched.delete(url);
+        deps.instanceIds.evictInstanceId(url);
+      }
+    }
+    deps.instanceIds.evictInstanceId(networkUrl);
     _launched.set(networkUrl, name);
+    _ownedIds.set(name, id);
     try {
       await waitForReady(
         networkUrl,
@@ -395,7 +418,7 @@ module.exports = function createModule(deps) {
     } catch (error) {
       if (!cfg.keepRunning) {
         try {
-          teardown(name, log);
+          teardown(id, log);
         } catch (cleanupError) {
           try {
             console.error(
@@ -410,15 +433,19 @@ module.exports = function createModule(deps) {
       throw error;
     }
 
-    return { spawned: true, name, url: networkUrl };
+    return { spawned: true, name, id, url: networkUrl };
   }
 
-  function teardown(name, log = () => {}) {
-    if (!name || ![..._launched.values()].includes(name)) {
+  function teardown(nameOrId, log = () => {}) {
+    const owned = [..._ownedIds].find(
+      ([name, id]) => name === nameOrId || id === nameOrId,
+    );
+    if (!owned) {
       return;
     }
+    const [name, id] = owned;
     log(`  tearing down ${name}`);
-    const removed = spawnSync('docker', ['rm', '-f', name], {
+    const removed = spawnSync('docker', ['rm', '-f', id], {
       encoding: 'utf8',
     });
     if (
@@ -429,6 +456,7 @@ module.exports = function createModule(deps) {
         `Could not remove owned TRE container ${name}: ${removed.error?.message ?? removed.stderr}`,
       );
     }
+    _ownedIds.delete(name);
     for (const [url, ownedName] of _launched) {
       if (ownedName === name) {
         _launched.delete(url);
@@ -443,6 +471,7 @@ module.exports = function createModule(deps) {
     isReachable,
     containerState,
     launchedContainerFor,
+    associateOwnedUrl,
     isLocalTre,
     isLoopbackHost,
     hostMatchesBinding,

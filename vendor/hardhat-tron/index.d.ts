@@ -16,7 +16,7 @@ export interface TreHelpers {
   time: {
     latest(): Promise<number>;
     latestBlock(): Promise<number>;
-    increase(seconds: number): Promise<void>;
+    increase(seconds: number): Promise<number>;
     increaseTo(timestamp: number): Promise<void>;
     setNextBlockTimestamp(timestamp: number): Promise<void>;
   };
@@ -35,6 +35,7 @@ export interface TreRuntime {
   makeTronWeb(): { tronWeb: TronWeb; address: string };
 }
 export interface RuntimeContext {
+  lifecycle?: Pick<Lifecycle, 'instanceId'>;
   config: {
     paths: { root: string; artifacts: string };
     tre: { fundSigners: boolean };
@@ -63,11 +64,27 @@ export interface LifecycleConfig {
   startupEnv: Record<string, string>;
 }
 export interface Lifecycle {
+  isLoopbackHost(host: string): boolean;
+  hostMatchesBinding(host: string, bindingHost: string): boolean;
+  containerServing(
+    url: string,
+  ): { name: string; id: string; startedAt: string } | undefined;
+  associateOwnedUrl(name: string, url: string): void;
+  instanceId(options: {
+    url: string;
+    httpHeaders?: Record<string, string>;
+    provider: Pick<EthereumProvider, 'request'>;
+  }): Promise<string>;
   ensureUp(
     config: LifecycleConfig,
     url: string,
     log?: (message: string) => void,
-  ): Promise<{ spawned: boolean; name: string | null; url: string }>;
+  ): Promise<{
+    spawned: boolean;
+    name: string | null;
+    id?: string;
+    url: string;
+  }>;
   teardown(name: string | null): void;
   isReachable(
     url: string,

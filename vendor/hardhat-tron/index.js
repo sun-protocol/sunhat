@@ -34,6 +34,7 @@ function createRuntime(input) {
   };
   const deps = { context };
   deps.cheatcodes = createCheatcodes();
+  deps.capabilities = require('./runtime/capabilities')(deps.cheatcodes);
   deps.time = createTime(deps);
   deps.signers = createSigners(deps);
   deps.treWeb = createTreWeb();
@@ -41,15 +42,14 @@ function createRuntime(input) {
   deps.deploy = createDeploy(deps);
   deps.bridge = createBridge(deps);
   const makeTronWeb = () => deps.treWeb.makeTronWeb(context);
+  const lifecycle = input.lifecycle ?? createLifecycle();
   context.tre = {
     ...deps.cheatcodes,
     ...deps.deploy,
     ...deps.wait,
     makeTronWeb,
     instanceId: () =>
-      require('./runtime/instance-id')({
-        lifecycle: createLifecycle(),
-      }).instanceId({
+      lifecycle.instanceId({
         networkName: context.network.name,
         url: context.network.config.url,
         httpHeaders: context.network.config.httpHeaders,
@@ -138,7 +138,7 @@ function createLifecycle(options = {}) {
   const deps = { ...options };
   const lifecycle = createLifecycleModule(deps);
   deps.instanceIds = require('./runtime/instance-id')({ lifecycle });
-  return lifecycle;
+  return { ...lifecycle, instanceId: deps.instanceIds.instanceId };
 }
 
 function createCompiler(options = {}) {

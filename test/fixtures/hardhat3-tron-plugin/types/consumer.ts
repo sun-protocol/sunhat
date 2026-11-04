@@ -16,3 +16,12 @@ export async function inspectTron(
   await connection.tre.helpers.time.latest();
   return receipt.nativeTransactionId;
 }
+
+export async function increasedTimestamp(
+  connection: NetworkConnection,
+): Promise<number> {
+  if (connection.tre === undefined) {
+    throw new Error('A TRON connection is required');
+  }
+  return connection.tre.helpers.time.increase(1);
+}

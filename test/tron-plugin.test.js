@@ -79,7 +79,10 @@ test('Hardhat forwards native HTTP credentials and redacts readiness failures', 
     },
     () => connection.close(),
   );
-  const manager = createTreManager({ isReachable: async () => false });
+  const manager = createTreManager({
+    ...core.createLifecycle(),
+    isReachable: async () => false,
+  });
   await assert.rejects(
     () => manager.acquire(normalizeTre(undefined), url),
     (error) => {
@@ -226,7 +229,7 @@ function fakeLifecycle() {
       }
       running = true;
       starts += 1;
-      return { spawned: true, name: String(starts), url };
+      return { spawned: true, name: String(starts), id: String(starts), url };
     },
     teardown() {
       running = false;
@@ -235,6 +238,13 @@ function fakeLifecycle() {
     async isReachable() {
       return running;
     },
+    isLoopbackHost: (host) =>
+      ['127.0.0.1', 'localhost', '[::1]'].includes(host),
+    containerServing: () =>
+      running ? { name: String(starts), id: String(starts) } : undefined,
+    associateOwnedUrl() {},
+    hostMatchesBinding: (host, binding) =>
+      host === 'localhost' || host === binding,
     status() {
       return { running, starts, stops };
     },
@@ -276,6 +286,205 @@ test('node acquisition promotes an existing owned TRE lease to persistent', asyn
   await first();
   await node();
   assert.deepEqual(lifecycle.status(), { running: true, starts: 1, stops: 0 });
+});
+
+function managedNodes(t) {
+  const containers = new Map();
+  const removed = [];
+  let starts = 0;
+  let failRemoval = false;
+  let discoverable = true;
+  t.mock.method(globalThis, 'fetch', async (source, options) => {
+    const url = new URL(source);
+    if (new Headers(options.headers).get('authorization') === 'invalid') {
+      return new Response('{}', { status: 401 });
+    }
+    const host = url.hostname === 'localhost' ? '127.0.0.1' : url.hostname;
+    const ready = [...containers.values()].some(
+      (entry) => entry.host === host && entry.port === (url.port || '80'),
+    );
+    if (!ready) {
+      throw new TypeError('fetch failed');
+    }
+    return Response.json(
+      url.pathname.endsWith('getnodeinfo')
+        ? { configNodeInfo: { codeVersion: 'test' } }
+        : { block_header: { raw_data: { number: 1 } } },
+    );
+  });
+  const lifecycle = core.createLifecycle({
+    process: {
+      spawnSync(_command, args) {
+        if (args[0] === 'run') {
+          starts += 1;
+          const name = args[args.indexOf('--name') + 1];
+          const [host, port] = args[args.indexOf('-p') + 1].split(':');
+          const id = starts.toString(16).padStart(64, '0');
+          containers.set(name, { host, port, id });
+          return { status: 0, stdout: id };
+        }
+        if (args[0] === 'rm') {
+          if (failRemoval) {
+            return { status: 1, stderr: 'EXPECTED_REMOVE_FAILURE' };
+          }
+          const owned = [...containers].find(
+            ([, entry]) => entry.id === args[2],
+          );
+          removed.push(args[2]);
+          if (owned) {
+            containers.delete(owned[0]);
+          }
+          return { status: 0 };
+        }
+        if (!discoverable) {
+          return { status: 1, stderr: 'EXPECTED_DOCKER_UNAVAILABLE' };
+        }
+        if (args[0] === 'ps') {
+          return {
+            status: 0,
+            stdout: [...containers.values()]
+              .map((entry) => entry.id)
+              .join('\n'),
+          };
+        }
+        return {
+          status: 0,
+          stdout: [...containers]
+            .map(([name, entry]) => {
+              const ports = {
+                '9090/tcp': [{ HostIp: entry.host, HostPort: entry.port }],
+              };
+              return `${entry.id}|2026-01-01|/${name}|${JSON.stringify(ports)}`;
+            })
+            .join('\n'),
+        };
+      },
+    },
+  });
+  return {
+    lifecycle,
+    containers,
+    removed,
+    starts: () => starts,
+    failRemoval: (value) => {
+      failRemoval = value;
+    },
+    discoverable: (value) => {
+      discoverable = value;
+    },
+  };
+}
+
+test('actual container ownership shares alias leases in either release order', async (t) => {
+  const nodes = managedNodes(t);
+  const manager = createTreManager(nodes.lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  for (const firstIndex of [0, 1]) {
+    const releases = await taskContext.run('test', () =>
+      Promise.all([
+        manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+        manager.acquire(config, 'http://localhost:9090/jsonrpc'),
+      ]),
+    );
+    assert.equal(nodes.starts(), firstIndex + 1);
+    await releases[firstIndex]();
+    assert.equal(nodes.containers.size, 1);
+    await releases[1 - firstIndex]();
+    await releases[firstIndex]();
+    assert.equal(nodes.containers.size, 0);
+    assert.equal(nodes.removed.length, firstIndex + 1);
+  }
+});
+
+test('failed alias acquisitions cannot promote or invalidate an existing lease', async (t) => {
+  const nodes = managedNodes(t);
+  const manager = createTreManager(nodes.lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  const release = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  await assert.rejects(
+    taskContext.run('node', () =>
+      manager.acquire(config, 'http://localhost:9090/jsonrpc', {
+        Authorization: 'invalid',
+      }),
+    ),
+    /HTTP 401/,
+  );
+  await assert.rejects(
+    manager.acquire(
+      { ...config, image: 'conflicting:image' },
+      'http://localhost:9090/jsonrpc',
+    ),
+    /Conflicting TRE/,
+  );
+  nodes.discoverable(false);
+  await assert.rejects(
+    manager.acquire(config, 'http://localhost:9090/jsonrpc'),
+    /Cannot identify/,
+  );
+  nodes.discoverable(true);
+  const alias = await manager.acquire(config, 'http://localhost:9090/jsonrpc');
+  await release();
+  assert.equal(nodes.containers.size, 1);
+  await alias();
+  assert.equal(nodes.containers.size, 0);
+});
+
+test('distinct interfaces and external nodes never acquire owned cleanup', async (t) => {
+  const nodes = managedNodes(t);
+  const manager = createTreManager(nodes.lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  const owned = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  nodes.containers.set('external-ipv4', { host: '127.0.0.2', port: '9090' });
+  nodes.containers.set('external-ipv6', { host: '[::1]', port: '9090' });
+  nodes.discoverable(false);
+  const other = await manager.acquire(config, 'http://127.0.0.2:9090/jsonrpc');
+  const ipv6 = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://[::1]:9090/jsonrpc'),
+  );
+  await owned();
+  await other();
+  await ipv6();
+  assert.deepEqual(
+    [...nodes.containers.keys()],
+    ['external-ipv4', 'external-ipv6'],
+  );
+  assert.equal(nodes.removed.length, 1);
+});
+
+test('failed final teardown retains ownership for a later cleanup attempt', async (t) => {
+  const nodes = managedNodes(t);
+  const manager = createTreManager(nodes.lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  const release = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  nodes.failRemoval(true);
+  await assert.rejects(release(), /EXPECTED_REMOVE_FAILURE/);
+  const retry = await manager.acquire(config, 'http://localhost:9090/jsonrpc');
+  nodes.failRemoval(false);
+  await retry();
+  assert.equal(nodes.containers.size, 0);
+});
+
+test('an old lease cannot remove an external container that reused its name', async (t) => {
+  const nodes = managedNodes(t);
+  const manager = createTreManager(nodes.lifecycle);
+  const config = normalizeTre({ autoStart: true });
+  const release = await taskContext.run('test', () =>
+    manager.acquire(config, 'http://127.0.0.1:9090/jsonrpc'),
+  );
+  const [name, original] = [...nodes.containers][0];
+  const replacement = { ...original, id: 'f'.repeat(64) };
+  nodes.containers.set(name, replacement);
+  const alias = await manager.acquire(config, 'http://localhost:9090/jsonrpc');
+  await release();
+  await alias();
+  assert.equal(nodes.containers.get(name), replacement);
+  assert.deepEqual(nodes.removed, [original.id]);
 });
 test('connection cleanup preserves every original thrown value', async () => {
   for (const original of [

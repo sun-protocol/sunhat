@@ -12,7 +12,7 @@ module.exports = function createModule(deps) {
   //      probed for ANY url, not just local ones, so a remote self-hosted
   //      patched TRE still answers; a network that does not answer this costs
   //      at most ~4s (two 2s attempts); an unanswered probe leaves the id
-  //      provisional and is re-probed on later calls (bounded) before settling.
+  //      provisional and is re-probed on later calls with two attempts per call.
   //   1. Owned: this plugin launched the container (lifecycle.launchedContainerFor).
   //      Its identity is read via `docker inspect` and MUST succeed — a failure
   //      here throws rather than falling through to a weaker tier, since we know
@@ -46,7 +46,7 @@ module.exports = function createModule(deps) {
   //
   // The id is resolved once and cached per url when the tier-0 probe got an
   // answer. When it did not (timeout, dropped socket), the fallback id is held
-  // provisionally: later calls re-probe tier 0 (bounded) so a node that was
+  // provisionally: later calls re-probe tier 0 (bounded per call) so a node that was
   // merely mid-hiccup converges on its served id. `networkName` is accepted for
   // the caller's convenience but does not participate in the key: id derivation
   // depends only on the url, and two networks sharing a url point at the same
@@ -114,7 +114,6 @@ module.exports = function createModule(deps) {
 
   const PROBE_TIMEOUT_MS = 2000;
   const PROBE_RETRY_DELAY_MS = 100;
-  const MAX_PROVISIONAL_REPROBES = 2;
 
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -136,17 +135,19 @@ module.exports = function createModule(deps) {
       }),
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    const id = body && body.result;
-    return typeof id === 'string' && /^0x[0-9a-f]{64}$/.test(id)
-      ? id
-      : undefined;
-  }
-
-  // A thrown probe error is definitive only when a complete non-JSON body came
-  // back (SyntaxError from res.json()): the endpoint answered, it just is not a
-  // patched TRE. Every other throw (timeout, reset, refused) is "no answer".
-  function isDefinitiveProbeError(err) {
-    return !!err && err.name === 'SyntaxError';
+    if (body?.error?.code === -32601) {
+      return undefined;
+    }
+    if (
+      body &&
+      !Array.isArray(body) &&
+      body.error === undefined &&
+      typeof body.result === 'string' &&
+      /^0x[0-9a-f]{64}$/.test(body.result)
+    ) {
+      return body.result;
+    }
+    throw new Error('Invalid tre_instanceId response', { cause: body });
   }
 
   // Tier 0 probe. { id, definitive: true } -- the node served an id;
@@ -160,10 +161,7 @@ module.exports = function createModule(deps) {
           id: await fetchNodeServedInstanceId(url, httpHeaders),
           definitive: true,
         };
-      } catch (err) {
-        if (isDefinitiveProbeError(err)) {
-          return { id: undefined, definitive: true };
-        }
+      } catch {
         if (attempt >= 1) {
           return { id: undefined, definitive: false };
         }
@@ -200,28 +198,54 @@ module.exports = function createModule(deps) {
     return id;
   }
 
-  // Concurrent calls for one url share a single resolution: interleaved
-  // probes could otherwise commit a stale fallback over a served id.
+  const keysByUrl = new Map();
+  function cacheKey({ url, httpHeaders }) {
+    const headers = [...new Headers(httpHeaders).entries()].sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+    return crypto
+      .createHash('sha256')
+      .update(JSON.stringify([url, headers]))
+      .digest('hex');
+  }
+
+  // Credentials can route one URL to different tenant nodes. Coalesce only
+  // requests that describe the same authenticated endpoint.
   async function instanceId(opts) {
-    const cached = _instanceIdCache.get(opts.url);
+    const request = {
+      ...opts,
+      httpHeaders: Object.fromEntries(new Headers(opts.httpHeaders).entries()),
+    };
+    const key = cacheKey(request);
+    let keys = keysByUrl.get(request.url);
+    if (!keys) {
+      keys = new Set();
+      keysByUrl.set(request.url, keys);
+    }
+    keys.add(key);
+    const cached = _instanceIdCache.get(key);
     if (cached && !cached.provisional) {
       return cached.id;
     }
-    let p = _inflight.get(opts.url);
+    let p = _inflight.get(key);
     if (!p) {
-      p = resolveInstanceId(opts).finally(() => _inflight.delete(opts.url));
-      _inflight.set(opts.url, p);
+      p = resolveInstanceId(request, key).finally(() => {
+        if (_inflight.get(key) === p) {
+          _inflight.delete(key);
+        }
+      });
+      _inflight.set(key, p);
     }
     return p;
   }
 
-  async function resolveInstanceId({ url, provider, httpHeaders }) {
+  async function resolveInstanceId({ url, provider, httpHeaders }, key) {
     // A cache write is void if teardown evicted the url while a probe was in
     // flight: the resolved id belongs to the instance that was just removed.
-    const gen = _evictGen.get(url) || 0;
-    const evicted = () => (_evictGen.get(url) || 0) !== gen;
+    const gen = _evictGen.get(key) || 0;
+    const evicted = () => (_evictGen.get(key) || 0) !== gen;
 
-    const cached = _instanceIdCache.get(url);
+    const cached = _instanceIdCache.get(key);
     if (cached && !cached.provisional) {
       return cached.id;
     }
@@ -236,17 +260,11 @@ module.exports = function createModule(deps) {
         return id;
       }
       if (probe.definitive) {
-        return commit(url, id);
+        return commit(key, id);
       }
-      if (--cached.reprobesLeft > 0) {
-        return cached.id;
-      }
-      console.warn(
-        `[hardhat-tron] the tre_instanceId probe for ${describeEndpoint(url)} never got an answer; ` +
-          `settling on the fallback instance id. If this node runs the patched TRE jar, ` +
-          `other processes may key their upgrades manifest differently.`,
-      );
-      return commit(url, cached.id);
+      // A transient failure never becomes permanent evidence of absence.
+      // Each subsequent call retries at most twice before returning fallback.
+      return cached.id;
     }
 
     const probe = await nodeServedInstanceId(url, httpHeaders);
@@ -282,12 +300,11 @@ module.exports = function createModule(deps) {
       return id;
     }
     if (probe.definitive) {
-      return commit(url, id);
+      return commit(key, id);
     }
-    _instanceIdCache.set(url, {
+    _instanceIdCache.set(key, {
       id,
       provisional: true,
-      reprobesLeft: MAX_PROVISIONAL_REPROBES,
     });
     return id;
   }
@@ -295,11 +312,12 @@ module.exports = function createModule(deps) {
   // Called by the TRE lifecycle when it removes the container serving a url,
   // so a later boot on the same url resolves a fresh identity.
   function evictInstanceId(url) {
-    _instanceIdCache.delete(url);
-    // A post-eviction caller must start fresh, not join the dead
-    // instance's in-flight resolution.
-    _inflight.delete(url);
-    _evictGen.set(url, (_evictGen.get(url) || 0) + 1);
+    for (const key of keysByUrl.get(url) ?? []) {
+      _instanceIdCache.delete(key);
+      _inflight.delete(key);
+      _evictGen.set(key, (_evictGen.get(key) || 0) + 1);
+    }
+    keysByUrl.delete(url);
   }
 
   return { instanceId, evictInstanceId };

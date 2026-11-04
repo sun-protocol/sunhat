@@ -366,6 +366,14 @@ test(
             );
             assert.match(tested.stdout, /6 passing/);
           }
+          if (mode === 'success') {
+            const aliases = run(
+              process.execPath,
+              [hardhat, 'run', 'scripts/lifecycle.js', '--no-compile'],
+              options,
+            );
+            assert.match(aliases.stdout, /TRE_LEASE_STILL_READY/);
+          }
           const state = spawnSync(
             'docker',
             ['inspect', '--format', '{{.State.Running}}', name],

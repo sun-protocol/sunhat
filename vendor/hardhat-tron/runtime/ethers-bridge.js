@@ -2418,20 +2418,6 @@ module.exports = function createModule(deps) {
 
   // -- Snapshot + loadFixture --------------------------------------
 
-  // Probed once: does the running container support `tre_snapshot` /
-  // `tre_revert`? The patched fork advertises itself via the
-  // `tre_version` suffix `oz-tron`. Cached for the lifetime of the
-  // connection.
-  let _snapshotSupported = null;
-  async function _supportsSnapshot(tronWeb) {
-    if (_snapshotSupported !== null) {
-      return _snapshotSupported;
-    }
-    const v = await rpcCall(tronWeb, 'tre_version', []).catch(() => null);
-    _snapshotSupported = !!(v && v.result && /oz-tron/.test(v.result));
-    return _snapshotSupported;
-  }
-
   // `SnapshotRestorer` — analogue of `hardhat-network-helpers`'
   // `SnapshotRestorer`. `restore()` reverts to the snapshot AND
   // immediately re-snapshots so the restorer stays reusable; the
@@ -2491,7 +2477,7 @@ module.exports = function createModule(deps) {
     // one of the derived signers. Idempotent — `buildSigners` caches
     // the array.
     await makeSigners(hre);
-    if (!(await _supportsSnapshot(tronWeb))) {
+    if (!(await deps.capabilities.supportsPatched(tronWeb))) {
       throw new Error(
         'loadFixture requires patched TRE snapshot/revert support',
       );

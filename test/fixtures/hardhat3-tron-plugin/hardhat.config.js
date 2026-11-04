@@ -40,6 +40,7 @@ export default defineConfig({
   networks: {
     default: tron,
     tre: tron,
+    alias: { ...tron, url: tron.url.replace('127.0.0.1', 'localhost') },
     evm: { type: 'edr-simulated' },
     readonly: { ...tron, accounts: 'remote' },
     ...(process.env.TRE_OTHER_URL

@@ -6,7 +6,7 @@ import core from '../../../vendor/hardhat-tron/index.js';
 import { normalizeTre } from './settings.js';
 import { resolveSigningAccounts } from './accounts.js';
 import { withCleanup } from './cleanup.js';
-import { acquireTre } from './resources.js';
+import { acquireTre, treLifecycle } from './resources.js';
 
 export default async (): Promise<Partial<NetworkHooks>> => {
   const releases = new WeakMap<
@@ -46,6 +46,7 @@ export default async (): Promise<Partial<NetworkHooks>> => {
         const accounts = await resolveSigningAccounts(network.accounts);
         release = await acquireTre(config, url, network.httpHeaders);
         const runtime = core.createRuntime({
+          lifecycle: treLifecycle,
           config: {
             paths: {
               root: context.config.paths.root,

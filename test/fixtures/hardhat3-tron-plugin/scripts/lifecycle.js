@@ -1,15 +1,24 @@
 import assert from 'node:assert/strict';
 import { network } from 'hardhat';
 
+const { taskContext } = await import(
+  new URL(
+    './dist/plugins/tron/resources.js',
+    import.meta.resolve('sunhat/package.json'),
+  )
+);
 const connections = [];
 let primary;
 let succeeded = false;
 try {
-  const first = await network.create('tre');
+  const first = await taskContext.run('test', () => network.create('tre'));
   connections.push(first);
-  const second = await network.create('tre');
+  const second = await network.create('alias');
   connections.push(second);
   assert.ok(first.tre && second.tre);
+  const identity = await first.tre.instanceId();
+  assert.equal(await first.tre.instanceId(), identity);
+  assert.equal(await second.tre.instanceId(), identity);
   await first.close();
   connections.shift();
   assert.ok((await second.ethers.provider.getBlockNumber()) > 0);

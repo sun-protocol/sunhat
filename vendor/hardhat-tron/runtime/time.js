@@ -71,22 +71,8 @@ module.exports = function createModule(deps) {
     await mine(tronWeb, Number(t - cur));
   }
 
-  // Probed once: does the running container support
-  // `tre_setNextBlockTimestamp`? The patched fork advertises itself
-  // via the `tre_version` suffix `oz-tron`. Cached for the lifetime
-  // of the test process.
-  let _instantWarpSupported = null;
-  async function _supportsInstantWarp(tronWeb) {
-    if (_instantWarpSupported !== null) {
-      return _instantWarpSupported;
-    }
-    const v = await rpcCall(tronWeb, 'tre_version', []).catch(() => null);
-    _instantWarpSupported = !!(v && v.result && /oz-tron/.test(v.result));
-    return _instantWarpSupported;
-  }
-
   async function _requireInstantWarp(tronWeb) {
-    if (!(await _supportsInstantWarp(tronWeb))) {
+    if (!(await deps.capabilities.supportsPatched(tronWeb))) {
       throw new Error(
         'time-warp requires the patched FullNode.jar (tre_version with `-oz-tron` suffix). ' +
           'Build it via the docker pipeline and start a fresh container with the jar mounted. ' +
