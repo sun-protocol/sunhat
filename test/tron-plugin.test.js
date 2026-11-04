@@ -7,6 +7,7 @@ import { createHardhatRuntimeEnvironment } from 'hardhat/hre';
 import plugin from '../dist/plugins/tron/index.js';
 import ethersMatchers from '@nomicfoundation/hardhat-ethers-chai-matchers';
 import { expect } from 'chai';
+import { Contract } from 'ethers';
 import core from '../vendor/hardhat-tron/index.js';
 import { normalizeTre } from '../dist/plugins/tron/settings.js';
 import { withCleanup } from '../dist/plugins/tron/cleanup.js';
@@ -242,11 +243,19 @@ test(
       async () => {
         core.registerMatchers();
         const [sender, recipient] = await connection.ethers.getSigners();
-        await expect(
-          sender.sendTransaction({ to: recipient.address, value: 9n }),
-        ).to.changeEtherBalances(
+        const response = await sender.sendTransaction({
+          to: recipient.address,
+          value: 9n,
+        });
+        const addressable = { getAddress: async () => recipient.address };
+        await expect(response).to.changeEtherBalance(
           connection.ethers,
-          [sender, recipient],
+          addressable,
+          9n,
+        );
+        await expect(response).to.changeEtherBalances(
+          connection.ethers,
+          [sender, new Contract(addressable, [])],
           [-9n, 9n],
         );
       },

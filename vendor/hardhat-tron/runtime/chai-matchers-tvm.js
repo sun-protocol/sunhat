@@ -89,20 +89,20 @@ module.exports = function createModule(deps) {
     return typeof s === 'string' ? s.toLowerCase() : s;
   }
 
-  async function formatAddress(account) {
-    if (!account) {
-      return String(account);
-    }
-    if (typeof account === 'string') {
-      return account;
-    }
-    if (typeof account.address === 'string') {
-      return account.address;
-    }
-    if (typeof account.getAddress === 'function') {
-      return await account.getAddress();
-    }
-    return String(account);
+  async function resolveAddrLower(account) {
+    // Addressable identity takes precedence over legacy string fields.
+    // Resolve before TRON conversion; resolveAddress(Addressable) would
+    // reject native encodings and the zero-address balance sentinel.
+    const address = ethersV6.isAddressable(account)
+      ? await account.getAddress()
+      : asAddressString(account);
+    ethersV6.assertArgument(
+      typeof address === 'string',
+      'invalid account address',
+      'address',
+      address,
+    );
+    return ethersV6.getAddress(normalizeAddrLower(address)).toLowerCase();
   }
 
   // --- token (ERC20) balance from Transfer events ------------------
@@ -159,14 +159,6 @@ module.exports = function createModule(deps) {
       }
     }
     return change;
-  }
-
-  async function getTokenAddrLower(token) {
-    const addr =
-      (typeof token.getAddress === 'function' && (await token.getAddress())) ||
-      token.target ||
-      token.address;
-    return normalizeAddrLower(addr);
   }
 
   // --- ether balance from outer tx + internal_transactions ---------
@@ -305,8 +297,8 @@ module.exports = function createModule(deps) {
             txResponse && typeof txResponse.wait === 'function'
               ? await txResponse.wait()
               : txResponse;
-          const tokenAddrLower = await getTokenAddrLower(token);
-          const accountAddrLower = normalizeAddrLower(account);
+          const tokenAddrLower = await resolveAddrLower(token);
+          const accountAddrLower = await resolveAddrLower(account);
           const actual = tokenBalanceChange(
             receipt,
             tokenAddrLower,
@@ -315,7 +307,7 @@ module.exports = function createModule(deps) {
           const expectedBig = toBigInt(expected);
           const matches = actual === expectedBig;
           if (negated ? matches : !matches) {
-            const accountDesc = await formatAddress(account);
+            const accountDesc = accountAddrLower;
             const tokenDesc = await getTokenDescription(token, tokenAddrLower);
             throw new Error(
               negated
@@ -349,8 +341,10 @@ module.exports = function createModule(deps) {
             txResponse && typeof txResponse.wait === 'function'
               ? await txResponse.wait()
               : txResponse;
-          const tokenAddrLower = await getTokenAddrLower(token);
-          const accountAddrsLower = accounts.map(normalizeAddrLower);
+          const tokenAddrLower = await resolveAddrLower(token);
+          const accountAddrsLower = await Promise.all(
+            accounts.map(resolveAddrLower),
+          );
           const actuals = accountAddrsLower.map((a) =>
             tokenBalanceChange(receipt, tokenAddrLower, a),
           );
@@ -370,7 +364,7 @@ module.exports = function createModule(deps) {
           const matches = actuals.every((v, i) => v === expectedBig[i]);
           if (negated ? matches : !matches) {
             const tokenDesc = await getTokenDescription(token, tokenAddrLower);
-            const addrDesc = await Promise.all(accounts.map(formatAddress));
+            const addrDesc = accountAddrsLower;
             throw new Error(
               negated
                 ? `Expected balances of ${tokenDesc} tokens for ${addrDesc.join(',')} NOT to change by [${expectedBig.join(',')}], but they did`
@@ -402,9 +396,10 @@ module.exports = function createModule(deps) {
             await txResponse.wait();
           }
           const includeFee = !!(options && options.includeFee);
+          const accountAddrLower = await resolveAddrLower(account);
           const [changeSun] = await etherBalanceChangesSun(
             txResponse,
-            [normalizeAddrLower(account)],
+            [accountAddrLower],
             hre,
             includeFee,
           );
@@ -413,7 +408,7 @@ module.exports = function createModule(deps) {
           const expectedBig = toBigInt(expected);
           const matches = actualWei === expectedBig;
           if (negated ? matches : !matches) {
-            const addrDesc = await formatAddress(account);
+            const addrDesc = accountAddrLower;
             throw new Error(
               negated
                 ? `Expected the ether balance of "${addrDesc}" NOT to change by ${expectedBig.toString()} wei, but it did`
@@ -442,7 +437,9 @@ module.exports = function createModule(deps) {
             await txResponse.wait();
           }
           const includeFee = !!(options && options.includeFee);
-          const accountAddrsLower = accounts.map(normalizeAddrLower);
+          const accountAddrsLower = await Promise.all(
+            accounts.map(resolveAddrLower),
+          );
           const changesSun = await etherBalanceChangesSun(
             txResponse,
             accountAddrsLower,
@@ -465,7 +462,7 @@ module.exports = function createModule(deps) {
           const expectedBig = expected.map(toBigInt);
           const matches = actualsWei.every((v, i) => v === expectedBig[i]);
           if (negated ? matches : !matches) {
-            const addrDesc = await Promise.all(accounts.map(formatAddress));
+            const addrDesc = accountAddrsLower;
             throw new Error(
               negated
                 ? `Expected ether balances for [${addrDesc.join(',')}] NOT to change by [${expectedBig.map((b) => b.toString()).join(',')}] wei, but they did`

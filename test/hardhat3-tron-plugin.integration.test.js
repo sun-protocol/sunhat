@@ -297,7 +297,7 @@ test(
             [hardhat, 'test', 'mocha', '--no-compile'],
             options,
           );
-          assert.match(tested.stdout, /5 passing/);
+          assert.match(tested.stdout, /6 passing/);
           assert.match(tested.stdout, /TRON_PLUGIN_RESULT/);
           subtest.diagnostic(
             `image=${image}; patchedJarSha256=${patched ? jarDigest : 'none'}; ${tested.stdout.match(/TRON_PLUGIN_RESULT .*/)?.[0]}`,
@@ -364,7 +364,7 @@ test(
               [hardhat, 'test', 'mocha', '--no-compile'],
               options,
             );
-            assert.match(tested.stdout, /5 passing/);
+            assert.match(tested.stdout, /6 passing/);
           }
           const state = spawnSync(
             'docker',

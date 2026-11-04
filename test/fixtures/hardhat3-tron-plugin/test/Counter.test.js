@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { expect } from 'chai';
 import { network } from 'hardhat';
+import { Contract } from 'ethers';
 import { describe, it, afterEach } from 'mocha';
 import {
   toBase58Address,
@@ -302,6 +303,64 @@ describe('Hardhat 3 TRON plugin', function () {
     );
     const emptyOverrides = await emptyFactory.deploy(...second, {});
     assert.equal(await emptyOverrides.getAddress(), emptyPrediction);
+  });
+  it('resolves Addressable accounts in all native balance matchers', async function () {
+    const connection = await network.create('tre');
+    connections.push(connection);
+    const { ethers } = connection;
+    const [sender, recipient] = await ethers.getSigners();
+    const address = await recipient.getAddress();
+    const addressable = { getAddress: async () => address };
+    const contract = new Contract(addressable, []);
+    const token = await ethers.deployContract('TokenFixture');
+    const nativeBefore = await ethers.provider.getBalance(address);
+    const native = await sender.sendTransaction({ to: address, value: 100n });
+    await native.wait();
+    assert.equal(
+      await ethers.provider.getBalance(address),
+      nativeBefore + 100n,
+    );
+    const tokensBefore = await token.balanceOf(address);
+    const transfer = await token.transfer(address, 100n);
+    await transfer.wait();
+    assert.equal(await token.balanceOf(address), tokensBefore + 100n);
+    for (const account of [address, recipient, addressable, contract]) {
+      await expect(native).to.changeEtherBalance(ethers, account, 100n);
+      await expect(native).to.changeEtherBalances(
+        ethers,
+        [sender, account],
+        [-100n, 100n],
+      );
+      await expect(transfer).to.changeTokenBalance(
+        ethers,
+        token,
+        account,
+        100n,
+      );
+      await expect(transfer).to.changeTokenBalances(
+        ethers,
+        token,
+        [sender, account],
+        [-100n, 100n],
+      );
+      for (const assertion of [
+        () => expect(native).to.changeEtherBalance(ethers, account, 0n),
+        () => expect(native).to.changeEtherBalances(ethers, [account], [0n]),
+        () =>
+          expect(transfer).to.changeTokenBalance(ethers, token, account, 0n),
+        () =>
+          expect(transfer).to.changeTokenBalances(
+            ethers,
+            token,
+            [account],
+            [0n],
+          ),
+      ]) {
+        await assert.rejects(async () => {
+          await assertion();
+        }, /changed by/);
+      }
+    }
   });
   it('uses connection ethers on native TVM and preserves EVM coexistence', async function () {
     const first = await network.create('tre');
