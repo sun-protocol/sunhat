@@ -8,5 +8,10 @@
     "requestMs": 300000,
     "receiptMs": 240000,
     "deploymentMs": 180000
+  },
+  "jdkImage": "eclipse-temurin@sha256:91011320978c10ec51d2cde1eb6f616db6d2a739a0e521096c343dd3fed9abe6",
+  "localCompiler": {
+    "version": "0.8.26",
+    "sha256": "31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1"
   }
 }

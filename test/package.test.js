@@ -168,6 +168,7 @@ test(
           'dist/plugins/tron/index.d.ts',
           'vendor/hardhat-tron/LICENSE',
           'config/tron-defaults.json',
+          'config/compatibility.json',
           'docs/hardhat3-tron-plugin.md',
           'templates',
           'README.md',

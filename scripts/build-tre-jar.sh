@@ -22,16 +22,32 @@
 #      corresponding entry in the stock jar (new classes are added).
 #
 # Env knobs:
-#   TRE_IMAGE  image to patch. Defaults to the verified TRE digest below.
-#   JDK_IMAGE  compiler image. Defaults to the verified Temurin digest below.
+#   TRE_IMAGE  image to patch. Defaults to config/tron-defaults.json.
+#   JDK_IMAGE  compiler image. Defaults to config/tron-defaults.json.
 #   TRE_JAR    path of FullNode.jar inside TRE_IMAGE. Auto-detected.
 #   SUNHAT_TRE_JAR_OUTPUT  output path; defaults to .sunhat/tre/FullNode.jar.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-TRE_IMAGE="${TRE_IMAGE:-tronbox/tre@sha256:f4332e11df12a9f360639a4546fd046593909630fda48af00b30410c144342f0}"
-JDK_IMAGE="${JDK_IMAGE:-eclipse-temurin@sha256:91011320978c10ec51d2cde1eb6f616db6d2a739a0e521096c343dd3fed9abe6}"
+read_default() {
+  python3 - "$1" <<'PYTHON'
+import json
+import sys
+
+path = 'config/tron-defaults.json'
+field = sys.argv[1]
+with open(path, encoding='utf-8') as source:
+    defaults = json.load(source)
+value = defaults.get(field) if isinstance(defaults, dict) else None
+if not isinstance(value, str) or not value.strip():
+    sys.exit(f'Invalid TRON default {field} in {path}: expected a non-empty string')
+print(value)
+PYTHON
+}
+
+TRE_IMAGE="${TRE_IMAGE:-$(read_default image)}"
+JDK_IMAGE="${JDK_IMAGE:-$(read_default jdkImage)}"
 OUT="${SUNHAT_TRE_JAR_OUTPUT:-.sunhat/tre/FullNode.jar}"
 
 WORK="$(mktemp -d)"

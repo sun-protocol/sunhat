@@ -12,6 +12,7 @@ import { createServer } from 'node:http';
 import core from '../vendor/hardhat-tron/index.js';
 import { normalizeTre } from '../dist/plugins/tron/settings.js';
 import { withCleanup } from '../dist/plugins/tron/cleanup.js';
+import { configureTronCompiler } from '../dist/plugins/tron/compiler.js';
 import { readTronDefaults } from '../dist/plugins/tron/defaults.js';
 import {
   createTreManager,
@@ -103,6 +104,8 @@ test('TRON defaults read configuration data and reject invalid or missing assets
   const configured = {
     image: 'example/tre:test',
     compilerMirror: 'https://example.invalid/solc',
+    jdkImage: 'example/jdk:test',
+    localCompiler: { version: '0.8.26', sha256: '1'.repeat(64) },
   };
   writeFileSync(path, JSON.stringify(configured));
   assert.deepEqual(readTronDefaults(path), configured);
@@ -112,6 +115,7 @@ test('TRON defaults read configuration data and reject invalid or missing assets
     {},
     { ...configured, image: ' ' },
     { ...configured, compilerMirror: 42 },
+    { ...configured, localCompiler: { version: '0.8.26', sha256: 'bad' } },
   ]) {
     writeFileSync(path, JSON.stringify(value));
     assert.throws(
@@ -548,3 +552,34 @@ test(
     );
   },
 );
+
+test('local compiler release metadata keeps version and checksum enforcement', async (t) => {
+  const root = mkdtempSync(resolve(tmpdir(), 'sunhat-pinned-solc-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = resolve(root, 'soljson.js');
+  writeFileSync(
+    path,
+    'throw new Error("unverified compiler must not execute");',
+  );
+  for (const [version, pattern] of [
+    ['0.8.26', /checksum mismatch/],
+    ['0.8.25', /requires Solidity 0.8.26/],
+  ]) {
+    await assert.rejects(
+      configureTronCompiler(
+        {
+          paths: {
+            root,
+            artifacts: resolve(root, 'artifacts'),
+            cache: resolve(root, 'cache'),
+          },
+          solidity: {
+            profiles: { default: { compilers: [{ version }], overrides: {} } },
+          },
+        },
+        normalizeTre({ compiler: { path } }),
+      ),
+      pattern,
+    );
+  }
+});

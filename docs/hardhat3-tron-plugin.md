@@ -123,3 +123,15 @@ confirmed-view queries and recovery mining share that operation deadline;
 retries cannot extend it. Caller cancellation and the network timeout are both
 enforced, including while reading response bodies. Readiness probes and compiler
 operations retain their separate deadlines.
+
+Release maintainers update `config/compatibility.json` for Node support and
+Hardhat 3 TRON dependency policy. `minimum` is the supported floor; `tested` is
+the exact version pinned in templates and the development lockfile. They may
+change independently. `npm run check:compatibility` verifies portable package
+engines, template pins, optional peers and the lockfile; CI reads its Node matrix
+from the same metadata.
+
+`config/tron-defaults.json` owns the TRE/JDK image digests and the verified local
+compiler version/hash, alongside runtime defaults. `TRE_IMAGE` and `JDK_IMAGE`
+still override the jar build inputs. Moving these pins does not change compiler
+integrity checks or the manifest-based download path for other compiler versions.

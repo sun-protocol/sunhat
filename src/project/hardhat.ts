@@ -1,5 +1,6 @@
 import { toolchainError } from '../errors.js';
 import { isRecord, readJson } from '../json.js';
+import { compatibility } from '../compatibility.js';
 import { isSupportedNode } from '../runtime.js';
 
 export type HardhatMajor = 2 | 3;
@@ -22,7 +23,7 @@ export function hardhatMajor(
 }
 
 export function isHardhat3NodeSupported(version: string): boolean {
-  return isSupportedNode(version, { major: 22, minor: 13 });
+  return isSupportedNode(version, compatibility.node.minimum.hardhat3);
 }
 
 export function readHardhatPackage(path: string): HardhatPackage {

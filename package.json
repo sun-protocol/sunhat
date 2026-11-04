@@ -16,7 +16,8 @@
     "README.md",
     "vendor/hardhat-tron/",
     "docs/hardhat3-tron-plugin.md",
-    "docs/release-2.1.0.md"
+    "docs/release-2.1.0.md",
+    "config/compatibility.json"
   ],
   "engines": {
     "node": "^20.11.0 || ^22.0.0 || ^24.0.0 || ^26.0.0"
@@ -30,7 +31,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepack": "npm run build",
     "test": "npm run build && npm run test:runtime",
-    "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/runtime.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
+    "test:runtime": "node --test test/toml.test.js test/binding.test.js test/json-boundaries.test.js test/runtime.test.js test/compatibility.test.js test/process.test.js test/cli.test.js test/init-commands.test.js test/init-template-assets.test.js test/toolchain.test.js",
     "test:templates": "npm run build && node --test test/template-types.test.js",
     "test:hardhat3": "npm run build && node --test test/hardhat3.integration.test.js",
     "test:hardhat3:tron": "node --test test/hardhat3-tron.integration.test.js",
@@ -40,7 +41,8 @@
     "tre:build-jar": "bash scripts/build-tre-jar.sh",
     "test:tron-plugin": "node --test test/tron-core.test.js test/tron-addresses.test.js test/tron-reverts.test.js test/tron-receipts.test.js test/tron-predictions.test.js test/tron-balances.test.js test/tron-transport.test.js test/tron-capabilities.test.js test/tron-abi.test.js test/tron-estimates.test.js test/tron-fees.test.js test/tron-artifacts.test.js test/tron-compiler.test.js test/tron-plugin.test.js",
     "test:hardhat3:tron-template": "npm run build && node --test test/hardhat3-tron-template.integration.test.js",
-    "check:english": "node scripts/check-english.js"
+    "check:english": "node scripts/check-english.js",
+    "check:compatibility": "node scripts/check-compatibility.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -2,30 +2,18 @@ import type { HardhatPlugin } from 'hardhat/types/plugins';
 import { isHardhat3NodeSupported } from '../../project/hardhat.js';
 import './types.js';
 import { assertDependency } from './dependencies.js';
+import { compatibility } from '../../compatibility.js';
+import { nodeSupportDescription } from '../../runtime.js';
 
 export type * from './types.js';
 if (!isHardhat3NodeSupported(process.versions.node)) {
-  throw new Error('Sunhat TRON requires Node.js 22.13+, 24.x or 26.x');
+  throw new Error(
+    `Sunhat TRON requires Node.js ${nodeSupportDescription(compatibility.node.minimum.hardhat3)}`,
+  );
 }
-for (const [name, version] of [
-  ['hardhat', '3.21.1'],
-  ['@nomicfoundation/hardhat-ethers', '4.2.1'],
-  ['@nomicfoundation/hardhat-mocha', '4.0.1'],
-  ['ethers', '6.17.0'],
-  ['@openzeppelin/tron-runtime', '0.1.0'],
-  ['tronweb', '6.5.1'],
-  ['solc', '0.8.26'],
-]) {
-  if (name !== undefined && version !== undefined) {
-    assertDependency(name, version);
-  }
+for (const [name, policy] of Object.entries(compatibility.hardhat3Tron)) {
+  assertDependency(name, policy.minimum, policy.entry);
 }
-
-assertDependency(
-  '@nomicfoundation/hardhat-utils',
-  '5.1.1',
-  '@nomicfoundation/hardhat-utils/package.json',
-);
 
 const [{ definePlugin }, { overrideTask, task }] = await Promise.all([
   import('hardhat/plugins'),

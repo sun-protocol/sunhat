@@ -5,9 +5,7 @@ import { getCacheDir } from '@nomicfoundation/hardhat-utils/global-dir';
 import type { HardhatConfig } from 'hardhat/types/config';
 import core from '../../../vendor/hardhat-tron/index.js';
 import type { TreConfig } from './types.js';
-
-const SOLC_SHA256 =
-  '31fe546b9e6ad74e816d6406dcdb59f3af180f9c1145fd994bd5205d9c8465c1';
+import { tronDefaults } from './defaults.js';
 
 export async function configureTronCompiler(
   config: HardhatConfig,
@@ -42,16 +40,16 @@ export async function configureTronCompiler(
         throw new Error('TRON requires a solc compiler');
       }
       if (tre.compiler.path) {
-        if (entry.version !== '0.8.26') {
+        if (entry.version !== tronDefaults.localCompiler.version) {
           throw new Error(
-            'The pinned local TRON compiler requires Solidity 0.8.26',
+            `The pinned local TRON compiler requires Solidity ${tronDefaults.localCompiler.version}`,
           );
         }
         const path = resolve(config.paths.root, tre.compiler.path);
         if (
           createHash('sha256')
             .update(await readFile(path))
-            .digest('hex') !== SOLC_SHA256
+            .digest('hex') !== tronDefaults.localCompiler.sha256
         ) {
           throw new Error(`TRON compiler checksum mismatch: ${path}`);
         }

@@ -1,3 +1,5 @@
+import { compatibility } from '../compatibility.js';
+import { nodeSupportDescription } from '../runtime.js';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, resolve } from 'node:path';
@@ -74,7 +76,7 @@ export async function runHardhat(
     }
     if (!isHardhat3NodeSupported(process.versions.node)) {
       return toolchainError(
-        `Hardhat 3 requires Node.js 22.13+, 24.x or 26.x; resolved ${process.versions.node} for ${manifestPath}`,
+        `Hardhat 3 requires Node.js ${nodeSupportDescription(compatibility.node.minimum.hardhat3)}; resolved ${process.versions.node} for ${manifestPath}`,
       );
     }
     if (target === 'tron') {
