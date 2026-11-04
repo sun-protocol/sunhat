@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { CliError, errorMessage, usage } from '../errors.js';
+import { frameworkSchema } from '../project/binding-schema.js';
 import type { Framework, Target } from '../project/binding.js';
 import type { HardhatMajor } from '../project/hardhat.js';
 import { applyScaffold } from '../scaffold/apply.js';
@@ -60,10 +61,13 @@ function parseInitOptions(argv: readonly string[]): InitOptions | undefined {
     if (positionals.length > 1) {
       return usage('init accepts at most one path');
     }
-    const framework = values.framework;
-    if (framework !== 'foundry' && framework !== 'hardhat') {
-      return usage('--framework requires foundry or hardhat');
+    const parsedFramework = frameworkSchema.safeParse(values.framework);
+    if (!parsedFramework.success) {
+      return usage(
+        `--framework requires ${frameworkSchema.options.join(' or ')}`,
+      );
     }
+    const framework = parsedFramework.data;
     const version = values['hardhat-version'];
     if (version !== undefined && framework !== 'hardhat') {
       return usage('--hardhat-version requires --framework hardhat');

@@ -274,6 +274,10 @@ for (const [name, args] of [
   ['invalid boolean value', ['--adopt=false']],
   ['invalid target', ['--target', 'other']],
   ['empty framework', ['--framework=']],
+  ['uppercase framework', ['--framework', 'Hardhat']],
+  ['framework with whitespace', ['--framework', ' hardhat']],
+  ['uppercase target', ['--target', 'EVM']],
+  ['target with whitespace', ['--target', 'tron ']],
   ['multiple project paths', ['first', 'second']],
 ]) {
   test(`init rejects ${name} with exit code 2`, () => {

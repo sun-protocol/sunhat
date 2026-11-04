@@ -64,7 +64,8 @@
     "typescript-eslint": "8.72.1"
   },
   "dependencies": {
-    "smol-toml": "1.9.1"
+    "smol-toml": "1.9.1",
+    "zod": "3.25.76"
   },
   "peerDependencies": {
     "@nomicfoundation/hardhat-ethers": "*",
