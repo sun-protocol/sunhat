@@ -30,6 +30,8 @@ const offlineDownload = new URL(
 const metadata = JSON.parse(
   readFileSync(resolve(repository, 'package.json'), 'utf8'),
 );
+// Cold dependency installs on Windows runners can exceed 90 seconds.
+const npmInstallTimeout = 300_000;
 
 function run(args, cwd, { env = {}, timeout = 30_000 } = {}) {
   const result = spawnSync(process.execPath, args, {
@@ -42,7 +44,15 @@ function run(args, cwd, { env = {}, timeout = 30_000 } = {}) {
   assert.equal(
     result.status,
     0,
-    [args.join(' '), result.error?.message, result.stdout, result.stderr]
+    [
+      args.join(' '),
+      result.error?.code === 'ETIMEDOUT'
+        ? `Command exceeded its ${timeout} ms timeout in ${cwd}`
+        : undefined,
+      result.error?.message,
+      result.stdout,
+      result.stderr,
+    ]
       .filter(Boolean)
       .join('\n'),
   );
@@ -51,7 +61,8 @@ function run(args, cwd, { env = {}, timeout = 30_000 } = {}) {
 
 test(
   'the packed CLI works outside the repository and initializes all project variants',
-  { timeout: 180_000 },
+  // Allow both installs, packing and artifact checks to finish within the suite budget.
+  { timeout: 900_000 },
   async (t) => {
     const npm = process.env.npm_execpath;
     assert.ok(npm, 'Run this integration suite with npm run pack:check');
@@ -100,7 +111,7 @@ test(
         resolve(archives, tarballs[0]),
       ],
       consumer,
-      { timeout: 90_000 },
+      { timeout: npmInstallTimeout },
     );
     const installed = resolve(consumer, 'node_modules', metadata.name);
     assert.equal(lstatSync(installed).isSymbolicLink(), false);
@@ -130,7 +141,7 @@ test(
             'ethers@5.7.2',
           ],
           legacy,
-          { timeout: 90000 },
+          { timeout: npmInstallTimeout },
         );
         for (const [name, version] of [
           ['hardhat', '2.22.0'],
