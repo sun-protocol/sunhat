@@ -170,6 +170,8 @@ solc = "0.8.28"
 
 Edit the quoted value to select another compiler version, such as `"0.8.26"`, and update source pragmas to accept that version. Foundry also accepts a local compiler path through `solc`; TRON projects require a native `tron-solc` executable. Foundry-TRON caches downloaded native compilers under `~/.foundry-tron/solc/`. Hardhat 2/TRON uses the compiler downloader supplied by `@openzeppelin/hardhat-tron`. Hardhat 3/TRON uses the verified downloader adapted in `sunhat/hardhat3-tron` and Hardhat 3's public compiler path setting.
 
+All generated TRON projects select `tron-solc`: Foundry uses `network = "tron"` with the native `solc` version field, and both Hardhat templates explicitly set `tre.compiler.target: 'tron'`. The Hardhat npm `solc` dependency provides wrapper utilities; the TRON plugin supplies the TVM compiler itself. For adopted projects, configure these native settings before building. The `sunhat.toml` binding selects the framework/toolchain and does not override native compiler settings or explicit command-line options.
+
 ## Common Foundry commands
 
 | Command                                            | Purpose                                                       |

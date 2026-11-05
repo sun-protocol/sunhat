@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -163,6 +164,30 @@ test(
       options,
     );
     run(process.execPath, [npm, 'run', 'build'], options);
+    const assertTronCompiler = () => {
+      const directory = resolve(project, 'artifacts-tron/build-info');
+      const builds = readdirSync(directory).filter(
+        (name) => name.endsWith('.json') && !name.endsWith('.output.json'),
+      );
+      assert.ok(builds.length > 0, 'The build must produce TRON artifacts');
+      for (const name of builds) {
+        const info = JSON.parse(readFileSync(resolve(directory, name)));
+        assert.match(info.solcLongVersion, /^0\.8\.26\+commit\.733b4d28\b/);
+      }
+    };
+    assertTronCompiler();
+    // Changing the default network must not change a TRON template's compiler.
+    writeFileSync(
+      resolve(project, 'compiler.config.ts'),
+      `import base from './hardhat.config.js';\nexport default { ...base, networks: { ...base.networks, default: { type: 'edr-simulated' } } };\n`,
+    );
+    rmSync(resolve(project, 'artifacts-tron'), { recursive: true });
+    run(
+      process.execPath,
+      [installedCli, 'build', '--config', 'compiler.config.ts', '--force'],
+      options,
+    );
+    assertTronCompiler();
     const tested = run(process.execPath, [npm, 'test'], options);
     assert.match(tested.stdout, /1 passing/);
     const deployed = run(
