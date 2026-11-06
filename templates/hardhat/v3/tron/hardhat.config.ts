@@ -25,7 +25,7 @@ export default defineConfig({
     autoStart: process.env.TRE_AUTO_START === 'true',
     keepRunning: process.env.TRE_KEEP_RUNNING === 'true',
     jarPath: process.env.TRE_JAR_PATH,
-    compiler: { path: process.env.TRON_SOLC_PATH },
+    compiler: { target: 'tron', path: process.env.TRON_SOLC_PATH },
   },
   networks: {
     default: tron,

@@ -1,6 +1,6 @@
 {
   "name": "@sun-protocol/sunhat",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Project-bound Hardhat and Foundry CLI for EVM and TRON development",
   "type": "module",
   "license": "MIT OR Apache-2.0",

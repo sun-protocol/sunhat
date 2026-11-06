@@ -1,6 +1,6 @@
 # Sunhat 2
 
-Sunhat 2 is a project CLI for Hardhat 2, Hardhat 3 and Foundry on EVM and TRON. It selects the framework and target from `sunhat.toml`, then runs the project's native tools. The npm package is `@sun-protocol/sunhat`; the executable is `sunhat`. This checkout targets 2.1.0 and has not been published; the released 2.0.0 package does not contain Hardhat 3 support.
+Sunhat 2 is a project CLI for Hardhat 2, Hardhat 3 and Foundry on EVM and TRON. It selects the framework and target from `sunhat.toml`, then runs the project's native tools. The npm package is `@sun-protocol/sunhat`; the executable is `sunhat`. This checkout targets 2.1.1 and has not been published; the released 2.0.0 package does not contain Hardhat 3 support.
 
 ## Version policy
 
@@ -38,7 +38,7 @@ The example above uses released 2.0.0. For this checkout's Hardhat 3 features, b
 | Hardhat 2 | Existing ethers template          | Existing OpenZeppelin Hardhat 2 plugin                                   |
 | Hardhat 3 | Explicit ethers/Mocha connections | Native TVM plugin at `sunhat/hardhat3-tron`, ordinary/patched Docker TRE |
 
-In this 2.1.0 checkout, only the Hardhat 3/TRON template declares Sunhat as a project dependency, because it imports the native TRON plugin. Other templates do not install the CLI locally. Hardhat npm scripts invoke local Hardhat directly; Foundry npm scripts use Sunhat on `PATH` to select the project-pinned toolchain. Released 2.0.0 templates retain their original dependency policy.
+In this 2.1.1 checkout, only the Hardhat 3/TRON template declares Sunhat as a project dependency, because it imports the native TRON plugin. Other templates do not install the CLI locally. Hardhat npm scripts invoke local Hardhat directly; Foundry npm scripts use Sunhat on `PATH` to select the project-pinned toolchain. Released 2.0.0 templates retain their original dependency policy.
 
 The [TRON plugin guide](docs/hardhat3-tron-plugin.md) covers native sun units, compiler/artifact separation, Docker policies, assertions and patched-node limits. Adoption preserves user code and configuration; register the appropriate native plugins before adopting.
 
